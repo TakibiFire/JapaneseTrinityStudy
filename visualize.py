@@ -33,7 +33,7 @@ def create_styled_summary(
     生データの DataFrame と、表示用にフォーマット・スタイリングされた pandas Styler オブジェクトのタプル。
   """
   summary_data = {}
-  
+
   # パーセンタイルのラベル名マッピング
   quantile_labels = {
       0.01: "下位1% (だいぶ運が悪い)",
@@ -52,7 +52,7 @@ def create_styled_summary(
     for q in quantiles:
       label = quantile_labels.get(q, f"{q*100:.0f}%パーセンタイル")
       data[label] = np.quantile(net_values, q)
-      
+
     for y in bankruptcy_years:
       data[f"{y}年破産確率 (%)"] = np.mean(sustained_months < y * 12) * 100.0
 
@@ -61,23 +61,28 @@ def create_styled_summary(
   summary_df = pd.DataFrame(summary_data).T
 
   def format_oku(x: float) -> str:
-    return f"約 {x / 10000:.1f}億円"
+    return f"{x / 10000:.1f}億円"
 
   def format_pct(x: float) -> str:
     return f"{x:.1f}%"
 
   format_dict = {}
+  formatted_df = summary_df.copy()
+
   for q in quantiles:
-      label = quantile_labels.get(q, f"{q*100:.0f}%パーセンタイル")
-      format_dict[label] = format_oku
-      
+    label = quantile_labels.get(q, f"{q*100:.0f}%パーセンタイル")
+    format_dict[label] = format_oku
+    formatted_df[label] = formatted_df[label].map(format_oku)
+
   for y in bankruptcy_years:
-      format_dict[f"{y}年破産確率 (%)"] = format_pct
+    format_dict[f"{y}年破産確率 (%)"] = format_pct
+    formatted_df[f"{y}年破産確率 (%)"] = formatted_df[f"{y}年破産確率 (%)"].map(
+        format_pct)
 
   styled_summary = summary_df.style.format(format_dict)
   styled_summary.index.name = "戦略"
 
-  return summary_df, styled_summary
+  return formatted_df, styled_summary
 
 
 def visualize_and_save(results: Dict[str, SimulationResult],
@@ -138,19 +143,21 @@ def visualize_and_save(results: Dict[str, SimulationResult],
       y=alt.Y('Final Value (万円):Q', scale=alt.Scale(type='log')),
       color='Strategy:N')
 
-  final_chart = (area_chart + line_chart).properties(
-      title=title, width=600, height=300).interactive()
+  final_chart = (area_chart + line_chart).properties(title=title,
+                                                     width=600,
+                                                     height=300).interactive()
 
   # サマリーとHTMLの出力
-  summary_df, styled_summary = create_styled_summary(
+  formatted_df, styled_summary = create_styled_summary(
       results,
       quantiles=[0.01, 0.10, 0.25, 0.50, 0.75, 0.90],
-      bankruptcy_years=bankruptcy_years
-  )
+      bankruptcy_years=bankruptcy_years)
 
   # STDOUT にマークダウンを出力
   print(f"\n## {summary_title}")
-  print(summary_df.to_markdown(floatfmt=".1f"))
+  print(
+      formatted_df.to_markdown(colalign=("left",) +
+                               ("right",) * len(formatted_df.columns)))
   print("\n")
 
   # ensure temp directory exists
@@ -178,7 +185,7 @@ th {background-color: #f2f2f2; text-align: center;}
     f.write(full_html)
 
   print(f"✅ 結果を {html_file} に保存しました。")
-  
+
   if image_file:
     os.makedirs(os.path.dirname(image_file), exist_ok=True)
     final_chart.save(image_file)
