@@ -164,3 +164,7 @@ cython_debug/
 
 # macOS
 .DS_Store
+
+# Internal directories
+tasks/
+temp/
