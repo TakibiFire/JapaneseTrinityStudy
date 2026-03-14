@@ -19,7 +19,10 @@ class OptimizationTarget(enum.Enum):
   """
   最適化の目的関数を指定する列挙型。
   """
-  MINIMIZE_RUIN_PROBABILITY = "minimize_ruin_probability"
+  MINIMIZE_RUIN_PROBABILITY_20Y = "minimize_ruin_probability_20y"
+  MINIMIZE_RUIN_PROBABILITY_30Y = "minimize_ruin_probability_30y"
+  MINIMIZE_RUIN_PROBABILITY_40Y = "minimize_ruin_probability_40y"
+  MINIMIZE_RUIN_PROBABILITY_50Y = "minimize_ruin_probability_50y"
   MAXIMIZE_10_PERCENTILE = "maximize_10_percentile"
   MAXIMIZE_50_PERCENTILE = "maximize_50_percentile"
 
@@ -88,12 +91,26 @@ def evaluate_strategy(params: Tuple[float, float, float, int],
   strategy = create_strategy(i, j, k, int(r))
 
   # シミュレーション実行
-  net_values = simulate_strategy(strategy, monthly_asset_prices)
+  res = simulate_strategy(strategy, monthly_asset_prices)
+  net_values = res.net_values
+  sustained_months = res.sustained_months
 
   # 目的関数に応じたスコア計算
-  if target == OptimizationTarget.MINIMIZE_RUIN_PROBABILITY:
-    # 破産確率 (%) を計算
-    ruin_prob = np.mean(net_values <= 0) * 100.0
+  if target == OptimizationTarget.MINIMIZE_RUIN_PROBABILITY_20Y:
+    # 20年破産確率 (%) を計算
+    ruin_prob = np.mean(sustained_months < 20 * 12) * 100.0
+    return float(ruin_prob)
+  elif target == OptimizationTarget.MINIMIZE_RUIN_PROBABILITY_30Y:
+    # 30年破産確率 (%) を計算
+    ruin_prob = np.mean(sustained_months < 30 * 12) * 100.0
+    return float(ruin_prob)
+  elif target == OptimizationTarget.MINIMIZE_RUIN_PROBABILITY_40Y:
+    # 40年破産確率 (%) を計算
+    ruin_prob = np.mean(sustained_months < 40 * 12) * 100.0
+    return float(ruin_prob)
+  elif target == OptimizationTarget.MINIMIZE_RUIN_PROBABILITY_50Y:
+    # 50年破産確率 (%) を計算
+    ruin_prob = np.mean(sustained_months < 50 * 12) * 100.0
     return float(ruin_prob)
   elif target == OptimizationTarget.MAXIMIZE_10_PERCENTILE:
     # 10パーセンタイル値を計算し、最大化のため負の値にする

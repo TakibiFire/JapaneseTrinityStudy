@@ -12,8 +12,8 @@ from typing import Dict
 import numpy as np
 import pandas as pd
 
-from core import (Asset, Strategy, create_styled_summary,
-                  generate_monthly_asset_prices, simulate_strategy)
+from core import (Asset, create_styled_summary, generate_monthly_asset_prices,
+                  simulate_strategy)
 from optimization import OptimizationTarget, create_strategy, optimize_strategy
 
 
@@ -37,7 +37,7 @@ def main() -> None:
   monthly_asset_prices = generate_monthly_asset_prices(assets)
 
   targets = [
-      OptimizationTarget.MINIMIZE_RUIN_PROBABILITY,
+      OptimizationTarget.MINIMIZE_RUIN_PROBABILITY_50Y,
       # OptimizationTarget.MAXIMIZE_10_PERCENTILE,
       OptimizationTarget.MAXIMIZE_50_PERCENTILE,
   ]
@@ -59,7 +59,12 @@ def main() -> None:
     print(f"  初期借入額の係数 (k)    : {best_k}")
     print(f"  リバランス間隔 (r)      : {best_r} ヶ月")
 
-    if target == OptimizationTarget.MINIMIZE_RUIN_PROBABILITY:
+    if target in [
+        OptimizationTarget.MINIMIZE_RUIN_PROBABILITY_20Y,
+        OptimizationTarget.MINIMIZE_RUIN_PROBABILITY_30Y,
+        OptimizationTarget.MINIMIZE_RUIN_PROBABILITY_40Y,
+        OptimizationTarget.MINIMIZE_RUIN_PROBABILITY_50Y
+    ]:
       print(f"  最小破産確率           : {best_score:.2f}%")
     else:
       print(f"  最大化されたスコア       : {best_score:.2f} 万円")
@@ -71,10 +76,10 @@ def main() -> None:
                                          best_r,
                                          name=f"Opt ({target.value})")
 
-    net_values = simulate_strategy(optimized_strategy, monthly_asset_prices)
-    df_results = pd.DataFrame({optimized_strategy.name: net_values})
+    res = simulate_strategy(optimized_strategy, monthly_asset_prices)
+    results = {optimized_strategy.name: res}
 
-    styled_summary = create_styled_summary(df_results)
+    styled_summary = create_styled_summary(results)
 
     print("\n  --- シミュレーション サマリー ---")
 

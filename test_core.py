@@ -3,9 +3,9 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from core import (MU, N_SIM, SIGMA, TRADING_DAYS, YEARS, Asset, Strategy,
-                  create_styled_summary, generate_monthly_asset_prices,
-                  simulate_strategy)
+from core import (MU, N_SIM, SIGMA, TRADING_DAYS, YEARS, Asset,
+                  SimulationResult, Strategy, create_styled_summary,
+                  generate_monthly_asset_prices, simulate_strategy)
 
 
 class TestCore(unittest.TestCase):
@@ -57,7 +57,8 @@ class TestCore(unittest.TestCase):
                         annual_cost_inflation=0.0,
                         selling_priority=["Safe"])
 
-    net_values = simulate_strategy(strategy, prices)
+    res = simulate_strategy(strategy, prices)
+    net_values = res.net_values
 
     # 全く減らないので、初期資金がそのまま残るはず
     self.assertEqual(net_values.shape, (n_sim,))
@@ -94,7 +95,8 @@ class TestCore(unittest.TestCase):
         annual_cost_inflation=0.0,
         selling_priority=["Risky"])
 
-    net_values = simulate_strategy(strategy, prices)
+    res = simulate_strategy(strategy, prices)
+    net_values = res.net_values
 
     # 全員破産するため 0 になるはず
     self.assertTrue(np.allclose(net_values, 0.0))
@@ -124,7 +126,8 @@ class TestCore(unittest.TestCase):
 
     # 毎月1.0取り崩すので、12ヶ月で12.0減る
     # 最終的な純資産は 120.0 - 12.0 = 108.0
-    net_values = simulate_strategy(strategy, prices)
+    res = simulate_strategy(strategy, prices)
+    net_values = res.net_values
 
     self.assertTrue(np.allclose(net_values, 108.0))
 
@@ -201,7 +204,8 @@ class TestCore(unittest.TestCase):
     # 2年目の売却口数 = 66口 (残 74口)
     # 2年末の総資産 = 残り 74口 * 2.0 + 現金 0 = 148.0
 
-    net_values = simulate_strategy(strategy, prices)
+    res = simulate_strategy(strategy, prices)
+    net_values = res.net_values
     self.assertTrue(np.allclose(net_values, 148.0))
 
   def test_simulate_strategy_rebalance(self):
@@ -276,31 +280,37 @@ class TestCore(unittest.TestCase):
     #
     # 最終的な総純資産 = 121.25 (この月のリバランスによる税金は翌年支払うため、純資産から引かれない)
 
-    net_values = simulate_strategy(strategy, prices)
+    res = simulate_strategy(strategy, prices)
+    net_values = res.net_values
     self.assertTrue(np.allclose(net_values, 121.25))
 
   def test_create_styled_summary(self):
     """
-    シミュレーション結果の DataFrame から、各戦略のパーセンタイルや
+    シミュレーション結果の辞書から、各戦略のパーセンタイルや
     破産確率を計算し、Styler オブジェクトとしてフォーマットして返す
     処理が正しく行われるかを検証する。
     """
     # モックデータ
-    data = {
-        "Strategy1": [0.0, 10000.0, 20000.0, 50000.0, 100000.0],
-        "Strategy2": [5000.0, 15000.0, 25000.0, 60000.0, 150000.0]
+    results = {
+        "Strategy1": SimulationResult(
+            net_values=np.array([0.0, 10000.0, 20000.0, 50000.0, 100000.0]),
+            sustained_months=np.array([12, 600, 600, 600, 600]) # 1つだけ1年で破産
+        ),
+        "Strategy2": SimulationResult(
+            net_values=np.array([5000.0, 15000.0, 25000.0, 60000.0, 150000.0]),
+            sustained_months=np.array([600, 600, 600, 600, 600])
+        )
     }
-    df = pd.DataFrame(data)
 
-    styled = create_styled_summary(df)
+    styled = create_styled_summary(results)
 
     # 型チェック
     self.assertIsInstance(styled, pd.io.formats.style.Styler)
 
-    # 破産確率のチェック (Strategy1 は 0.0 を含むため 20%, Strategy2 は 0%)
+    # 破産確率のチェック (Strategy1 は 20年(240ヶ月)時点で破産しているのが1つあるため 20%)
     summary_df = styled.data
-    self.assertEqual(summary_df.loc["Strategy1", "破産確率 (%)"], 20.0)
-    self.assertEqual(summary_df.loc["Strategy2", "破産確率 (%)"], 0.0)
+    self.assertEqual(summary_df.loc["Strategy1", "20年破産確率 (%)"], 20.0)
+    self.assertEqual(summary_df.loc["Strategy2", "20年破産確率 (%)"], 0.0)
 
     # 表示形式の確認
     html = styled.to_html()
@@ -308,6 +318,46 @@ class TestCore(unittest.TestCase):
     self.assertIn("0.0%", html)
     # 10000万円 -> 約 1.0億円
     self.assertIn("1.0億円", html)
+
+  def test_sustained_months_tracking(self):
+    """
+    破産が発生した月が sustained_months に正しく記録されるか検証する。
+    """
+    n_sim = 3
+    years = 10
+    total_months = years * 12
+    
+    # 価格推移を自作
+    prices_array = np.ones((n_sim, total_months + 1))
+    
+    # パス0: 即破産 (現金不足で資産を売っても足りない状況を作る)
+    # パス1: 5年(60ヶ月)で破産
+    # パス2: 破産しない
+    
+    prices_array[0, 1:] = 0.0001 # ほぼ価値なし
+    prices_array[1, 61:] = 0.0001 # 61ヶ月目から価値なし
+    
+    prices = {"Asset": prices_array}
+    
+    strategy = Strategy(
+        name="SustainedTest",
+        initial_money=10.0,
+        initial_loan=90.0, # 借入比率が高い
+        yearly_loan_interest=0.0,
+        initial_asset_ratio={"Asset": 1.0},
+        annual_cost=0.0,
+        annual_cost_inflation=0.0,
+        selling_priority=["Asset"])
+    
+    res = simulate_strategy(strategy, prices)
+    sustained = res.sustained_months
+    
+    # パス0は m=0 で破産判定されるはず (総資産 100*0.0001 = 0.01 < 借入 90)
+    self.assertEqual(sustained[0], 0)
+    # パス1は m=60 で破産判定されるはず (総資産 100*0.0001 = 0.01 < 借入 90)
+    self.assertEqual(sustained[1], 60)
+    # パス2は最後まで破産しない
+    self.assertEqual(sustained[2], total_months)
 
 
 if __name__ == "__main__":

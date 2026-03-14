@@ -28,7 +28,7 @@ def test_evaluate_strategy_constraints(dummy_monthly_prices):
   最適化関数における (i + j <= 1.0) の制約が正しく機能し、
   違反した際に float('inf') を返すか検証する。
   """
-  target = OptimizationTarget.MINIMIZE_RUIN_PROBABILITY
+  target = OptimizationTarget.MINIMIZE_RUIN_PROBABILITY_20Y
   # 1.0を超える場合
   score = evaluate_strategy((0.6, 0.5, 0.0, 12), dummy_monthly_prices, target)
   assert score == float('inf')
@@ -46,10 +46,15 @@ def test_evaluate_strategy_targets(dummy_monthly_prices):
   params = (0.5, 0.5, 5.0, 12)  # i=0.5, j=0.5, k=5, r=12
 
   # 破産確率の最小化 (float値を返す)
-  score_ruin = evaluate_strategy(params, dummy_monthly_prices,
-                                 OptimizationTarget.MINIMIZE_RUIN_PROBABILITY)
-  assert isinstance(score_ruin, float)
-  assert 0.0 <= score_ruin <= 100.0
+  for target in [
+      OptimizationTarget.MINIMIZE_RUIN_PROBABILITY_20Y,
+      OptimizationTarget.MINIMIZE_RUIN_PROBABILITY_30Y,
+      OptimizationTarget.MINIMIZE_RUIN_PROBABILITY_40Y,
+      OptimizationTarget.MINIMIZE_RUIN_PROBABILITY_50Y
+  ]:
+    score_ruin = evaluate_strategy(params, dummy_monthly_prices, target)
+    assert isinstance(score_ruin, float)
+    assert 0.0 <= score_ruin <= 100.0
 
   # 10%ileの最大化 (内部では負の値として最小化問題になる)
   score_10p = evaluate_strategy(params, dummy_monthly_prices,
@@ -69,7 +74,7 @@ def test_optimize_strategy(dummy_monthly_prices):
   """
   # テストの実行時間を短縮するため、ダミーの小規模データを使用する
   # 破産確率の最小化を対象にテスト
-  target = OptimizationTarget.MINIMIZE_RUIN_PROBABILITY
+  target = OptimizationTarget.MINIMIZE_RUIN_PROBABILITY_20Y
   best_i, best_j, best_k, best_r, best_score = optimize_strategy(
       dummy_monthly_prices, target)
 

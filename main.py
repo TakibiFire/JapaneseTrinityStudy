@@ -195,11 +195,13 @@ def main():
   results = {}
   print("各戦略のシミュレーションを実行中...")
   for strategy in strategies:
-    net_values = simulate_strategy(strategy, monthly_asset_prices)
-    results[strategy.name] = net_values
+    res = simulate_strategy(strategy, monthly_asset_prices)
+    results[strategy.name] = res
 
-  # DataFrame化
-  df_results = pd.DataFrame(results)
+  # 可視化用に最終純資産額のみの DataFrame を作成
+  df_results_net_values = pd.DataFrame({
+      name: res.net_values for name, res in results.items()
+  })
 
   # ---------------------------------------------------------------------------
   # 4. 可視化 (Altair)
@@ -209,8 +211,8 @@ def main():
   plot_data = []
 
   for q in quantiles:
-    for col in df_results.columns:
-      val = max(df_results[col].quantile(q), 1.0)  # 対数表示のため0以下は1に
+    for col in df_results_net_values.columns:
+      val = max(df_results_net_values[col].quantile(q), 1.0)  # 対数表示のため0以下は1に
       plot_data.append({
           'Quantile (%)': q * 100,
           'Strategy': col,
@@ -239,12 +241,12 @@ def main():
       color='Strategy:N')
 
   final_chart = (area_chart + line_chart).properties(
-      title='30年後の最終評価額のパーセンタイル分布', width=600, height=300).interactive()
+      title='50年後の最終評価額のパーセンタイル分布', width=600, height=300).interactive()
 
   # ---------------------------------------------------------------------------
   # 5. サマリーとHTMLの出力
   # ---------------------------------------------------------------------------
-  styled_summary = create_styled_summary(df_results)
+  styled_summary = create_styled_summary(results)
 
   html_file = 'temp/new_result.html'
 
@@ -262,7 +264,7 @@ th, td {border: 1px solid #ddd; padding: 8px; text-align: right;}
 th {background-color: #f2f2f2; text-align: center;}
 </style>
 """
-  insert_html = f"<body>\n<h2>30年後の最終評価額サマリー（1,000回試行）</h2>\n{style_tag}\n{table_html}\n<hr>\n"
+  insert_html = f"<body>\n<h2>50年後の最終評価額サマリー（1,000回試行）</h2>\n{style_tag}\n{table_html}\n<hr>\n"
   full_html = chart_html.replace('<body>', insert_html)
 
   # 4. ファイルに保存してブラウザで開く

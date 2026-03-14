@@ -17,7 +17,7 @@ import pandas as pd
 SEED = 42
 MU = 0.07  # オルカン期待リターン 7%
 SIGMA = 0.15  # オルカンボラティリティ 15%
-YEARS = 30  # シミュレーション期間（年）
+YEARS = 50  # シミュレーション期間（年）
 TRADING_DAYS = 252  # 1年あたりの営業日数
 N_SIM = 1000  # モンテカルロ・シミュレーションのパス数
 
@@ -68,6 +68,19 @@ class Strategy:
   selling_priority: List[str]
   tax_rate: float = 0.20315
   rebalance_interval: int = 0
+
+
+@dataclasses.dataclass
+class SimulationResult:
+  """
+  シミュレーションの実行結果を保持するクラス。
+  """
+  # 各パスの最終純資産額 (万円)。shape: (n_sim,)
+  net_values: np.ndarray
+
+  # 各パスが破産せずに継続できた月数。shape: (n_sim,)
+  # 破産しなかった場合は、シミュレーションの総月数 (YEARS * 12) が入る。
+  sustained_months: np.ndarray
 
 
 # ---------------------------------------------------------------------------
@@ -149,8 +162,8 @@ def generate_monthly_asset_prices(assets: List[Asset],
 
 
 def simulate_strategy(
-    strategy: Strategy, monthly_asset_prices: Dict[str,
-                                                   np.ndarray]) -> np.ndarray:
+    strategy: Strategy,
+    monthly_asset_prices: Dict[str, np.ndarray]) -> SimulationResult:
   """
   指定された戦略パラメータに従い、各シミュレーションパスにおける最終的な純資産総額を計算する。
   
@@ -162,8 +175,7 @@ def simulate_strategy(
     monthly_asset_prices: generate_monthly_asset_prices() で計算された各資産の月次価格推移。
     
   Returns:
-    各パスの最終純資産総額 (万円) を格納した shape=(n_sim,) の numpy 配列。
-    破産したパスの最終純資産総額は 0 となる。
+    SimulationResult インスタンス。
   """
   # 任意の資産から n_sim と total_months を取得
   sample_asset_name = list(monthly_asset_prices.keys())[0]
@@ -196,6 +208,9 @@ def simulate_strategy(
 
   # 破産フラグ (True なら破産)
   bankrupt = np.zeros(n_sim, dtype=bool)
+
+  # 各パスが破産せずに継続できた月数
+  sustained_months = np.full(n_sim, total_months, dtype=np.int32)
 
   # 最終的な純資産総額を保存する配列
   net_values = np.zeros(n_sim, dtype=np.float64)
@@ -366,6 +381,7 @@ def simulate_strategy(
     # 破産判定: 総資産 < 初期借入額
     new_bankrupts = active_paths & (total_assets < strategy.initial_loan)
     bankrupt[new_bankrupts] = True
+    sustained_months[new_bankrupts] = m
 
     # 年末 (12月) に税額を確定する
     if m % 12 == 11:
@@ -377,32 +393,43 @@ def simulate_strategy(
       survivors = ~bankrupt
       net_values[survivors] = total_assets[survivors] - strategy.initial_loan
 
-  return net_values
+  return SimulationResult(net_values=net_values,
+                          sustained_months=sustained_months)
 
 
 def create_styled_summary(
-    df_results: pd.DataFrame) -> "pd.io.formats.style.Styler":
+    results: Dict[str, SimulationResult]) -> "pd.io.formats.style.Styler":
   """
-  シミュレーション結果の DataFrame からサマリー統計を計算し、
+  シミュレーション結果の辞書からサマリー統計を計算し、
   フォーマットされた Styler オブジェクトを返す。
   
   分位点や破産確率など、複数の指標を算出して視覚的に整えたテーブルを作成する。
   
   Args:
-    df_results: 各戦略のシミュレーションの最終純資産 (列) を格納した DataFrame。
+    results: 戦略名をキー、SimulationResult インスタンスを値とする辞書。
   
   Returns:
     表示用にフォーマット・スタイリングされた pandas Styler オブジェクト。
   """
-  summary_df = pd.DataFrame({
-      "下位1% (だいぶ運が悪い)": df_results.quantile(0.01),
-      "下位10% (運が悪い)": df_results.quantile(0.10),
-      "下位25% (やや不運)": df_results.quantile(0.25),
-      "中央値 (普通)": df_results.median(),
-      "上位25% (やや幸運)": df_results.quantile(0.75),
-      "上位10% (運が良い)": df_results.quantile(0.90),
-      "破産確率 (%)": (df_results <= 0).mean() * 100
-  })
+  summary_data = {}
+  for name, res in results.items():
+    net_values = res.net_values
+    sustained_months = res.sustained_months
+
+    summary_data[name] = {
+        "下位1% (だいぶ運が悪い)": np.quantile(net_values, 0.01),
+        "下位10% (運が悪い)": np.quantile(net_values, 0.10),
+        "下位25% (やや不運)": np.quantile(net_values, 0.25),
+        "中央値 (普通)": np.median(net_values),
+        "上位25% (やや幸運)": np.quantile(net_values, 0.75),
+        "上位10% (運が良い)": np.quantile(net_values, 0.90),
+        "20年破産確率 (%)": np.mean(sustained_months < 20 * 12) * 100.0,
+        "30年破産確率 (%)": np.mean(sustained_months < 30 * 12) * 100.0,
+        "40年破産確率 (%)": np.mean(sustained_months < 40 * 12) * 100.0,
+        "50年破産確率 (%)": np.mean(sustained_months < 50 * 12) * 100.0,
+    }
+
+  summary_df = pd.DataFrame(summary_data).T
 
   def format_oku(x: float) -> str:
     return f"約 {x / 10000:.1f}億円"
@@ -417,7 +444,10 @@ def create_styled_summary(
       "中央値 (普通)": format_oku,
       "上位25% (やや幸運)": format_oku,
       "上位10% (運が良い)": format_oku,
-      "破産確率 (%)": format_pct
+      "20年破産確率 (%)": format_pct,
+      "30年破産確率 (%)": format_pct,
+      "40年破産確率 (%)": format_pct,
+      "50年破産確率 (%)": format_pct,
   })
   styled_summary.index.name = "戦略"
 
