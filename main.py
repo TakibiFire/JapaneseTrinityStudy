@@ -5,15 +5,9 @@
 シミュレーションを比較し、最終純資産の分布や破産確率などを視覚化して `new_result.html` に出力する。
 """
 
-import os
-import webbrowser
-
-import altair as alt
-import numpy as np
-import pandas as pd
-
-from core import (Asset, Strategy, ZeroRiskAsset, create_styled_summary,
+from core import (Asset, Strategy, ZeroRiskAsset,
                   generate_monthly_asset_prices, simulate_strategy)
+from visualize import visualize_and_save
 
 
 def main():
@@ -155,7 +149,7 @@ def main():
                     initial_asset_ratio={"オルカン": 1.0},
                     annual_cost=400,
                     annual_cost_inflation=0.015,
-                    selling_priority=["オルカン", "レバカン"])
+                    selling_priority=["オルカン"])
 
   plan_zero_risk_test = Strategy(
       name="ZeroRiskAssetテスト (BIL 20%)",
@@ -212,86 +206,15 @@ def main():
     res = simulate_strategy(strategy, monthly_asset_prices)
     results[strategy.name] = res
 
-  # 可視化用に最終純資産額のみの DataFrame を作成
-  df_results_net_values = pd.DataFrame({
-      name: res.net_values for name, res in results.items()
-  })
-
   # ---------------------------------------------------------------------------
-  # 4. 可視化 (Altair)
+  # 4. 可視化と保存
   # ---------------------------------------------------------------------------
-  # Altair用 Quantile データ作成
-  quantiles = np.linspace(0, 1, 101)
-  plot_data = []
-
-  for q in quantiles:
-    for col in df_results_net_values.columns:
-      val = max(df_results_net_values[col].quantile(q), 1.0)  # 対数表示のため0以下は1に
-      plot_data.append({
-          'Quantile (%)': q * 100,
-          'Strategy': col,
-          'Final Value (万円)': val
-      })
-
-  df_plot = pd.DataFrame(plot_data)
-
-  # Altair チャート描画（領域グラフ＋線グラフ）
-  area_chart = alt.Chart(df_plot).mark_area(opacity=0.3).encode(
-      x=alt.X('Quantile (%):Q', title='運の良さ (パーセンタイル %)'),
-      y=alt.Y('Final Value (万円):Q',
-              title='最終評価額(万円), 対数スケール',
-              scale=alt.Scale(type='log'),
-              stack=None),
-      y2=alt.Y2(datum=1),
-      color=alt.Color('Strategy:N', legend=alt.Legend(title="戦略")),
-      tooltip=[
-          'Quantile (%)', 'Strategy',
-          alt.Tooltip('Final Value (万円):Q', format=',.0f')
-      ])
-
-  line_chart = alt.Chart(df_plot).mark_line(point=False).encode(
-      x=alt.X('Quantile (%):Q'),
-      y=alt.Y('Final Value (万円):Q', scale=alt.Scale(type='log')),
-      color='Strategy:N')
-
-  final_chart = (area_chart + line_chart).properties(
-      title='50年後の最終評価額のパーセンタイル分布', width=600, height=300).interactive()
-
-  # ---------------------------------------------------------------------------
-  # 5. サマリーとHTMLの出力
-  # ---------------------------------------------------------------------------
-  styled_summary = create_styled_summary(results)
-
-  html_file = 'temp/new_result.html'
-
-  # 1. AltairのチャートをHTML文字列として取得
-  chart_html = final_chart.to_html()
-
-  # 2. DataFrame(Styler)をHTMLのテーブル文字列として取得
-  table_html = styled_summary.to_html()
-
-  # 3. チャートのHTMLの<body>の先頭にテーブルのHTMLを挿入する
-  style_tag = """
-<style>
-table {border-collapse: collapse; font-family: sans-serif; margin-bottom: 30px;}
-th, td {border: 1px solid #ddd; padding: 8px; text-align: right;}
-th {background-color: #f2f2f2; text-align: center;}
-</style>
-"""
-  insert_html = f"<body>\n<h2>50年後の最終評価額サマリー（1,000回試行）</h2>\n{style_tag}\n{table_html}\n<hr>\n"
-  full_html = chart_html.replace('<body>', insert_html)
-
-  # 4. ファイルに保存してブラウザで開く
-  with open(html_file, 'w', encoding='utf-8') as f:
-    f.write(full_html)
-
-  print(f"✅ 結果を {html_file} に保存しました。")
-  print("🌐 ブラウザで開いています...")
-
-  # file:// URIを作成してブラウザで開く
-  abs_path = os.path.abspath(html_file)
-  webbrowser.open('file://' + abs_path)
-
+  visualize_and_save(
+      results=results,
+      html_file='temp/new_result.html',
+      title='50年後の最終評価額のパーセンタイル分布',
+      summary_title='50年後の最終評価額サマリー（1,000回試行）'
+  )
 
 if __name__ == "__main__":
   main()

@@ -39,6 +39,8 @@ class Asset:
   name: str
   yearly_cost: float
   leverage: int
+  mu: float = MU
+  sigma: float = SIGMA
 
 
 @dataclasses.dataclass(frozen=True)
@@ -120,8 +122,6 @@ class SimulationResult:
 
 
 def generate_monthly_asset_prices(assets: List[Asset],
-                                  mu: float = MU,
-                                  sigma: float = SIGMA,
                                   years: int = YEARS,
                                   trading_days: int = TRADING_DAYS,
                                   n_sim: int = N_SIM,
@@ -135,8 +135,6 @@ def generate_monthly_asset_prices(assets: List[Asset],
   
   Args:
     assets: シミュレーション対象となる Asset インスタンスのリスト。
-    mu: ベースとなる期待リターン (年率)。
-    sigma: ベースとなるボラティリティ (年率)。
     years: シミュレーション期間 (年)。
     trading_days: 1年あたりの営業日数 (日次シミュレーション用)。
     n_sim: モンテカルロ・シミュレーションのパス数。
@@ -157,19 +155,15 @@ def generate_monthly_asset_prices(assets: List[Asset],
   # 乱数の生成 Z ~ N(0, 1)
   Z = np.random.normal(0, 1, (n_sim, total_days))
 
-  # ベースリターン: r_base = exp((mu - 0.5 * sigma^2)dt + sigma * sqrt(dt) * Z) - 1
-  # log_returns_base = (mu - 0.5 * sigma**2) * dt + sigma * np.sqrt(dt) * Z
-  # r_base = np.exp(log_returns_base) - 1
-
-  # シンプルな幾何ブラウン運動のリターン (design.md に従う)
-  r_base = np.exp((mu - 0.5 * sigma**2) * dt + sigma * np.sqrt(dt) * Z) - 1
-
   monthly_prices: Dict[str, np.ndarray] = {}
 
   days_per_month = trading_days // 12
   total_months = years * 12
 
   for asset in assets:
+    # シンプルな幾何ブラウン運動のリターン
+    r_base = np.exp((asset.mu - 0.5 * asset.sigma**2) * dt + asset.sigma * np.sqrt(dt) * Z) - 1
+
     # 日次コスト
     c_daily = asset.yearly_cost / trading_days
 
