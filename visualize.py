@@ -4,23 +4,92 @@
 
 import os
 import webbrowser
-from typing import Dict, Optional
+from typing import Dict, List, Optional, Tuple
 
 import altair as alt
 import numpy as np
 import pandas as pd
 
-from core import SimulationResult, create_styled_summary
+from core import SimulationResult
+
+
+def create_styled_summary(
+    results: Dict[str, SimulationResult],
+    quantiles: List[float] = [0.01, 0.10, 0.25, 0.50, 0.75, 0.90],
+    bankruptcy_years: List[int] = [20, 30, 40, 50]
+) -> Tuple[pd.DataFrame, "pd.io.formats.style.Styler"]:
+  """
+  シミュレーション結果の辞書からサマリー統計を計算し、
+  データフレームとフォーマットされた Styler オブジェクトを返す。
+  
+  分位点や破産確率など、複数の指標を算出して視覚的に整えたテーブルを作成する。
+  
+  Args:
+    results: 戦略名をキー、SimulationResult インスタンスを値とする辞書。
+    quantiles: 算出するパーセンタイルのリスト (0.0 〜 1.0)
+    bankruptcy_years: 破産確率を算出する年数のリスト
+  
+  Returns:
+    生データの DataFrame と、表示用にフォーマット・スタイリングされた pandas Styler オブジェクトのタプル。
+  """
+  summary_data = {}
+  
+  # パーセンタイルのラベル名マッピング
+  quantile_labels = {
+      0.01: "下位1% (だいぶ運が悪い)",
+      0.10: "下位10% (運が悪い)",
+      0.25: "下位25% (やや不運)",
+      0.50: "中央値 (普通)",
+      0.75: "上位25% (やや幸運)",
+      0.90: "上位10% (運が良い)"
+  }
+
+  for name, res in results.items():
+    net_values = res.net_values
+    sustained_months = res.sustained_months
+
+    data = {}
+    for q in quantiles:
+      label = quantile_labels.get(q, f"{q*100:.0f}%パーセンタイル")
+      data[label] = np.quantile(net_values, q)
+      
+    for y in bankruptcy_years:
+      data[f"{y}年破産確率 (%)"] = np.mean(sustained_months < y * 12) * 100.0
+
+    summary_data[name] = data
+
+  summary_df = pd.DataFrame(summary_data).T
+
+  def format_oku(x: float) -> str:
+    return f"約 {x / 10000:.1f}億円"
+
+  def format_pct(x: float) -> str:
+    return f"{x:.1f}%"
+
+  format_dict = {}
+  for q in quantiles:
+      label = quantile_labels.get(q, f"{q*100:.0f}%パーセンタイル")
+      format_dict[label] = format_oku
+      
+  for y in bankruptcy_years:
+      format_dict[f"{y}年破産確率 (%)"] = format_pct
+
+  styled_summary = summary_df.style.format(format_dict)
+  styled_summary.index.name = "戦略"
+
+  return summary_df, styled_summary
 
 
 def visualize_and_save(results: Dict[str, SimulationResult],
                        html_file: str,
                        image_file: Optional[str] = None,
                        title: str = '50年後の最終評価額のパーセンタイル分布',
-                       summary_title: str = '最終評価額サマリー（1,000回試行）') -> None:
+                       summary_title: str = '最終評価額サマリー（1,000回試行）',
+                       bankruptcy_years: List[int] = [20, 30, 40, 50]) -> None:
   """
   シミュレーション結果を可視化し、HTMLファイルに保存してブラウザで開く。
   オプションで画像ファイル（PNG/SVG等）としても保存する。
+  マークダウンのサマリーテーブルを標準出力にプリントする。
 
   Args:
     results: 戦略名をキーとする SimulationResult の辞書
@@ -28,6 +97,7 @@ def visualize_and_save(results: Dict[str, SimulationResult],
     image_file: オプションの保存先画像ファイルパス (例: .png, .svg)
     title: グラフのタイトル
     summary_title: サマリー表のタイトル
+    bankruptcy_years: サマリーに含める破産確率の年数リスト
   """
   # 可視化用に最終純資産額のみの DataFrame を作成
   df_results_net_values = pd.DataFrame({
@@ -72,7 +142,16 @@ def visualize_and_save(results: Dict[str, SimulationResult],
       title=title, width=600, height=300).interactive()
 
   # サマリーとHTMLの出力
-  styled_summary = create_styled_summary(results)
+  summary_df, styled_summary = create_styled_summary(
+      results,
+      quantiles=[0.01, 0.10, 0.25, 0.50, 0.75, 0.90],
+      bankruptcy_years=bankruptcy_years
+  )
+
+  # STDOUT にマークダウンを出力
+  print(f"\n## {summary_title}")
+  print(summary_df.to_markdown(floatfmt=".1f"))
+  print("\n")
 
   # ensure temp directory exists
   os.makedirs(os.path.dirname(html_file), exist_ok=True)
