@@ -4,8 +4,9 @@ import numpy as np
 import pandas as pd
 
 from core import (MU, N_SIM, SIGMA, TRADING_DAYS, YEARS, Asset,
-                  SimulationResult, Strategy, create_styled_summary,
-                  generate_monthly_asset_prices, simulate_strategy)
+                  SimulationResult, Strategy, ZeroRiskAsset,
+                  create_styled_summary, generate_monthly_asset_prices,
+                  simulate_strategy)
 
 
 class TestCore(unittest.TestCase):
@@ -292,14 +293,16 @@ class TestCore(unittest.TestCase):
     """
     # モックデータ
     results = {
-        "Strategy1": SimulationResult(
-            net_values=np.array([0.0, 10000.0, 20000.0, 50000.0, 100000.0]),
-            sustained_months=np.array([12, 600, 600, 600, 600]) # 1つだけ1年で破産
-        ),
-        "Strategy2": SimulationResult(
-            net_values=np.array([5000.0, 15000.0, 25000.0, 60000.0, 150000.0]),
-            sustained_months=np.array([600, 600, 600, 600, 600])
-        )
+        "Strategy1":
+            SimulationResult(
+                net_values=np.array([0.0, 10000.0, 20000.0, 50000.0, 100000.0]),
+                sustained_months=np.array([12, 600, 600, 600, 600])  # 1つだけ1年で破産
+            ),
+        "Strategy2":
+            SimulationResult(net_values=np.array(
+                [5000.0, 15000.0, 25000.0, 60000.0, 150000.0]),
+                             sustained_months=np.array(
+                                 [600, 600, 600, 600, 600]))
     }
 
     styled = create_styled_summary(results)
@@ -326,38 +329,113 @@ class TestCore(unittest.TestCase):
     n_sim = 3
     years = 10
     total_months = years * 12
-    
+
     # 価格推移を自作
     prices_array = np.ones((n_sim, total_months + 1))
-    
+
     # パス0: 即破産 (現金不足で資産を売っても足りない状況を作る)
     # パス1: 5年(60ヶ月)で破産
     # パス2: 破産しない
-    
-    prices_array[0, 1:] = 0.0001 # ほぼ価値なし
-    prices_array[1, 61:] = 0.0001 # 61ヶ月目から価値なし
-    
+
+    prices_array[0, 1:] = 0.0001  # ほぼ価値なし
+    prices_array[1, 61:] = 0.0001  # 61ヶ月目から価値なし
+
     prices = {"Asset": prices_array}
-    
+
     strategy = Strategy(
         name="SustainedTest",
         initial_money=10.0,
-        initial_loan=90.0, # 借入比率が高い
+        initial_loan=90.0,  # 借入比率が高い
         yearly_loan_interest=0.0,
         initial_asset_ratio={"Asset": 1.0},
         annual_cost=0.0,
         annual_cost_inflation=0.0,
         selling_priority=["Asset"])
-    
+
     res = simulate_strategy(strategy, prices)
     sustained = res.sustained_months
-    
+
     # パス0は m=0 で破産判定されるはず (総資産 100*0.0001 = 0.01 < 借入 90)
     self.assertEqual(sustained[0], 0)
     # パス1は m=60 で破産判定されるはず (総資産 100*0.0001 = 0.01 < 借入 90)
     self.assertEqual(sustained[1], 60)
     # パス2は最後まで破産しない
     self.assertEqual(sustained[2], total_months)
+
+  def test_simulate_strategy_zero_risk_asset(self):
+    """
+    無リスク資産(ZeroRiskAsset)が含まれる場合、利回りが正しく計算されて現金に加算され、
+    価格変動がなくキャピタルゲイン税がかからないことを検証する。
+    """
+    n_sim = 1
+    years = 1
+    total_months = 12
+
+    # 乱数生成のダミー(今回は使用しないが関数呼び出し用に必要)
+    prices = {"DummyAsset": np.ones((n_sim, total_months + 1))}
+
+    # 100万円投資し、年利12% (月利1%)、税率20%
+    # 毎月の利回りは 100 * 0.01 * (1 - 0.2) = 0.8万円
+    # 年間で 0.8 * 12 = 9.6万円 が現金に加算される
+    zr_asset = ZeroRiskAsset(name="Cash", yield_rate=0.12)
+
+    strategy = Strategy(name="ZeroRiskTest",
+                        initial_money=100.0,
+                        initial_loan=0.0,
+                        yearly_loan_interest=0.0,
+                        initial_asset_ratio={zr_asset: 1.0},
+                        annual_cost=0.0,
+                        annual_cost_inflation=0.0,
+                        selling_priority=["Cash"],
+                        tax_rate=0.2)
+
+    res = simulate_strategy(strategy, prices)
+    net_values = res.net_values
+
+    # 最終的な純資産総額は 100.0 + 9.6 = 109.6 になるはず
+    self.assertTrue(np.allclose(net_values, 109.6))
+
+  def test_strategy_validation(self):
+    """
+    selling_priority に initial_asset_ratio に含まれない資産が指定された場合、
+    ValueError が発生することを検証する。
+    """
+    with self.assertRaises(ValueError):
+      Strategy(
+          name="InvalidPriority",
+          initial_money=100.0,
+          initial_loan=0.0,
+          yearly_loan_interest=0.0,
+          initial_asset_ratio={"AssetA": 1.0},
+          annual_cost=0.0,
+          annual_cost_inflation=0.0,
+          selling_priority=["AssetB"]  # AssetAが存在するのにAssetBを指定
+      )
+
+    # ZeroRiskAssetの場合はそのnameで検証されるべき
+    zr = ZeroRiskAsset("Cash", 0.05)
+    with self.assertRaises(ValueError):
+      Strategy(name="InvalidPriorityZR",
+               initial_money=100.0,
+               initial_loan=0.0,
+               yearly_loan_interest=0.0,
+               initial_asset_ratio={zr: 1.0},
+               annual_cost=0.0,
+               annual_cost_inflation=0.0,
+               selling_priority=["NotCash"])
+
+    # 正しい場合はエラーにならない
+    Strategy(name="ValidPriority",
+             initial_money=100.0,
+             initial_loan=0.0,
+             yearly_loan_interest=0.0,
+             initial_asset_ratio={
+                 zr: 0.5,
+                 "AssetA": 0.5
+             },
+             annual_cost=0.0,
+             annual_cost_inflation=0.0,
+             selling_priority=["Cash", "AssetA"])
 
 
 if __name__ == "__main__":

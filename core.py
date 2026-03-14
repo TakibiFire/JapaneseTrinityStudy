@@ -6,7 +6,7 @@
 """
 
 import dataclasses
-from typing import Dict, List
+from typing import Dict, List, Union, cast
 
 import numpy as np
 import pandas as pd
@@ -41,6 +41,19 @@ class Asset:
   leverage: int
 
 
+@dataclasses.dataclass(frozen=True)
+class ZeroRiskAsset:
+  """
+  無リスク資産（価格変動なし、固定利回り）を定義する。
+  
+  Attributes:
+    name: 資産の名前 (例: "現金", "米国短期国債")
+    yield_rate: 年利 (割合)
+  """
+  name: str
+  yield_rate: float
+
+
 @dataclasses.dataclass
 class Strategy:
   """
@@ -52,9 +65,10 @@ class Strategy:
     initial_loan: 証券担保ローンの初期借入額 (万円)
     yearly_loan_interest: ローンの年利 (割合)
     initial_asset_ratio: 各資産への初期投資割合。合計が 1.0 以下の時、残りは現金とする。
+                         キーは Asset の name (str) または ZeroRiskAsset インスタンス。
     annual_cost: 初年の生活費 (万円)。月割で取り崩す。
     annual_cost_inflation: 生活費の年率インフレ率 (割合)
-    selling_priority: 現金不足時に売却する資産の優先順位
+    selling_priority: 現金不足時に売却する資産の優先順位 (資産の name のリスト)
     tax_rate: 譲渡益に対する税率。デフォルトは 20.315% (0.20315)
     rebalance_interval: リバランスを実行する間隔 (月数)。0 の場合は実行しない。
   """
@@ -62,12 +76,29 @@ class Strategy:
   initial_money: float
   initial_loan: float
   yearly_loan_interest: float
-  initial_asset_ratio: Dict[str, float]
+  initial_asset_ratio: Dict[Union[str, ZeroRiskAsset], float]
   annual_cost: float
   annual_cost_inflation: float
   selling_priority: List[str]
   tax_rate: float = 0.20315
   rebalance_interval: int = 0
+
+  def __post_init__(self):
+    """
+    selling_priority に含まれる資産名が initial_asset_ratio に存在するか検証する。
+    """
+    valid_names = set()
+    for key in self.initial_asset_ratio.keys():
+      if isinstance(key, ZeroRiskAsset):
+        valid_names.add(key.name)
+      else:
+        valid_names.add(key)
+
+    for name in self.selling_priority:
+      if name not in valid_names:
+        raise ValueError(
+            f"Selling priority asset '{name}' not found in initial_asset_ratio."
+        )
 
 
 @dataclasses.dataclass
@@ -177,24 +208,60 @@ def simulate_strategy(
   Returns:
     SimulationResult インスタンス。
   """
-  # 任意の資産から n_sim と total_months を取得
-  sample_asset_name = list(monthly_asset_prices.keys())[0]
-  prices_shape = monthly_asset_prices[sample_asset_name].shape
-  n_sim = prices_shape[0]
-  total_months = prices_shape[1] - 1  # 初期月が含まれるため -1
+  # 引数の辞書を変更しないようにコピーを作成
+  local_monthly_asset_prices = dict(monthly_asset_prices)
+
+  # 任意の資産から n_sim と total_months を取得 (既存の価格データがあればそれを使用)
+  if local_monthly_asset_prices:
+    sample_asset_name = list(local_monthly_asset_prices.keys())[0]
+    prices_shape = local_monthly_asset_prices[sample_asset_name].shape
+    n_sim = prices_shape[0]
+    total_months = prices_shape[1] - 1  # 初期月が含まれるため -1
+  else:
+    # monthly_asset_pricesが空で、ZeroRiskAssetのみの場合のフォールバック
+    # 現実的には n_sim と total_months が分からないため、これは想定外だが
+    # 今回の要件の範囲では通常資産が少なくとも1つはあるか、外部から渡されると想定する。
+    # とはいえ安全のため N_SIM, YEARS を使うことも考えられる。
+    n_sim = N_SIM
+    total_months = YEARS * 12
+
+  # ZeroRiskAsset の処理と initial_asset_ratio の正規化
+  # keysは資産名(str)、valuesは投資割合(float)のDict。
+  # 正規化が必要な理由は、strategy.initial_asset_ratio が ZeroRiskAsset オブジェクトと
+  # 文字列の両方をキーとして受け入れる仕様である一方、これ以降のシミュレーションの
+  # 主要なデータ構造(units, average_cost, monthly_asset_prices)は、
+  # 全て文字列の「資産名」をキーとして状態を管理するように設計されているため。
+  normalized_ratio: Dict[str, float] = {}
+  zero_risk_assets: List[ZeroRiskAsset] = []
+
+  for key, ratio in strategy.initial_asset_ratio.items():
+    if isinstance(key, ZeroRiskAsset):
+      asset_name = key.name
+      normalized_ratio[asset_name] = float(ratio)
+      zero_risk_assets.append(key)
+      # ZeroRiskAsset用の価格推移(常に1.0)を生成して追加
+      if asset_name not in local_monthly_asset_prices:
+        local_monthly_asset_prices[asset_name] = np.ones(
+            (n_sim, total_months + 1), dtype=np.float64)
+    else:
+      str_key = cast(str, key)
+      normalized_ratio[str_key] = float(ratio)
 
   # 初期資金
   total_capital = strategy.initial_money + strategy.initial_loan
 
   # 各資産の初期投資割合の合計
-  total_ratio = sum(strategy.initial_asset_ratio.values())
+  total_ratio = sum(normalized_ratio.values())
 
   # 初期状態の確保
   cash = np.full(n_sim, total_capital * (1.0 - total_ratio), dtype=np.float64)
 
   # 各資産の保有口数 (初期価格は1.0のため、金額＝口数)
+  # keysは資産名(str)、valuesは各シミュレーションパスにおける保有口数の配列(shape: (n_sim,))。
+  # シミュレーション上、全資産(通常資産も無リスク資産も)の初期価格を1.0として開始するため、
+  # 初期の保有口数は、各資産への初期投資金額(万円)と完全に一致する仕様となっている。
   units: Dict[str, np.ndarray] = {}
-  for asset_name, ratio in strategy.initial_asset_ratio.items():
+  for asset_name, ratio in normalized_ratio.items():
     units[asset_name] = np.full(n_sim, total_capital * ratio, dtype=np.float64)
 
   # 税金計算用の配列
@@ -203,7 +270,7 @@ def simulate_strategy(
 
   # 各資産の平均取得単価
   average_cost: Dict[str, np.ndarray] = {}
-  for asset_name in strategy.initial_asset_ratio.keys():
+  for asset_name in normalized_ratio.keys():
     average_cost[asset_name] = np.ones(n_sim, dtype=np.float64)
 
   # 破産フラグ (True なら破産)
@@ -220,6 +287,18 @@ def simulate_strategy(
     # すべてのパスが破産していればループ終了
     if np.all(bankrupt):
       break
+
+    # ZeroRiskAsset の利回り支払い (税引き後を直接 cash に加算)
+    active_paths = ~bankrupt
+    if np.any(active_paths):
+      for zr_asset in zero_risk_assets:
+        asset_name = zr_asset.name
+        if asset_name in units:
+          # units == 金額 (価格が常に1.0のため)
+          # 利回り = (保有口数) * (年利 / 12) * (1 - 税率)
+          yield_payment = units[asset_name] * (zr_asset.yield_rate /
+                                               12.0) * (1.0 - strategy.tax_rate)
+          cash[active_paths] += yield_payment[active_paths]
 
     # mヶ月目の生活費 (インフレ考慮)
     cost_m = (strategy.annual_cost /
@@ -238,7 +317,6 @@ def simulate_strategy(
 
     # 現金の取り崩し
     # 破産していないパスのみ現金を減少させる
-    active_paths = ~bankrupt
     cash[active_paths] -= required_cash[active_paths]
 
     # 現金不足のパスを特定
@@ -257,7 +335,8 @@ def simulate_strategy(
 
         # 現在の月次価格 (m+1 が現在の月末価格、m=0の時 prices[:, 1])
         # 取り崩しは月末に行うと仮定する
-        current_price = monthly_asset_prices[asset_name][still_shortage, m + 1]
+        current_price = local_monthly_asset_prices[asset_name][still_shortage,
+                                                               m + 1]
 
         # 保有資産の評価額
         asset_value = units[asset_name][still_shortage] * current_price
@@ -294,14 +373,14 @@ def simulate_strategy(
         current_total_net_value = cash[rebalance_paths].copy()
         current_values = {}
         for asset_name in units:
-          current_price = monthly_asset_prices[asset_name][rebalance_paths,
-                                                           m + 1]
+          current_price = local_monthly_asset_prices[asset_name][
+              rebalance_paths, m + 1]
           current_val = units[asset_name][rebalance_paths] * current_price
           current_values[asset_name] = current_val
           current_total_net_value += current_val
 
         # 売却処理 (目標よりも多い資産を売る)
-        for asset_name, ratio in strategy.initial_asset_ratio.items():
+        for asset_name, ratio in normalized_ratio.items():
           target_val = current_total_net_value * ratio
           current_val = current_values[asset_name]
           diff = current_val - target_val
@@ -311,8 +390,8 @@ def simulate_strategy(
           if np.any(sell_mask):
             sell_paths_idx = np.where(rebalance_paths)[0][sell_mask]
             sell_amount = diff[sell_mask]
-            current_price = monthly_asset_prices[asset_name][sell_paths_idx,
-                                                             m + 1]
+            current_price = local_monthly_asset_prices[asset_name][
+                sell_paths_idx, m + 1]
 
             valid_price_mask = current_price > 0
             units_to_sell = np.zeros_like(sell_amount)
@@ -328,11 +407,11 @@ def simulate_strategy(
             cash[sell_paths_idx] += sell_amount
 
         # 購入処理 (目標よりも少ない資産を買う)
-        for asset_name, ratio in strategy.initial_asset_ratio.items():
+        for asset_name, ratio in normalized_ratio.items():
           # 現時点での評価額を再計算（売却後の現金を反映するため、というより目標値と比較するため）
           target_val = current_total_net_value * ratio
-          current_price_full = monthly_asset_prices[asset_name][rebalance_paths,
-                                                                m + 1]
+          current_price_full = local_monthly_asset_prices[asset_name][
+              rebalance_paths, m + 1]
           current_val = units[asset_name][rebalance_paths] * current_price_full
           diff = target_val - current_val
 
@@ -347,8 +426,8 @@ def simulate_strategy(
             if np.any(actual_buy_mask):
               buy_paths_idx = buy_paths_idx[actual_buy_mask]
               buy_amount = buy_amount[actual_buy_mask]
-              current_price = monthly_asset_prices[asset_name][buy_paths_idx,
-                                                               m + 1]
+              current_price = local_monthly_asset_prices[asset_name][
+                  buy_paths_idx, m + 1]
 
               valid_price_mask = current_price > 0
               units_to_buy = np.zeros_like(buy_amount)
@@ -376,7 +455,8 @@ def simulate_strategy(
     total_assets = cash.copy()
     for asset_name, unit_array in units.items():
       total_assets[active_paths] += unit_array[
-          active_paths] * monthly_asset_prices[asset_name][active_paths, m + 1]
+          active_paths] * local_monthly_asset_prices[asset_name][active_paths,
+                                                                 m + 1]
 
     # 破産判定: 総資産 < 初期借入額
     new_bankrupts = active_paths & (total_assets < strategy.initial_loan)

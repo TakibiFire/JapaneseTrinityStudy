@@ -12,7 +12,7 @@ import altair as alt
 import numpy as np
 import pandas as pd
 
-from core import (Asset, Strategy, create_styled_summary,
+from core import (Asset, Strategy, ZeroRiskAsset, create_styled_summary,
                   generate_monthly_asset_prices, simulate_strategy)
 
 
@@ -157,6 +157,19 @@ def main():
                     annual_cost_inflation=0.015,
                     selling_priority=["オルカン", "レバカン"])
 
+  plan_zero_risk_test = Strategy(
+      name="ZeroRiskAssetテスト (BIL 20%)",
+      initial_money=10000,
+      initial_loan=0,
+      yearly_loan_interest=2.125 / 100,
+      initial_asset_ratio={
+          "オルカン": 0.8,
+          ZeroRiskAsset(name="BIL", yield_rate=0.04): 0.2
+      },
+      annual_cost=400,
+      annual_cost_inflation=0.015,
+      selling_priority=["オルカン"])
+
   opt50 = Strategy(name="Opt50",
                    initial_money=10000,
                    initial_loan=5000,
@@ -184,6 +197,7 @@ def main():
       #plan_b,
       #plan_b_4_4,
       #plan_c,
+      plan_zero_risk_test,
   ]
 
   # ---------------------------------------------------------------------------

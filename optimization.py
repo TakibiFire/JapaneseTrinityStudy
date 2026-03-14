@@ -7,12 +7,12 @@ scipy.optimize.brute を用いたグリッドサーチにより、
 """
 
 import enum
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import scipy.optimize
 
-from core import Strategy, simulate_strategy
+from core import Strategy, ZeroRiskAsset, simulate_strategy
 
 
 class OptimizationTarget(enum.Enum):
@@ -31,7 +31,9 @@ def create_strategy(i: float,
                     j: float,
                     k: float,
                     rebalance_interval: int = 0,
-                    name: str = "Optimization Target") -> Strategy:
+                    name: str = "Optimization Target",
+                    zero_risk_asset: Optional[ZeroRiskAsset] = None,
+                    zero_risk_ratio: float = 0.0) -> Strategy:
   """
   指定されたパラメータ(i, j, k)からシミュレーション用のStrategyオブジェクトを作成する。
   
@@ -41,18 +43,21 @@ def create_strategy(i: float,
     k: 初期借入額の係数 (k * 1000 万円の借入)
     rebalance_interval: リバランス間隔 (月)
     name: 戦略の名前
+    zero_risk_asset: ポートフォリオに含める無リスク資産（オプション）
+    zero_risk_ratio: 無リスク資産の初期資産割合
     
   Returns:
     Strategy: 構築された戦略オブジェクト
   """
+  ratio_dict: Dict[Union[str, ZeroRiskAsset], float] = {"オルカン": i, "レバカン": j}
+  if zero_risk_asset is not None and zero_risk_ratio > 0.0:
+    ratio_dict[zero_risk_asset] = zero_risk_ratio
+
   return Strategy(name=name,
                   initial_money=10000.0,
                   initial_loan=float(k * 1000.0),
                   yearly_loan_interest=2.125 / 100,
-                  initial_asset_ratio={
-                      "オルカン": i,
-                      "レバカン": j
-                  },
+                  initial_asset_ratio=ratio_dict,
                   annual_cost=400.0,
                   annual_cost_inflation=0.015,
                   selling_priority=["レバカン", "オルカン"],
@@ -61,7 +66,9 @@ def create_strategy(i: float,
 
 def evaluate_strategy(params: Tuple[float, float, float, int],
                       monthly_asset_prices: Dict[str, np.ndarray],
-                      target: OptimizationTarget) -> float:
+                      target: OptimizationTarget,
+                      zero_risk_asset: Optional[ZeroRiskAsset] = None,
+                      zero_risk_ratio: float = 0.0) -> float:
   """
   最適化探索 (scipy.optimize.brute) から呼び出される評価関数。
   
@@ -76,19 +83,26 @@ def evaluate_strategy(params: Tuple[float, float, float, int],
             r: リバランス間隔 (0 または 12)
     monthly_asset_prices: 事前計算された各資産の月次価格推移。
     target: 評価する目的関数 (OptimizationTarget)。
+    zero_risk_asset: ポートフォリオに含める無リスク資産（オプション）
+    zero_risk_ratio: 無リスク資産の初期資産割合
   
   Returns:
     最適化ソルバー向けの評価スコア (float)。
-    (i + j <= 1.0) の制約を満たさない場合は float('inf') を返す。
+    (i + j + zero_risk_ratio <= 1.0) の制約を満たさない場合は float('inf') を返す。
   """
   i, j, k, r = params
 
-  # 制約条件: i + j <= 1.0 (浮動小数点の誤差を許容)
-  if i + j > 1.0 + 1e-9:
+  # 制約条件: i + j + zero_risk_ratio <= 1.0 (浮動小数点の誤差を許容)
+  if i + j + zero_risk_ratio > 1.0 + 1e-9:
     return float('inf')
 
   # 評価用の戦略を構築
-  strategy = create_strategy(i, j, k, int(r))
+  strategy = create_strategy(i,
+                             j,
+                             k,
+                             int(r),
+                             zero_risk_asset=zero_risk_asset,
+                             zero_risk_ratio=zero_risk_ratio)
 
   # シミュレーション実行
   res = simulate_strategy(strategy, monthly_asset_prices)
@@ -126,13 +140,17 @@ def evaluate_strategy(params: Tuple[float, float, float, int],
 
 def optimize_strategy(
     monthly_asset_prices: Dict[str, np.ndarray],
-    target: OptimizationTarget) -> Tuple[float, float, int, int, float]:
+    target: OptimizationTarget,
+    zero_risk_asset: Optional[ZeroRiskAsset] = None,
+    zero_risk_ratio: float = 0.0) -> Tuple[float, float, int, int, float]:
   """
   scipy.optimize.brute を使用し、指定された目的関数に従って最適な (i, j, k, r) を探索する。
   
   Args:
     monthly_asset_prices: 月次資産価格のシミュレーションデータ
     target: 最適化の目的 (OptimizationTarget)
+    zero_risk_asset: ポートフォリオに含める無リスク資産（オプション）
+    zero_risk_ratio: 無リスク資産の初期資産割合
     
   Returns:
     Tuple[float, float, int, int, float]: 最適な (i, j, k, r) とその時の（元の）スコア
@@ -155,7 +173,7 @@ def optimize_strategy(
   res = scipy.optimize.brute(
       func=evaluate_strategy,
       ranges=ranges,
-      args=(monthly_asset_prices, target),
+      args=(monthly_asset_prices, target, zero_risk_asset, zero_risk_ratio),
       full_output=True,
       finish=None  # 局所最適化（Nelder-Meadなど）を行わず、グリッド上の最小値をそのまま返す
   )

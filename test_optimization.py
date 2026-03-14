@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from core import Asset, generate_monthly_asset_prices
+from core import Asset, ZeroRiskAsset, generate_monthly_asset_prices
 from optimization import (OptimizationTarget, evaluate_strategy,
                           optimize_strategy)
 
@@ -25,7 +25,7 @@ def dummy_monthly_prices():
 
 def test_evaluate_strategy_constraints(dummy_monthly_prices):
   """
-  最適化関数における (i + j <= 1.0) の制約が正しく機能し、
+  最適化関数における (i + j + zero_risk_ratio <= 1.0) の制約が正しく機能し、
   違反した際に float('inf') を返すか検証する。
   """
   target = OptimizationTarget.MINIMIZE_RUIN_PROBABILITY_20Y
@@ -36,6 +36,25 @@ def test_evaluate_strategy_constraints(dummy_monthly_prices):
   # 1.0ぴったりの場合 (許容されるはず)
   score = evaluate_strategy((0.5, 0.5, 0.0, 12), dummy_monthly_prices, target)
   assert score != float('inf')
+
+  # ZeroRiskAssetを含む場合
+  zr = ZeroRiskAsset(name="CashYield", yield_rate=0.03)
+
+  # i(0.4) + j(0.4) + zr(0.3) = 1.1 -> 1.0を超える
+  score_zr_over = evaluate_strategy((0.4, 0.4, 0.0, 12),
+                                    dummy_monthly_prices,
+                                    target,
+                                    zero_risk_asset=zr,
+                                    zero_risk_ratio=0.3)
+  assert score_zr_over == float('inf')
+
+  # i(0.4) + j(0.4) + zr(0.2) = 1.0 -> 許容されるはず
+  score_zr_ok = evaluate_strategy((0.4, 0.4, 0.0, 12),
+                                  dummy_monthly_prices,
+                                  target,
+                                  zero_risk_asset=zr,
+                                  zero_risk_ratio=0.2)
+  assert score_zr_ok != float('inf')
 
 
 def test_evaluate_strategy_targets(dummy_monthly_prices):
