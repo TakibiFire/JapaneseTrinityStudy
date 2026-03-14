@@ -73,12 +73,12 @@ def main():
   md_text = formatted_df.to_markdown(colalign=("left",) +
                                      ("right",) * len(formatted_df.columns))
 
-  report_file = 'tasks/report_task.md'
+  report_file = 'docs/report.md'
   try:
     with open(report_file, 'r', encoding='utf-8') as f:
       content = f.read()
 
-    pattern = r'(<volatility_main\.py>\n-->).*?(<!--\n</volatility_main\.py>)'
+    pattern = r'(<!--<volatility_main\.py>-->).*?(<!--</volatility_main\.py>-->)'
     if re.search(pattern, content, re.DOTALL):
       new_content = re.sub(pattern,
                            rf'\g<1>\n\n{md_text.strip()}\n\n\g<2>',

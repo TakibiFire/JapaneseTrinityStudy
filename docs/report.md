@@ -1,0 +1,88 @@
+<!--
+This task file has a special format. Some of the comment parts are the instruction
+for AI. The other parts are raw Markdown. The goal is to make a detailed report
+for the 4% rule.
+
+During this task, you are supposed to do the following:
+- Overwrite uncommented parts of this file directly based on my request
+- Write new Python files to do the simulation.
+
+See also core.py, main.py, optimization_main.py for the context.
+
+## Development policy
+
+- Write design doc `task/num_years_design.md`.
+- 2-space indent
+- pytype compatible 
+- Use Japanese as code comment
+- Make the code gradually
+- When I ask something, stop editting the file and always respond to it in a chat
+- Write tests
+-->
+
+# 日本語版 4% ルール
+
+<!--
+TODO: ここに素敵な導入を入れるが、それは後で考える。
+-->
+
+## シミュレーションについて
+
+<!--
+TODO: ここに今回行うシミュレーションの設定について説明するが、それは後で考える。
+-->
+
+## ボラティリティについて
+
+シンプルなライフプランのシミュレーションでありがちなのが、運用資産の運用利回り（リターン）のみを考慮するシミュレーションです。
+
+<img src="../imgs/NoVolatility.png" width="50%"/><br>
+[参考: 資産運用かんたんシミュレーション | アセットマネジメントOne](https://www.am-one.co.jp/shisankeisei/simulation.html)
+
+上には1億円を7%固定運用した場合のグラフが表示されています。このように定率で伸びる資産が存在すれば上のグラフのように指数関数的に増えるわけですが、オルカンなど株系の資産はこのような値動きをすることはありません。
+
+そもそも投資の世界における「リスク」や「ボラティリティ」という言葉は、日常的な「危険」という意味ではなく、「価格の振れ幅（変動の激しさ）」のことを指します。大きく値上がりする可能性もあれば、大きく値下がりする可能性もある、そのブレの大きさが「ボラティリティ」です。
+
+でも世の中のライフプランのシミュレーションに、このボラティリティを考えないツールは非常に多いので、注意が必要です。
+
+ボラティリティを考えないことがどれくらいまずいか、シミュレーションで調べてみました。
+
+例えばオルカンを初年度に1億円購入したとして50年運用したとします。仮に年リターンを7%, 年ボラティリティが0%, 11%, 13%, 15%, 17% と変えた時の資産価値は以下のようになります。
+
+<!--
+```
+python volatility_main.py.
+```
+
+fills in the following placeholder and updates imgs/volatility_result.svg.
+-->
+
+<!--<volatility_main.py>-->
+
+|              |   下位1% (だいぶ運が悪い) |   下位10% (運が悪い) |   下位25% (やや不運) |   中央値 (普通) |   上位25% (やや幸運) |   上位10% (運が良い) |
+|:-------------|-----------------:|---------------:|---------------:|-----------:|---------------:|---------------:|
+| オルカン, ボラ=0%  |           33.1億円 |         33.1億円 |         33.1億円 |     33.1億円 |         33.1億円 |         33.1億円 |
+| オルカン, ボラ=11% |            4.0億円 |          9.0億円 |         14.8億円 |     24.4億円 |         40.1億円 |         62.3億円 |
+| オルカン, ボラ=13% |            2.6億円 |          6.6億円 |         12.0億円 |     21.6億円 |         38.9億円 |         65.5億円 |
+| オルカン, ボラ=15% |            1.6億円 |          4.8億円 |          9.5億円 |     18.8億円 |         37.0億円 |         67.5億円 |
+| オルカン, ボラ=17% |            1.0億円 |          3.4億円 |          7.4億円 |     16.0億円 |         34.5億円 |         68.1億円 |
+
+<!--</volatility_main.py>-->
+
+<img src="../imgs/volatility_result.svg" /><br>
+
+上のグラフの横線はボラティリティがない場合です。他の場合がだいたい `70%` の場所で交わっていますね。つまり、高いボラティリティの商品を長期で掴んだ場合、ボラティリティ0の商品と比べてあなたが勝てる見込みは 30%くらいということです。逆の言い方をすればボラティリティを考慮しないシミュレーションをして「50年後に 33.1 倍になる！」と信じた場合、資産が本当に33.1倍以上になる確率は 30% しかありません。
+
+<details>
+<summary>数学的な話</summary>
+
+資産の価格変動が対数正規分布に従うと仮定すると、算術平均リターン $\mu$ とボラティリティ $\sigma$ に対して、長期的な中央値の成長率（幾何平均リターン）はおおよそ $\mu - \frac{\sigma^2}{2}$ となります。
+
+例えば、算術平均リターンが 7% ($\mu = 0.07$) であっても、ボラティリティが 17% ($\sigma = 0.17$) ある場合、長期的な成長率の中央値は $0.07 - \frac{0.17^2}{2} = 0.05555$ (約 5.56%) まで低下します。
+
+ちなみにこの数値を使って50年後の資産を計算すると、初期資産1億円 $\times \exp(0.05555 \times 50) \approx 16.1$ 億円となり、上の表にあるシミュレーション結果の「16.0億円」とほぼ一致することがわかります。
+
+これが、ボラティリティが高くなるほど「普通」の運の持ち主が得られる最終資産額（中央値）が下がってしまう数学的な理由です。
+
+</details>
+
