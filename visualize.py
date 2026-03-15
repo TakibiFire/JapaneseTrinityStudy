@@ -85,9 +85,56 @@ def create_styled_summary(
   return formatted_df, styled_summary
 
 
+def create_survival_probability_chart(
+    results: Dict[str, SimulationResult],
+    max_years: int = 50) -> Tuple[pd.DataFrame, alt.Chart]:
+  """
+  各戦略の生存確率 (1 - 破産確率) の推移を年単位で計算し、
+  データフレームと Altairの折れ線グラフを返す。
+
+  Args:
+    results: 戦略名をキー、SimulationResult を値とする辞書。
+    max_years: 何年後までを計算するか。デフォルトは50年。
+
+  Returns:
+    生データの DataFrame と Altair チャートのタプル。
+  """
+  plot_data = []
+  years = list(range(max_years + 1))
+
+  for name, res in results.items():
+    sustained = res.sustained_months
+    
+    for y in years:
+      # y年の時点で生存している = sustained_months >= y * 12
+      survival_rate = np.mean(sustained >= y * 12) * 100.0
+      plot_data.append({
+          'Year': y,
+          'Strategy': name,
+          'Survival Probability (%)': survival_rate
+      })
+
+  df_plot = pd.DataFrame(plot_data)
+
+  chart = alt.Chart(df_plot).mark_line(point=True).encode(
+      x=alt.X('Year:Q', title='経過年数 (年)'),
+      y=alt.Y('Survival Probability (%):Q',
+              title='生存確率 (%)',
+              scale=alt.Scale(domain=[0, 100])),
+      color=alt.Color('Strategy:N', legend=alt.Legend(title="戦略")),
+      tooltip=[
+          'Year', 'Strategy',
+          alt.Tooltip('Survival Probability (%):Q', format='.1f')
+      ]
+  ).properties(title='経過年数と生存確率の推移', width=600, height=250).interactive()
+
+  return df_plot, chart
+
+
 def visualize_and_save(results: Dict[str, SimulationResult],
                        html_file: str,
                        image_file: Optional[str] = None,
+                       survival_image_file: Optional[str] = None,
                        title: str = '50年後の最終評価額のパーセンタイル分布',
                        summary_title: str = '最終評価額サマリー（1,000回試行）',
                        bankruptcy_years: List[int] = [20, 30, 40, 50]) -> None:
@@ -99,7 +146,8 @@ def visualize_and_save(results: Dict[str, SimulationResult],
   Args:
     results: 戦略名をキーとする SimulationResult の辞書
     html_file: 保存先のHTMLファイルパス
-    image_file: オプションの保存先画像ファイルパス (例: .png, .svg)
+    image_file: オプションの保存先画像ファイルパス (例: .png, .svg) (最終評価額分布)
+    survival_image_file: オプションの保存先画像ファイルパス (生存確率推移)
     title: グラフのタイトル
     summary_title: サマリー表のタイトル
     bankruptcy_years: サマリーに含める破産確率の年数リスト
@@ -147,6 +195,12 @@ def visualize_and_save(results: Dict[str, SimulationResult],
                                                      width=600,
                                                      height=300).interactive()
 
+  # 生存確率のチャートを作成
+  _, survival_chart = create_survival_probability_chart(results, max_years=50)
+  
+  # HTML表示用に垂直結合し、各グラフに凡例を独立して表示させる
+  combined_chart = (final_chart & survival_chart).resolve_legend(color='independent')
+
   # サマリーとHTMLの出力
   formatted_df, styled_summary = create_styled_summary(
       results,
@@ -164,7 +218,7 @@ def visualize_and_save(results: Dict[str, SimulationResult],
   os.makedirs(os.path.dirname(html_file), exist_ok=True)
 
   # 1. AltairのチャートをHTML文字列として取得
-  chart_html = final_chart.to_html()
+  chart_html = combined_chart.to_html()
 
   # 2. DataFrame(Styler)をHTMLのテーブル文字列として取得
   table_html = styled_summary.to_html()
@@ -190,6 +244,11 @@ th {background-color: #f2f2f2; text-align: center;}
     os.makedirs(os.path.dirname(image_file), exist_ok=True)
     final_chart.save(image_file)
     print(f"✅ グラフを {image_file} に保存しました。")
+
+  if survival_image_file:
+    os.makedirs(os.path.dirname(survival_image_file), exist_ok=True)
+    survival_chart.save(survival_image_file)
+    print(f"✅ グラフを {survival_image_file} に保存しました。")
 
   print("🌐 ブラウザで開いています...")
 
