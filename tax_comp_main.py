@@ -70,10 +70,12 @@ def main():
   # ---------------------------------------------------------------------------
   # 4. 可視化と保存
   # ---------------------------------------------------------------------------
-  image_file = 'imgs/tax_comp_survival.svg'
+  survival_image_file = 'imgs/tax_comp_survival.svg'
+  distribution_image_file = 'imgs/tax_comp_distribution.svg'
   visualize_and_save(results=results,
                      html_file='temp/tax_comp_result.html',
-                     survival_image_file=image_file,
+                     survival_image_file=survival_image_file,
+                     distribution_image_file=distribution_image_file,
                      title='譲渡所得税の有無のシミュレーション比較',
                      summary_title='譲渡所得税ルールの比較サマリー（1,000回試行）',
                      bankruptcy_years=[10, 20, 30, 40, 50])

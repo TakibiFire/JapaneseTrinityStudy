@@ -125,15 +125,14 @@ def create_survival_probability_chart(
       tooltip=[
           'Year', 'Strategy',
           alt.Tooltip('Survival Probability (%):Q', format='.1f')
-      ]
-  ).properties(title='経過年数と生存確率の推移', width=600, height=250).interactive()
+      ]).properties(title='経過年数と生存確率の推移', width=600, height=250).interactive()
 
   return df_plot, chart
 
 
 def visualize_and_save(results: Dict[str, SimulationResult],
                        html_file: str,
-                       image_file: Optional[str] = None,
+                       distribution_image_file: Optional[str] = None,
                        survival_image_file: Optional[str] = None,
                        title: str = 'シミュレーション結果の可視化',
                        distribution_title: str = '50年後の資産の分布',
@@ -201,8 +200,8 @@ def visualize_and_save(results: Dict[str, SimulationResult],
   _, survival_chart = create_survival_probability_chart(results, max_years=50)
 
   # HTML表示用に垂直結合し、各グラフに凡例を独立して表示させる
-  combined_chart = (final_chart &
-                    survival_chart).properties(title=title).resolve_legend(color='independent')
+  combined_chart = (final_chart & survival_chart).properties(
+      title=title).resolve_legend(color='independent')
 
   # サマリーとHTMLの出力
   formatted_df, styled_summary = create_styled_summary(
@@ -251,10 +250,10 @@ def visualize_and_save(results: Dict[str, SimulationResult],
 
   print(f"✅ 結果を {html_file} に保存しました。")
 
-  if image_file:
-    os.makedirs(os.path.dirname(image_file), exist_ok=True)
-    final_chart.save(image_file)
-    print(f"✅ グラフを {image_file} に保存しました。")
+  if distribution_image_file:
+    os.makedirs(os.path.dirname(distribution_image_file), exist_ok=True)
+    final_chart.save(distribution_image_file)
+    print(f"✅ グラフを {distribution_image_file} に保存しました。")
 
   if survival_image_file:
     os.makedirs(os.path.dirname(survival_image_file), exist_ok=True)

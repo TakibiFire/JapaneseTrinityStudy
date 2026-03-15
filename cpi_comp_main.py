@@ -80,10 +80,12 @@ def main():
   # ---------------------------------------------------------------------------
   # 5. 可視化と保存
   # ---------------------------------------------------------------------------
-  image_file = 'imgs/cpi_comp_survival.svg'
+  survival_image_file = 'imgs/cpi_comp_survival.svg'
+  distribution_image_file = 'imgs/cpi_comp_distribution.svg'
   visualize_and_save(results=results,
                      html_file='temp/cpi_comp_result.html',
-                     survival_image_file=image_file,
+                     survival_image_file=survival_image_file,
+                     distribution_image_file=distribution_image_file,
                      title='物価上昇率のシミュレーション比較の生存確率',
                      summary_title='物価上昇率ルールの比較サマリー（1,000回試行）',
                      bankruptcy_years=[10, 20, 30, 40, 50])

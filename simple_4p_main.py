@@ -85,10 +85,12 @@ def main():
   # ---------------------------------------------------------------------------
   # 4. 可視化と保存
   # ---------------------------------------------------------------------------
-  image_file = 'imgs/simple_4p_survival.svg'
+  survival_image_file = 'imgs/simple_4p_survival.svg'
+  distribution_image_file = 'imgs/simple_4p_distribution.svg'
   visualize_and_save(results=results,
                      html_file='temp/simple_4p_result.html',
-                     survival_image_file=image_file,
+                     survival_image_file=survival_image_file,
+                     distribution_image_file=distribution_image_file,
                      title='シンプルな4%ルールの最終評価額のパーセンタイル分布',
                      summary_title='シンプルな4%ルール比較サマリー（1,000回試行）',
                      bankruptcy_years=[10, 20, 30, 40, 50])
