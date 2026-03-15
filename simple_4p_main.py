@@ -5,10 +5,38 @@
 
 import re
 import sys
+from typing import Dict, List, Union
 
-from core import (Asset, Strategy, generate_monthly_asset_prices,
-                  simulate_strategy)
+from core import (Asset, Strategy, ZeroRiskAsset,
+                  generate_monthly_asset_prices, simulate_strategy)
 from visualize import create_styled_summary, visualize_and_save
+
+
+def create_strategy(name: str,
+                    initial_asset_ratio: Dict[Union[str, ZeroRiskAsset],
+                                              float], annual_cost: float,
+                    selling_priority: List[str]) -> Strategy:
+  """
+  共通設定を持つ Strategy インスタンスを作成する。
+
+  Args:
+    name: 戦略の名前
+    initial_asset_ratio: 各資産への初期投資割合
+    annual_cost: 年間の生活費
+    selling_priority: 売却の優先順位
+
+  Returns:
+    Strategy: 初期設定済みの戦略オブジェクト
+  """
+  return Strategy(name=name,
+                  initial_money=10000,
+                  initial_loan=0,
+                  yearly_loan_interest=2.125 / 100,
+                  initial_asset_ratio=initial_asset_ratio,
+                  annual_cost=annual_cost,
+                  inflation_rate=0.0,
+                  tax_rate=0,
+                  selling_priority=selling_priority)
 
 
 def main():
@@ -24,38 +52,22 @@ def main():
   # 2. 戦略(Plan)の定義
   # ---------------------------------------------------------------------------
   strategies = [
-      Strategy(name="1. オルカン100% / 取り崩しなし",
-               initial_money=10000,
-               initial_loan=0,
-               yearly_loan_interest=2.125 / 100,
-               initial_asset_ratio={"オルカン": 1.0},
-               annual_cost=0,
-               inflation_rate=0,
-               selling_priority=["オルカン"]),
-      Strategy(name="2. 現金100% / 400万円取り崩し",
-               initial_money=10000,
-               initial_loan=0,
-               yearly_loan_interest=2.125 / 100,
-               initial_asset_ratio={},
-               annual_cost=400,
-               inflation_rate=0,
-               selling_priority=[]),
-      Strategy(name="3. 定率7%商品100% / 400万円取り崩し",
-               initial_money=10000,
-               initial_loan=0,
-               yearly_loan_interest=2.125 / 100,
-               initial_asset_ratio={"定率7%商品": 1.0},
-               annual_cost=400,
-               inflation_rate=0,
-               selling_priority=["定率7%商品"]),
-      Strategy(name="4. オルカン100% / 400万円取り崩し",
-               initial_money=10000,
-               initial_loan=0,
-               yearly_loan_interest=2.125 / 100,
-               initial_asset_ratio={"オルカン": 1.0},
-               annual_cost=400,
-               inflation_rate=0,
-               selling_priority=["オルカン"]),
+      create_strategy(name="1. オルカン100% / 取り崩しなし",
+                      initial_asset_ratio={"オルカン": 1.0},
+                      annual_cost=0,
+                      selling_priority=["オルカン"]),
+      create_strategy(name="2. 現金100% / 400万円取り崩し",
+                      initial_asset_ratio={},
+                      annual_cost=400,
+                      selling_priority=[]),
+      create_strategy(name="3. 定率7%商品100% / 400万円取り崩し",
+                      initial_asset_ratio={"定率7%商品": 1.0},
+                      annual_cost=400,
+                      selling_priority=["定率7%商品"]),
+      create_strategy(name="4. オルカン100% / 400万円取り崩し",
+                      initial_asset_ratio={"オルカン": 1.0},
+                      annual_cost=400,
+                      selling_priority=["オルカン"]),
   ]
 
   # ---------------------------------------------------------------------------
