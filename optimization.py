@@ -59,7 +59,7 @@ def create_strategy(i: float,
                   yearly_loan_interest=2.125 / 100,
                   initial_asset_ratio=ratio_dict,
                   annual_cost=400.0,
-                  annual_cost_inflation=0.015,
+                  inflation_rate=0.015,
                   selling_priority=["レバカン", "オルカン"],
                   rebalance_interval=rebalance_interval)
 

@@ -37,7 +37,7 @@ def main():
                yearly_loan_interest=2.125 / 100,
                initial_asset_ratio={f"オルカン v{v}%": 1.0},
                annual_cost=0,
-               annual_cost_inflation=0,
+               inflation_rate=0,
                selling_priority=[f"オルカン v{v}%"]) for v in sigmas
   ]
 

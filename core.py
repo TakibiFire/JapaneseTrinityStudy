@@ -6,7 +6,7 @@
 """
 
 import dataclasses
-from typing import Dict, List, Union, cast
+from typing import Dict, List, Optional, Union, cast
 
 import numpy as np
 import pandas as pd
@@ -57,6 +57,21 @@ class ZeroRiskAsset:
 
 
 @dataclasses.dataclass
+class Cpi:
+  """
+  シミュレーションにおける消費者物価指数（インフレ率）の設定を定義する。
+  
+  Attributes:
+    name: インフレ設定の名前 (例: "日本のCPI")
+    mu: 平均年次インフレ率 (割合)
+    sigma: 年次インフレ率の標本標準偏差 (割合)
+  """
+  name: str
+  mu: float
+  sigma: float
+
+
+@dataclasses.dataclass
 class Strategy:
   """
   シミュレーションの初期状態と、運用期間中の取り崩し・利払いルールを定義する。
@@ -69,7 +84,9 @@ class Strategy:
     initial_asset_ratio: 各資産への初期投資割合。合計が 1.0 以下の時、残りは現金とする。
                          キーは Asset の name (str) または ZeroRiskAsset インスタンス。
     annual_cost: 初年の生活費 (万円)。月割で取り崩す。
-    annual_cost_inflation: 生活費の年率インフレ率 (割合)
+    inflation_rate: 生活費のインフレ設定。
+                    floatが指定された場合は年率の定数インフレ率として扱う。
+                    strが指定された場合は事前計算されたCPIパスの名前として扱う。
     selling_priority: 現金不足時に売却する資産の優先順位 (資産の name のリスト)
     tax_rate: 譲渡益に対する税率。デフォルトは 20.315% (0.20315)
     rebalance_interval: リバランスを実行する間隔 (月数)。0 の場合は実行しない。
@@ -80,7 +97,7 @@ class Strategy:
   yearly_loan_interest: float
   initial_asset_ratio: Dict[Union[str, ZeroRiskAsset], float]
   annual_cost: float
-  annual_cost_inflation: float
+  inflation_rate: Union[float, str]
   selling_priority: List[str]
   tax_rate: float = 0.20315
   rebalance_interval: int = 0
@@ -119,6 +136,53 @@ class SimulationResult:
 # ---------------------------------------------------------------------------
 # 3. コア機能のシグネチャと数学的仕様
 # ---------------------------------------------------------------------------
+
+
+def generate_cpi_paths(cpis: List[Cpi],
+                       years: int = YEARS,
+                       n_sim: int = N_SIM,
+                       seed: int = SEED) -> Dict[str, np.ndarray]:
+  """
+  幾何ブラウン運動に基づいて、CPI（インフレ率）の月次推移をシミュレーションする。
+  
+  月次単位での幾何ブラウン運動による乱数を生成し累積積を計算する。
+  
+  Args:
+    cpis: シミュレーション対象となる Cpi インスタンスのリスト。
+    years: シミュレーション期間 (年)。
+    n_sim: モンテカルロ・シミュレーションのパス数。
+    seed: 乱数シード。
+    
+  Returns:
+    CPI名をキー、shape が (n_sim, 12 * years + 1) の numpy 配列を値とする Dict。
+    初期の0ヶ月目 (倍率 1.0) を含むため、要素数は月数 + 1 になる。
+  """
+  np.random.seed(seed)
+
+  # 時間ステップ (月次)
+  dt = 1.0 / 12.0
+
+  # 総月数
+  total_months = years * 12
+
+  monthly_paths: Dict[str, np.ndarray] = {}
+
+  for cpi in cpis:
+    # 乱数の生成 Z ~ N(0, 1)
+    Z = np.random.normal(0, 1, (n_sim, total_months))
+
+    # 月次倍率の計算
+    monthly_multiplier = np.exp((cpi.mu - 0.5 * cpi.sigma**2) * dt +
+                                cpi.sigma * np.sqrt(dt) * Z)
+
+    # 月次推移 (累積積)
+    # 初期値 1.0 を追加する
+    paths = np.ones((n_sim, total_months + 1), dtype=np.float64)
+    paths[:, 1:] = np.cumprod(monthly_multiplier, axis=1)
+
+    monthly_paths[cpi.name] = paths
+
+  return monthly_paths
 
 
 def generate_monthly_asset_prices(assets: List[Asset],
@@ -162,7 +226,8 @@ def generate_monthly_asset_prices(assets: List[Asset],
 
   for asset in assets:
     # シンプルな幾何ブラウン運動のリターン
-    r_base = np.exp((asset.mu - 0.5 * asset.sigma**2) * dt + asset.sigma * np.sqrt(dt) * Z) - 1
+    r_base = np.exp((asset.mu - 0.5 * asset.sigma**2) * dt +
+                    asset.sigma * np.sqrt(dt) * Z) - 1
 
     # 日次コスト
     c_daily = asset.yearly_cost / trading_days
@@ -188,7 +253,8 @@ def generate_monthly_asset_prices(assets: List[Asset],
 
 def simulate_strategy(
     strategy: Strategy,
-    monthly_asset_prices: Dict[str, np.ndarray]) -> SimulationResult:
+    monthly_asset_prices: Dict[str, np.ndarray],
+    cpi_paths: Optional[Dict[str, np.ndarray]] = None) -> SimulationResult:
   """
   指定された戦略パラメータに従い、各シミュレーションパスにおける最終的な純資産総額を計算する。
   
@@ -198,6 +264,7 @@ def simulate_strategy(
   Args:
     strategy: 実行する投資戦略を定義した Strategy インスタンス。
     monthly_asset_prices: generate_monthly_asset_prices() で計算された各資産の月次価格推移。
+    cpi_paths: generate_cpi_paths() で計算された各CPIの月次推移。strategy.inflation_rateがstrの場合に必須。
     
   Returns:
     SimulationResult インスタンス。
@@ -218,6 +285,14 @@ def simulate_strategy(
     # とはいえ安全のため N_SIM, YEARS を使うことも考えられる。
     n_sim = N_SIM
     total_months = YEARS * 12
+
+  # CPIパスの事前検証と参照の取得
+  cpi_multiplier_path: Optional[np.ndarray] = None
+  if isinstance(strategy.inflation_rate, str):
+    if cpi_paths is None or strategy.inflation_rate not in cpi_paths:
+      raise ValueError(
+          f"CPI path '{strategy.inflation_rate}' not found in cpi_paths.")
+    cpi_multiplier_path = cpi_paths[strategy.inflation_rate]
 
   # ZeroRiskAsset の処理と initial_asset_ratio の正規化
   # keysは資産名(str)、valuesは投資割合(float)のDict。
@@ -295,8 +370,14 @@ def simulate_strategy(
           cash[active_paths] += yield_payment[active_paths]
 
     # mヶ月目の生活費 (インフレ考慮)
-    cost_m = (strategy.annual_cost /
-              12.0) * (1.0 + strategy.annual_cost_inflation)**(m / 12.0)
+    if isinstance(strategy.inflation_rate, float):
+      # 定数インフレの場合
+      cpi_multiplier = (1.0 + strategy.inflation_rate)**(m / 12.0)
+    else:
+      # CPIパスが指定された場合 (cpi_multiplier_path は上で検証済みのため必ず存在する)
+      cpi_multiplier = cpi_multiplier_path[:, m]  # type: ignore
+
+    cost_m = (strategy.annual_cost / 12.0) * cpi_multiplier
 
     # 月次利息支払額
     interest = strategy.initial_loan * (strategy.yearly_loan_interest / 12.0)
@@ -469,6 +550,3 @@ def simulate_strategy(
 
   return SimulationResult(net_values=net_values,
                           sustained_months=sustained_months)
-
-
-

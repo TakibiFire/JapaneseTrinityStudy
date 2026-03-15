@@ -3,9 +3,9 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from core import (MU, N_SIM, SIGMA, TRADING_DAYS, YEARS, Asset,
+from core import (MU, N_SIM, SIGMA, TRADING_DAYS, YEARS, Asset, Cpi,
                   SimulationResult, Strategy, ZeroRiskAsset,
-                  create_styled_summary, generate_monthly_asset_prices,
+                  generate_cpi_paths, generate_monthly_asset_prices,
                   simulate_strategy)
 
 
@@ -55,7 +55,7 @@ class TestCore(unittest.TestCase):
                         yearly_loan_interest=0.0,
                         initial_asset_ratio={"Safe": 1.0},
                         annual_cost=0.0,
-                        annual_cost_inflation=0.0,
+                        inflation_rate=0.0,
                         selling_priority=["Safe"])
 
     res = simulate_strategy(strategy, prices)
@@ -93,7 +93,7 @@ class TestCore(unittest.TestCase):
         yearly_loan_interest=0.0,
         initial_asset_ratio={"Risky": 1.0},  # 総資金100.0すべてを投資
         annual_cost=0.0,
-        annual_cost_inflation=0.0,
+        inflation_rate=0.0,
         selling_priority=["Risky"])
 
     res = simulate_strategy(strategy, prices)
@@ -122,7 +122,7 @@ class TestCore(unittest.TestCase):
         yearly_loan_interest=0.0,
         initial_asset_ratio={"AssetA": 1.0},  # 全額投資、現金0
         annual_cost=12.0,  # 月1.0の取り崩し
-        annual_cost_inflation=0.0,
+        inflation_rate=0.0,
         selling_priority=["AssetA"])
 
     # 毎月1.0取り崩すので、12ヶ月で12.0減る
@@ -138,15 +138,11 @@ class TestCore(unittest.TestCase):
     期待通りのレバレッジ効果が反映されているかを検証する。
     """
     assets = [
-        Asset(name="1x", yearly_cost=0.0, leverage=1),
-        Asset(name="2x", yearly_cost=0.0, leverage=2)
+        Asset(name="1x", yearly_cost=0.0, leverage=1, mu=0.1, sigma=0.0),
+        Asset(name="2x", yearly_cost=0.0, leverage=2, mu=0.1, sigma=0.0)
     ]
     # ボラティリティ0で確実に上がるように設定
-    prices = generate_monthly_asset_prices(assets,
-                                           mu=0.1,
-                                           sigma=0.0,
-                                           years=1,
-                                           n_sim=1)
+    prices = generate_monthly_asset_prices(assets, years=1, n_sim=1)
 
     # 最終月の価格を比較
     final_1x = prices["1x"][0, -1]
@@ -179,7 +175,7 @@ class TestCore(unittest.TestCase):
         yearly_loan_interest=0.0,
         initial_asset_ratio={"AssetA": 1.0},
         annual_cost=120.0,  # 月10.0の取り崩し
-        annual_cost_inflation=0.0,
+        inflation_rate=0.0,
         selling_priority=["AssetA"],
         tax_rate=0.2  # 20%の税率で計算を分かりやすくする
     )
@@ -240,7 +236,7 @@ class TestCore(unittest.TestCase):
             "B": 0.5
         },
         annual_cost=0.0,
-        annual_cost_inflation=0.0,
+        inflation_rate=0.0,
         selling_priority=["A", "B"],
         tax_rate=0.2,  # 税率20%
         rebalance_interval=12)
@@ -285,43 +281,6 @@ class TestCore(unittest.TestCase):
     net_values = res.net_values
     self.assertTrue(np.allclose(net_values, 121.25))
 
-  def test_create_styled_summary(self):
-    """
-    シミュレーション結果の辞書から、各戦略のパーセンタイルや
-    破産確率を計算し、Styler オブジェクトとしてフォーマットして返す
-    処理が正しく行われるかを検証する。
-    """
-    # モックデータ
-    results = {
-        "Strategy1":
-            SimulationResult(
-                net_values=np.array([0.0, 10000.0, 20000.0, 50000.0, 100000.0]),
-                sustained_months=np.array([12, 600, 600, 600, 600])  # 1つだけ1年で破産
-            ),
-        "Strategy2":
-            SimulationResult(net_values=np.array(
-                [5000.0, 15000.0, 25000.0, 60000.0, 150000.0]),
-                             sustained_months=np.array(
-                                 [600, 600, 600, 600, 600]))
-    }
-
-    styled = create_styled_summary(results)
-
-    # 型チェック
-    self.assertIsInstance(styled, pd.io.formats.style.Styler)
-
-    # 破産確率のチェック (Strategy1 は 20年(240ヶ月)時点で破産しているのが1つあるため 20%)
-    summary_df = styled.data
-    self.assertEqual(summary_df.loc["Strategy1", "20年破産確率 (%)"], 20.0)
-    self.assertEqual(summary_df.loc["Strategy2", "20年破産確率 (%)"], 0.0)
-
-    # 表示形式の確認
-    html = styled.to_html()
-    self.assertIn("20.0%", html)
-    self.assertIn("0.0%", html)
-    # 10000万円 -> 約 1.0億円
-    self.assertIn("1.0億円", html)
-
   def test_sustained_months_tracking(self):
     """
     破産が発生した月が sustained_months に正しく記録されるか検証する。
@@ -349,7 +308,7 @@ class TestCore(unittest.TestCase):
         yearly_loan_interest=0.0,
         initial_asset_ratio={"Asset": 1.0},
         annual_cost=0.0,
-        annual_cost_inflation=0.0,
+        inflation_rate=0.0,
         selling_priority=["Asset"])
 
     res = simulate_strategy(strategy, prices)
@@ -385,7 +344,7 @@ class TestCore(unittest.TestCase):
                         yearly_loan_interest=0.0,
                         initial_asset_ratio={zr_asset: 1.0},
                         annual_cost=0.0,
-                        annual_cost_inflation=0.0,
+                        inflation_rate=0.0,
                         selling_priority=["Cash"],
                         tax_rate=0.2)
 
@@ -408,7 +367,7 @@ class TestCore(unittest.TestCase):
           yearly_loan_interest=0.0,
           initial_asset_ratio={"AssetA": 1.0},
           annual_cost=0.0,
-          annual_cost_inflation=0.0,
+          inflation_rate=0.0,
           selling_priority=["AssetB"]  # AssetAが存在するのにAssetBを指定
       )
 
@@ -421,7 +380,7 @@ class TestCore(unittest.TestCase):
                yearly_loan_interest=0.0,
                initial_asset_ratio={zr: 1.0},
                annual_cost=0.0,
-               annual_cost_inflation=0.0,
+               inflation_rate=0.0,
                selling_priority=["NotCash"])
 
     # 正しい場合はエラーにならない
@@ -434,9 +393,37 @@ class TestCore(unittest.TestCase):
                  "AssetA": 0.5
              },
              annual_cost=0.0,
-             annual_cost_inflation=0.0,
+             inflation_rate=0.0,
              selling_priority=["Cash", "AssetA"])
+
+  def test_generate_cpi_paths(self):
+    """
+    generate_cpi_paths が生成するCPIパスの形状と初期値が想定通りか検証する。
+    """
+    cpis = [
+        Cpi(name="Normal", mu=0.02, sigma=0.05),
+        Cpi(name="Flat", mu=0.0, sigma=0.0)
+    ]
+    paths = generate_cpi_paths(cpis, years=2, n_sim=10)
+
+    self.assertEqual(len(paths), 2)
+    self.assertIn("Normal", paths)
+    self.assertIn("Flat", paths)
+
+    # 2年 * 12ヶ月 + 1(初期値) = 25ヶ月
+    expected_shape = (10, 2 * 12 + 1)
+    self.assertEqual(paths["Normal"].shape, expected_shape)
+    self.assertEqual(paths["Flat"].shape, expected_shape)
+
+    # 初期値は全て1.0
+    self.assertTrue(np.allclose(paths["Normal"][:, 0], 1.0))
+    self.assertTrue(np.allclose(paths["Flat"][:, 0], 1.0))
+
+    # Flat は変動なし (全て1.0) のはず
+    self.assertTrue(np.allclose(paths["Flat"], 1.0))
 
 
 if __name__ == "__main__":
+  unittest.main()
+  unittest.main()
   unittest.main()

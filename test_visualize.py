@@ -58,6 +58,44 @@ def test_create_styled_summary():
   assert "33.3%" in md_text
 
 
+def test_create_styled_summary_legacy():
+  """
+  シミュレーション結果の辞書から、各戦略のパーセンタイルや
+  破産確率を計算し、Styler オブジェクトとしてフォーマットして返す
+  処理が正しく行われるかを検証する（古いテストケース）。
+  """
+  # モックデータ
+  results = {
+      "Strategy1":
+          SimulationResult(
+              net_values=np.array([0.0, 10000.0, 20000.0, 50000.0, 100000.0]),
+              sustained_months=np.array([12, 600, 600, 600, 600])  # 1つだけ1年で破産
+          ),
+      "Strategy2":
+          SimulationResult(net_values=np.array(
+              [5000.0, 15000.0, 25000.0, 60000.0, 150000.0]),
+                           sustained_months=np.array([600, 600, 600, 600, 600]))
+  }
+
+  df, styled = create_styled_summary(results, bankruptcy_years=[20])
+
+  import pandas as pd
+
+  # 型チェック
+  assert isinstance(styled, pd.io.formats.style.Styler)
+
+  # 破産確率のチェック (Strategy1 は 20年(240ヶ月)時点で破産しているのが1つあるため 20%)
+  assert styled.data.loc["Strategy1", "20年破産確率 (%)"] == 20.0
+  assert styled.data.loc["Strategy2", "20年破産確率 (%)"] == 0.0
+
+  # 表示形式の確認
+  html = styled.to_html()
+  assert "20.0%" in html
+  assert "0.0%" in html
+  # 10000万円 -> 約 1.0億円
+  assert "1.0億円" in html
+
+
 def test_create_survival_probability_chart():
   """
   create_survival_probability_chart の計算が正しいか、
@@ -80,15 +118,17 @@ def test_create_survival_probability_chart():
   df, chart = visualize.create_survival_probability_chart(results, max_years=10)
 
   # Safe は 10年時点でも 100% 生存
-  safe_y10 = df[(df['Strategy'] == 'Safe Strategy') & (df['Year'] == 10)]['Survival Probability (%)'].values[0]
+  safe_y10 = df[(df['Strategy'] == 'Safe Strategy') &
+                (df['Year'] == 10)]['Survival Probability (%)'].values[0]
   assert safe_y10 == 100.0
 
   # Risky は 5年時点ではまだ100% (60ヶ月目で破産とすると、60ヶ月以上は満たす)
   # 実際には 60 >= 60 は True。
-  risky_y5 = df[(df['Strategy'] == 'Risky Strategy') & (df['Year'] == 5)]['Survival Probability (%)'].values[0]
+  risky_y5 = df[(df['Strategy'] == 'Risky Strategy') &
+                (df['Year'] == 5)]['Survival Probability (%)'].values[0]
   assert risky_y5 == 100.0
 
   # Risky は 6年(72ヶ月)時点では、1つが60なので False になり 2/3 の生存率となる
-  risky_y6 = df[(df['Strategy'] == 'Risky Strategy') & (df['Year'] == 6)]['Survival Probability (%)'].values[0]
+  risky_y6 = df[(df['Strategy'] == 'Risky Strategy') &
+                (df['Year'] == 6)]['Survival Probability (%)'].values[0]
   np.testing.assert_almost_equal(risky_y6, 66.66666666666667)
-

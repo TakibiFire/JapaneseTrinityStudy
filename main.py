@@ -28,7 +28,7 @@ def main():
                        yearly_loan_interest=2.125 / 100,
                        initial_asset_ratio={},
                        annual_cost=400,
-                       annual_cost_inflation=0.015,
+                       inflation_rate=0.015,
                        selling_priority=[])
 
   plan_a = Strategy(name="A: オルカン100%",
@@ -37,7 +37,7 @@ def main():
                     yearly_loan_interest=2.125 / 100,
                     initial_asset_ratio={"オルカン": 1.0},
                     annual_cost=0,
-                    annual_cost_inflation=0,
+                    inflation_rate=0,
                     selling_priority=["オルカン"])
 
   plan_a_cost_4p = Strategy(name="オルカン100%, cost4%, inf1.5%",
@@ -46,7 +46,7 @@ def main():
                             yearly_loan_interest=2.125 / 100,
                             initial_asset_ratio={"オルカン": 1.0},
                             annual_cost=400,
-                            annual_cost_inflation=0.015,
+                            inflation_rate=0.015,
                             selling_priority=["オルカン"])
 
   plan_a_80p_cost_4p = Strategy(name="オルカン80%, cost4%, inf1.5%",
@@ -55,7 +55,7 @@ def main():
                                 yearly_loan_interest=2.125 / 100,
                                 initial_asset_ratio={"オルカン": 0.8},
                                 annual_cost=400,
-                                annual_cost_inflation=0.015,
+                                inflation_rate=0.015,
                                 selling_priority=["オルカン"])
 
   plan_a_50p_cost_4p = Strategy(name="オルカン50%, cost4%, inf1.5%",
@@ -64,7 +64,7 @@ def main():
                                 yearly_loan_interest=2.125 / 100,
                                 initial_asset_ratio={"オルカン": 0.5},
                                 annual_cost=400,
-                                annual_cost_inflation=0.015,
+                                inflation_rate=0.015,
                                 selling_priority=["オルカン"])
 
   plan_opt = Strategy(name="Opt",
@@ -76,7 +76,7 @@ def main():
                           "レバカン": 0.0
                       },
                       annual_cost=400,
-                      annual_cost_inflation=0.015,
+                      inflation_rate=0.015,
                       selling_priority=["オルカン", "レバカン"])
 
   plan_opt_reb1 = Strategy(name="Opt Rebalance 1",
@@ -88,7 +88,7 @@ def main():
                                "レバカン": 0.0
                            },
                            annual_cost=400,
-                           annual_cost_inflation=0.015,
+                           inflation_rate=0.015,
                            selling_priority=["オルカン", "レバカン"],
                            rebalance_interval=1)
 
@@ -101,7 +101,7 @@ def main():
                                 "レバカン": 0.0
                             },
                             annual_cost=400,
-                            annual_cost_inflation=0.015,
+                            inflation_rate=0.015,
                             selling_priority=["オルカン", "レバカン"],
                             rebalance_interval=12)
 
@@ -114,7 +114,7 @@ def main():
                                  "レバカン": 0.0
                              },
                              annual_cost=400,
-                             annual_cost_inflation=0.015,
+                             inflation_rate=0.015,
                              selling_priority=["オルカン", "レバカン"],
                              rebalance_interval=180)
 
@@ -127,7 +127,7 @@ def main():
                         "レバカン": 0.5
                     },
                     annual_cost=400,
-                    annual_cost_inflation=0.015,
+                    inflation_rate=0.015,
                     selling_priority=["オルカン", "レバカン"])
 
   plan_b_4_4 = Strategy(name="B: オルカン40%+レバカン40%, cost4%, inf1.5%",
@@ -139,7 +139,7 @@ def main():
                             "レバカン": 0.4
                         },
                         annual_cost=400,
-                        annual_cost_inflation=0.015,
+                        inflation_rate=0.015,
                         selling_priority=["オルカン", "レバカン"])
 
   plan_c = Strategy(name="C: 証券担保ローン1.5倍, cost4%, inf1.5%",
@@ -148,7 +148,7 @@ def main():
                     yearly_loan_interest=2.125 / 100,
                     initial_asset_ratio={"オルカン": 1.0},
                     annual_cost=400,
-                    annual_cost_inflation=0.015,
+                    inflation_rate=0.015,
                     selling_priority=["オルカン"])
 
   plan_zero_risk_test = Strategy(
@@ -161,7 +161,7 @@ def main():
           ZeroRiskAsset(name="BIL", yield_rate=0.04): 0.2
       },
       annual_cost=400,
-      annual_cost_inflation=0.015,
+      inflation_rate=0.015,
       selling_priority=["オルカン"])
 
   opt50 = Strategy(name="Opt50",
@@ -173,7 +173,7 @@ def main():
                        "レバカン": 0.9
                    },
                    annual_cost=400,
-                   annual_cost_inflation=0.015,
+                   inflation_rate=0.015,
                    selling_priority=["レバカン", "オルカン"],
                    rebalance_interval=0)
 
@@ -209,12 +209,11 @@ def main():
   # ---------------------------------------------------------------------------
   # 4. 可視化と保存
   # ---------------------------------------------------------------------------
-  visualize_and_save(
-      results=results,
-      html_file='temp/new_result.html',
-      title='50年後の最終評価額のパーセンタイル分布',
-      summary_title='50年後の最終評価額サマリー（1,000回試行）'
-  )
+  visualize_and_save(results=results,
+                     html_file='temp/new_result.html',
+                     title='50年後の最終評価額のパーセンタイル分布',
+                     summary_title='50年後の最終評価額サマリー（1,000回試行）')
+
 
 if __name__ == "__main__":
   main()
