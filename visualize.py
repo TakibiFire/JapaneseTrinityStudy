@@ -135,7 +135,8 @@ def visualize_and_save(results: Dict[str, SimulationResult],
                        html_file: str,
                        image_file: Optional[str] = None,
                        survival_image_file: Optional[str] = None,
-                       title: str = '50年後の最終評価額のパーセンタイル分布',
+                       title: str = 'シミュレーション結果の可視化',
+                       distribution_title: str = '50年後の資産の分布',
                        summary_title: str = '最終評価額サマリー（1,000回試行）',
                        bankruptcy_years: List[int] = [20, 30, 40, 50]) -> None:
   """
@@ -148,7 +149,8 @@ def visualize_and_save(results: Dict[str, SimulationResult],
     html_file: 保存先のHTMLファイルパス
     image_file: オプションの保存先画像ファイルパス (例: .png, .svg) (最終評価額分布)
     survival_image_file: オプションの保存先画像ファイルパス (生存確率推移)
-    title: グラフのタイトル
+    title: グラフ全体のタイトル
+    distribution_title: 最終評価額分布グラフのタイトル
     summary_title: サマリー表のタイトル
     bankruptcy_years: サマリーに含める破産確率の年数リスト
   """
@@ -191,7 +193,7 @@ def visualize_and_save(results: Dict[str, SimulationResult],
       y=alt.Y('Final Value (万円):Q', scale=alt.Scale(type='log')),
       color='Strategy:N')
 
-  final_chart = (area_chart + line_chart).properties(title=title,
+  final_chart = (area_chart + line_chart).properties(title=distribution_title,
                                                      width=600,
                                                      height=300).interactive()
 
@@ -200,7 +202,7 @@ def visualize_and_save(results: Dict[str, SimulationResult],
 
   # HTML表示用に垂直結合し、各グラフに凡例を独立して表示させる
   combined_chart = (final_chart &
-                    survival_chart).resolve_legend(color='independent')
+                    survival_chart).properties(title=title).resolve_legend(color='independent')
 
   # サマリーとHTMLの出力
   formatted_df, styled_summary = create_styled_summary(
