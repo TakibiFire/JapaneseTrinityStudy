@@ -15,7 +15,10 @@ def main():
   # ---------------------------------------------------------------------------
   # 1. 資産の定義
   # ---------------------------------------------------------------------------
-  assets = [Asset(name="オルカン", yearly_cost=0, mu=0.07, sigma=0.15, leverage=1)]
+  assets = [
+    Asset(name="オルカン", yearly_cost=0, mu=0.07, sigma=0.15, leverage=1),
+    Asset(name="定率7%商品", yearly_cost=0, mu=0.07, sigma=0.0, leverage=1)
+  ]
 
   # ---------------------------------------------------------------------------
   # 2. 戦略(Plan)の定義
@@ -29,7 +32,23 @@ def main():
                annual_cost=0,
                annual_cost_inflation=0,
                selling_priority=["オルカン"]),
-      Strategy(name="2. オルカン100% / 400万円取り崩し",
+      Strategy(name="2. 現金100% / 400万円取り崩し",
+               initial_money=10000,
+               initial_loan=0,
+               yearly_loan_interest=2.125 / 100,
+               initial_asset_ratio={},
+               annual_cost=400,
+               annual_cost_inflation=0,
+               selling_priority=[]),
+      Strategy(name="3. 定率7%商品100% / 400万円取り崩し",
+               initial_money=10000,
+               initial_loan=0,
+               yearly_loan_interest=2.125 / 100,
+               initial_asset_ratio={"定率7%商品": 1.0},
+               annual_cost=400,
+               annual_cost_inflation=0,
+               selling_priority=["定率7%商品"]),
+      Strategy(name="4. オルカン100% / 400万円取り崩し",
                initial_money=10000,
                initial_loan=0,
                yearly_loan_interest=2.125 / 100,
@@ -37,14 +56,6 @@ def main():
                annual_cost=400,
                annual_cost_inflation=0,
                selling_priority=["オルカン"]),
-      Strategy(name="3. 現金100% / 400万円取り崩し",
-               initial_money=10000,
-               initial_loan=0,
-               yearly_loan_interest=2.125 / 100,
-               initial_asset_ratio={},
-               annual_cost=400,
-               annual_cost_inflation=0,
-               selling_priority=[])
   ]
 
   # ---------------------------------------------------------------------------
