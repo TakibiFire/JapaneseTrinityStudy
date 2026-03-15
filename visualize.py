@@ -104,7 +104,7 @@ def create_survival_probability_chart(
 
   for name, res in results.items():
     sustained = res.sustained_months
-    
+
     for y in years:
       # y年の時点で生存している = sustained_months >= y * 12
       survival_rate = np.mean(sustained >= y * 12) * 100.0
@@ -197,9 +197,10 @@ def visualize_and_save(results: Dict[str, SimulationResult],
 
   # 生存確率のチャートを作成
   _, survival_chart = create_survival_probability_chart(results, max_years=50)
-  
+
   # HTML表示用に垂直結合し、各グラフに凡例を独立して表示させる
-  combined_chart = (final_chart & survival_chart).resolve_legend(color='independent')
+  combined_chart = (final_chart &
+                    survival_chart).resolve_legend(color='independent')
 
   # サマリーとHTMLの出力
   formatted_df, styled_summary = create_styled_summary(
@@ -226,12 +227,20 @@ def visualize_and_save(results: Dict[str, SimulationResult],
   # 3. チャートのHTMLの<body>の先頭にテーブルのHTMLを挿入する
   style_tag = """
 <style>
-table {border-collapse: collapse; font-family: sans-serif; margin-bottom: 30px;}
-th, td {border: 1px solid #ddd; padding: 8px; text-align: right;}
-th {background-color: #f2f2f2; text-align: center;}
+.summary-table table {border-collapse: collapse; font-family: sans-serif; margin-bottom: 30px;}
+.summary-table th, .summary-table td {border: 1px solid #ddd; padding: 8px; text-align: right;}
+.summary-table th {background-color: #f2f2f2; text-align: center;}
 </style>
 """
-  insert_html = f"<body>\n<h2>{summary_title}</h2>\n{style_tag}\n{table_html}\n<hr>\n"
+  insert_html = f"""
+<body>
+<h2>{summary_title}</h2>
+{style_tag}
+<div class='summary-table'>
+{table_html}
+</div>
+<hr>
+"""
   full_html = chart_html.replace('<body>', insert_html)
 
   # 4. ファイルに保存してブラウザで開く
