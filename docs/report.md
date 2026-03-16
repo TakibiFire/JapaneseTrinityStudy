@@ -191,7 +191,7 @@ IMPORTANT: 切り崩し生活で一番怖いのは、切り崩し生活を始め
 ちなみに直近の動きを見ると、基準年である2020年を100とした場合、2025年には「112.0」まで上昇しています。つまり、たった5年間で私たちが普段買っているものの価格が平均して12%も上がったということであり、物価上昇が机上の空論ではなく現実の脅威であることがよくわかります。
 
 <!--
-Run `python cpi_main.py` to make this SVG file.
+Run `python analyze_cpi_main.py` to make this SVG file.
 -->
 
 <img src="../imgs/cpi.svg"/>
