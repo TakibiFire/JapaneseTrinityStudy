@@ -1,0 +1,122 @@
+"""
+オルカンと現金の比率を一定に保つ（リバランスする）ことによる4%ルールの生存確率への影響を比較するシミュレーション。
+"""
+
+import os
+import re
+import sys
+
+from core import (Asset, Forex, Strategy, generate_forex_paths,
+                  generate_monthly_asset_prices, simulate_strategy)
+from visualize import create_styled_summary, visualize_and_save
+
+
+def main():
+  # ---------------------------------------------------------------------------
+  # 1. 為替レートと資産の定義
+  # ---------------------------------------------------------------------------
+  # 為替の定義
+  forexes = [Forex(name="USDJPY", mu=0.0, sigma=0.1053)]
+  forex_paths = generate_forex_paths(forexes)
+
+  # 資産の定義 (オルカン)
+  asset_name = "オルカン"
+  assets_def = [
+      Asset(name=asset_name, trust_fee=0.0005775, mu=0.07, sigma=0.15, leverage=1, forex="USDJPY"),
+  ]
+
+  print("月次価格推移を生成中...")
+  monthly_asset_prices = generate_monthly_asset_prices(assets_def, forex_paths=forex_paths)
+
+  # ---------------------------------------------------------------------------
+  # 2. 戦略(Plan)の定義
+  # ---------------------------------------------------------------------------
+  # (比率, リバランス間隔) のペア
+  test_cases = [
+      (1.0, 0),   # オルカン100% (基準)
+      (0.8, 0),   # 80/20 リバランスなし
+      (0.8, 12),  # 80/20 毎年リバランス
+      (0.7, 0),   # 70/30 リバランスなし
+      (0.7, 12),  # 70/30 毎年リバランス
+      (0.5, 0),   # 50/50 リバランスなし
+      (0.5, 12),  # 50/50 毎年リバランス
+  ]
+  
+  strategies = []
+
+  for ratio, interval in test_cases:
+    suffix = "リバランスなし" if interval == 0 else "毎年リバランス"
+    strategies.append(
+        Strategy(
+            name=f"オルカン {round(ratio*100)}% ({suffix})",
+            initial_money=10000,
+            initial_loan=0,
+            yearly_loan_interest=0,
+            initial_asset_ratio={asset_name: ratio},
+            annual_cost=400,
+            inflation_rate=0.02,
+            tax_rate=0.20315,
+            selling_priority=[asset_name],
+            rebalance_interval=interval
+        )
+    )
+
+  # ---------------------------------------------------------------------------
+  # 3. シミュレーションの実行
+  # ---------------------------------------------------------------------------
+  results = {}
+  print("各戦略のシミュレーションを実行中...")
+  for strategy in strategies:
+    res = simulate_strategy(strategy, monthly_asset_prices)
+    results[strategy.name] = res
+
+  # ---------------------------------------------------------------------------
+  # 4. 可視化と保存
+  # ---------------------------------------------------------------------------
+  survival_image_file = 'imgs/ratio_rebalance_comp_survival.svg'
+  distribution_image_file = 'imgs/ratio_rebalance_comp_distribution.svg'
+  visualize_and_save(results=results,
+                     html_file='temp/ratio_rebalance_comp_result.html',
+                     survival_image_file=survival_image_file,
+                     distribution_image_file=distribution_image_file,
+                     title='リバランスの有無による生存確率の比較',
+                     summary_title='リバランスの影響サマリー（1,000回試行）',
+                     bankruptcy_years=[10, 20, 30, 40, 50])
+
+  # ---------------------------------------------------------------------------
+  # 5. Markdown レポートの更新
+  # ---------------------------------------------------------------------------
+  bankruptcy_years = [10, 20, 30, 40, 50]
+  formatted_df, _ = create_styled_summary(
+      results,
+      quantiles=[0.01, 0.10, 0.25, 0.50, 0.75, 0.90],
+      bankruptcy_years=bankruptcy_years)
+
+  md_text = formatted_df.to_markdown(colalign=("left",) +
+                                     ("right",) * len(formatted_df.columns))
+
+  report_file = 'docs/report.md'
+  try:
+    with open(report_file, 'r', encoding='utf-8') as f:
+      content = f.read()
+
+    pattern = r'(<!--<cash_ratio_rebalance_comp_main\.py>-->).*?(<!--</cash_ratio_rebalance_comp_main\.py>-->)'
+    if re.search(pattern, content, re.DOTALL):
+      insert_text = f'\n\n{md_text.strip()}\n\n'
+      new_content = re.sub(pattern,
+                           rf'\g<1>{insert_text}\g<2>',
+                           content,
+                           flags=re.DOTALL)
+      with open(report_file, 'w', encoding='utf-8') as f:
+        f.write(new_content)
+      print(f"✅ {report_file} を更新しました。")
+    else:
+      print(
+          f"\033[91mWarning: Placeholder <cash_ratio_rebalance_comp_main.py> not found in {report_file}\033[0m",
+          file=sys.stderr)
+  except FileNotFoundError:
+    print(f"\033[91mWarning: {report_file} not found\033[0m", file=sys.stderr)
+
+
+if __name__ == "__main__":
+  main()
