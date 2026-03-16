@@ -181,7 +181,7 @@ def visualize_and_save(results: Dict[str, SimulationResult],
               scale=alt.Scale(type='log'),
               stack=None),
       y2=alt.Y2(datum=1),
-      color=alt.Color('Strategy:N', legend=alt.Legend(title="戦略")),
+      color=alt.Color('Strategy:N', legend=alt.Legend(title="戦略", symbolOpacity=1)),
       tooltip=[
           'Quantile (%)', 'Strategy',
           alt.Tooltip('Final Value (万円):Q', format=',.0f')
