@@ -3,10 +3,10 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from core import (MU, N_SIM, SIGMA, TRADING_DAYS, YEARS, Asset, Cpi,
+from core import (MU, N_SIM, SIGMA, TRADING_DAYS, YEARS, Asset, Cpi, Forex,
                   SimulationResult, Strategy, ZeroRiskAsset,
-                  generate_cpi_paths, generate_monthly_asset_prices,
-                  simulate_strategy)
+                  generate_cpi_paths, generate_forex_paths,
+                  generate_monthly_asset_prices, simulate_strategy)
 
 
 class TestCore(unittest.TestCase):
@@ -421,6 +421,67 @@ class TestCore(unittest.TestCase):
 
     # Flat は変動なし (全て1.0) のはず
     self.assertTrue(np.allclose(paths["Flat"], 1.0))
+
+  def test_generate_forex_paths(self):
+    """
+    generate_forex_paths が生成する為替パスの形状と初期値が想定通りか検証する。
+    """
+    forexes = [
+        Forex(name="NormalFX", mu=0.03, sigma=0.10),
+        Forex(name="FlatFX", mu=0.0, sigma=0.0)
+    ]
+    paths = generate_forex_paths(forexes, years=2, n_sim=10)
+
+    self.assertEqual(len(paths), 2)
+    self.assertIn("NormalFX", paths)
+    self.assertIn("FlatFX", paths)
+
+    # 2年 * 12ヶ月 + 1(初期値) = 25ヶ月
+    expected_shape = (10, 2 * 12 + 1)
+    self.assertEqual(paths["NormalFX"].shape, expected_shape)
+    self.assertEqual(paths["FlatFX"].shape, expected_shape)
+
+    # 初期値は全て1.0
+    self.assertTrue(np.allclose(paths["NormalFX"][:, 0], 1.0))
+    self.assertTrue(np.allclose(paths["FlatFX"][:, 0], 1.0))
+
+    # FlatFX は変動なし (全て1.0) のはず
+    self.assertTrue(np.allclose(paths["FlatFX"], 1.0))
+
+  def test_generate_monthly_asset_prices_with_forex(self):
+    """
+    Asset に為替(forex)が設定されている場合、generate_monthly_asset_prices が
+    正しく為替パスの乗算を行うことを検証する。
+    """
+    assets = [
+        Asset(name="NoFX", trust_fee=0.0, leverage=1, mu=0.0, sigma=0.0),
+        Asset(name="WithFX", trust_fee=0.0, leverage=1, mu=0.0, sigma=0.0, forex="USDJPY")
+    ]
+    
+    n_sim = 5
+    years = 1
+    total_months = years * 12
+
+    # ダミーの為替パスを作成 (初期値1.0, 以降2.0)
+    fx_paths = np.full((n_sim, total_months + 1), 2.0)
+    fx_paths[:, 0] = 1.0
+    forex_paths_dict = {"USDJPY": fx_paths}
+
+    prices = generate_monthly_asset_prices(assets, years=years, n_sim=n_sim, forex_paths=forex_paths_dict)
+
+    # NoFXは為替の影響を受けず1.0のまま
+    self.assertTrue(np.allclose(prices["NoFX"], 1.0))
+
+    # WithFXは為替のパス(2.0)が乗算されているため、1ヶ月目以降は2.0になる
+    self.assertTrue(np.allclose(prices["WithFX"][:, 0], 1.0))
+    self.assertTrue(np.allclose(prices["WithFX"][:, 1:], 2.0))
+
+    # forex_pathsが不足している場合はValueErrorになるべき
+    with self.assertRaises(ValueError):
+      generate_monthly_asset_prices(assets, years=years, n_sim=n_sim, forex_paths={})
+    
+    with self.assertRaises(ValueError):
+      generate_monthly_asset_prices(assets, years=years, n_sim=n_sim)
 
 
 if __name__ == "__main__":

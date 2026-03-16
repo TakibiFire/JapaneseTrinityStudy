@@ -35,12 +35,14 @@ class Asset:
     name: 資産の名前 (例: "オルカン", "レバカン")
     trust_fee: 信託報酬など、資産を保有するための年率コスト (割合)
     leverage: 資産のレバレッジ倍率 (1: 通常, 2: 2倍レバレッジ)
+    forex: 為替レートの名前 (任意)。指定された場合、その為替の月次推移を価格に乗算する。
   """
   name: str
   trust_fee: float
   leverage: int
   mu: float = MU
   sigma: float = SIGMA
+  forex: Optional[str] = None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -65,6 +67,21 @@ class Cpi:
     name: インフレ設定の名前 (例: "日本のCPI")
     mu: 平均年次インフレ率 (割合)
     sigma: 年次インフレ率の標本標準偏差 (割合)
+  """
+  name: str
+  mu: float
+  sigma: float
+
+
+@dataclasses.dataclass
+class Forex:
+  """
+  為替レートの設定を定義する。
+  
+  Attributes:
+    name: 為替レートの名前 (例: "ドル円")
+    mu: 年次期待リターン (割合)
+    sigma: 年次ボラティリティ (割合)
   """
   name: str
   mu: float
@@ -185,11 +202,59 @@ def generate_cpi_paths(cpis: List[Cpi],
   return monthly_paths
 
 
+def generate_forex_paths(forexes: List[Forex],
+                         years: int = YEARS,
+                         n_sim: int = N_SIM,
+                         seed: int = SEED) -> Dict[str, np.ndarray]:
+  """
+  幾何ブラウン運動に基づいて、為替レートの月次推移をシミュレーションする。
+  
+  月次単位での幾何ブラウン運動による乱数を生成し累積積を計算する。初期値は 1.0 とする。
+  
+  Args:
+    forexes: シミュレーション対象となる Forex インスタンスのリスト。
+    years: シミュレーション期間 (年)。
+    n_sim: モンテカルロ・シミュレーションのパス数。
+    seed: 乱数シード。
+    
+  Returns:
+    為替名をキー、shape が (n_sim, 12 * years + 1) の numpy 配列を値とする Dict。
+    初期の0ヶ月目 (為替レート 1.0) を含むため、要素数は月数 + 1 になる。
+  """
+  np.random.seed(seed)
+
+  # 時間ステップ (月次)
+  dt = 1.0 / 12.0
+
+  # 総月数
+  total_months = years * 12
+
+  monthly_paths: Dict[str, np.ndarray] = {}
+
+  for fx in forexes:
+    # 乱数の生成 Z ~ N(0, 1)
+    Z = np.random.normal(0, 1, (n_sim, total_months))
+
+    # 月次倍率の計算
+    monthly_multiplier = np.exp((fx.mu - 0.5 * fx.sigma**2) * dt +
+                                fx.sigma * np.sqrt(dt) * Z)
+
+    # 月次推移 (累積積)
+    # 初期値 1.0 を追加する
+    paths = np.ones((n_sim, total_months + 1), dtype=np.float64)
+    paths[:, 1:] = np.cumprod(monthly_multiplier, axis=1)
+
+    monthly_paths[fx.name] = paths
+
+  return monthly_paths
+
+
 def generate_monthly_asset_prices(assets: List[Asset],
                                   years: int = YEARS,
                                   trading_days: int = TRADING_DAYS,
                                   n_sim: int = N_SIM,
-                                  seed: int = SEED) -> Dict[str, np.ndarray]:
+                                  seed: int = SEED,
+                                  forex_paths: Optional[Dict[str, np.ndarray]] = None) -> Dict[str, np.ndarray]:
   """
   幾何ブラウン運動に基づいて、各資産の月次価格推移をシミュレーションする。
   
@@ -203,6 +268,8 @@ def generate_monthly_asset_prices(assets: List[Asset],
     trading_days: 1年あたりの営業日数 (日次シミュレーション用)。
     n_sim: モンテカルロ・シミュレーションのパス数。
     seed: 乱数シード。
+    forex_paths: generate_forex_paths() で計算された為替レートの月次推移。
+                 資産の forex フィールドが設定されている場合に必要。
     
   Returns:
     資産名をキー、shape が (n_sim, 12 * years + 1) の numpy 配列を値とする Dict。
@@ -245,6 +312,13 @@ def generate_monthly_asset_prices(assets: List[Asset],
     # 初期値 1.0 を追加する
     prices = np.ones((n_sim, total_months + 1), dtype=np.float64)
     prices[:, 1:] = np.cumprod(m_monthly, axis=1)
+
+    if asset.forex is not None:
+      if forex_paths is None or asset.forex not in forex_paths:
+        raise ValueError(
+            f"Forex path '{asset.forex}' not found in forex_paths.")
+      # 為替レートの月次推移を価格に乗算する
+      prices *= forex_paths[asset.forex]
 
     monthly_prices[asset.name] = prices
 
