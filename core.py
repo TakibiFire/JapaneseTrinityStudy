@@ -33,11 +33,11 @@ class Asset:
   
   Attributes:
     name: 資産の名前 (例: "オルカン", "レバカン")
-    yearly_cost: 信託報酬など、資産を保有するための年率コスト (割合)
+    trust_fee: 信託報酬など、資産を保有するための年率コスト (割合)
     leverage: 資産のレバレッジ倍率 (1: 通常, 2: 2倍レバレッジ)
   """
   name: str
-  yearly_cost: float
+  trust_fee: float
   leverage: int
   mu: float = MU
   sigma: float = SIGMA
@@ -230,7 +230,7 @@ def generate_monthly_asset_prices(assets: List[Asset],
                     asset.sigma * np.sqrt(dt) * Z) - 1
 
     # 日次コスト
-    c_daily = asset.yearly_cost / trading_days
+    c_daily = asset.trust_fee / trading_days
 
     # 日次倍率: M_daily = max(1 + L * r_base - c_daily, 0)
     m_daily = np.maximum(1.0 + asset.leverage * r_base - c_daily, 0.0)

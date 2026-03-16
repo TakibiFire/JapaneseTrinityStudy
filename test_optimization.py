@@ -12,8 +12,8 @@ def dummy_monthly_prices():
   テスト用の月次資産価格データを生成するフィクスチャ。
   """
   assets = [
-      Asset(name="オルカン", yearly_cost=0.0005775, leverage=1),
-      Asset(name="レバカン", yearly_cost=0.00422, leverage=2)
+      Asset(name="オルカン", trust_fee=0.0005775, leverage=1),
+      Asset(name="レバカン", trust_fee=0.00422, leverage=2)
   ]
   # 計算量を減らすためにシミュレーション回数(パス数)と期間を最小化
   return generate_monthly_asset_prices(

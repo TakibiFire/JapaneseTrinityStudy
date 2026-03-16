@@ -21,7 +21,7 @@ def main():
 
   assets = [
       Asset(name=f"オルカン v{v}%",
-            yearly_cost=0,
+            trust_fee=0,
             mu=0.07,
             sigma=v / 100.0,
             leverage=1) for v in sigmas

@@ -17,8 +17,8 @@ class TestCore(unittest.TestCase):
     想定通りであるか検証する。
     """
     assets = [
-        Asset(name="A", yearly_cost=0.01, leverage=1),
-        Asset(name="B", yearly_cost=0.02, leverage=2)
+        Asset(name="A", trust_fee=0.01, leverage=1),
+        Asset(name="B", trust_fee=0.02, leverage=2)
     ]
     prices = generate_monthly_asset_prices(assets, years=5, n_sim=10)
 
@@ -41,7 +41,7 @@ class TestCore(unittest.TestCase):
     初期資金がそのまま維持され破産しないことを検証する。
     """
     # 資産は常に一定の価値 (ボラティリティ0, リターン0) となるようにする
-    assets = [Asset(name="Safe", yearly_cost=0.0, leverage=1)]
+    assets = [Asset(name="Safe", trust_fee=0.0, leverage=1)]
 
     # 乱数の影響を排除するため、価格配列を自作
     n_sim = 5
@@ -71,7 +71,7 @@ class TestCore(unittest.TestCase):
     正しく破産 (最終純資産が 0) と判定されるか検証する。
     """
     # 資産価値が急激に下がるシナリオ
-    assets = [Asset(name="Risky", yearly_cost=0.0, leverage=1)]
+    assets = [Asset(name="Risky", trust_fee=0.0, leverage=1)]
 
     n_sim = 3
     years = 1
@@ -138,8 +138,8 @@ class TestCore(unittest.TestCase):
     期待通りのレバレッジ効果が反映されているかを検証する。
     """
     assets = [
-        Asset(name="1x", yearly_cost=0.0, leverage=1, mu=0.1, sigma=0.0),
-        Asset(name="2x", yearly_cost=0.0, leverage=2, mu=0.1, sigma=0.0)
+        Asset(name="1x", trust_fee=0.0, leverage=1, mu=0.1, sigma=0.0),
+        Asset(name="2x", trust_fee=0.0, leverage=2, mu=0.1, sigma=0.0)
     ]
     # ボラティリティ0で確実に上がるように設定
     prices = generate_monthly_asset_prices(assets, years=1, n_sim=1)

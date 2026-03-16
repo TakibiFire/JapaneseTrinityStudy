@@ -44,8 +44,8 @@ def main():
   # 1. 資産の定義
   # ---------------------------------------------------------------------------
   assets = [
-      Asset(name="オルカン", yearly_cost=0, mu=0.07, sigma=0.15, leverage=1),
-      Asset(name="定率7%商品", yearly_cost=0, mu=0.07, sigma=0.0, leverage=1)
+      Asset(name="オルカン", trust_fee=0, mu=0.07, sigma=0.15, leverage=1),
+      Asset(name="定率7%商品", trust_fee=0, mu=0.07, sigma=0.0, leverage=1)
   ]
 
   # ---------------------------------------------------------------------------
