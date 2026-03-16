@@ -100,7 +100,7 @@ class Strategy:
     yearly_loan_interest: ローンの年利 (割合)
     initial_asset_ratio: 各資産への初期投資割合。合計が 1.0 以下の時、残りは現金とする。
                          キーは Asset の name (str) または ZeroRiskAsset インスタンス。
-    annual_cost: 初年の生活費 (万円)。月割で取り崩す。
+    annual_cost: 初年の生活費 (万円)。月割で取り崩す。リストの場合は毎年の生活費 (万円) を指定する。リストの長さは YEARS と等しい必要がある。
     inflation_rate: 生活費のインフレ設定。
                     floatが指定された場合は年率の定数インフレ率として扱う。
                     strが指定された場合は事前計算されたCPIパスの名前として扱う。
@@ -113,7 +113,7 @@ class Strategy:
   initial_loan: float
   yearly_loan_interest: float
   initial_asset_ratio: Dict[Union[str, ZeroRiskAsset], float]
-  annual_cost: float
+  annual_cost: Union[float, List[float]]
   inflation_rate: Union[float, str]
   selling_priority: List[str]
   tax_rate: float = 0.20315
@@ -140,6 +140,15 @@ class Strategy:
       if extra:
         error_msg += f" Extra assets not in ratio: {extra}."
       raise ValueError(error_msg)
+
+    # annual_cost の検証
+    if not isinstance(self.annual_cost, (int, float, list)):
+      raise TypeError("annual_cost must be float, int or list")
+    if isinstance(self.annual_cost, list):
+      if not all(isinstance(c, (int, float)) for c in self.annual_cost):
+        raise TypeError("All elements in annual_cost list must be float or int")
+      if len(self.annual_cost) != YEARS:
+        raise ValueError(f"annual_cost list must have exactly {YEARS} elements, but got {len(self.annual_cost)}")
 
 
 @dataclasses.dataclass
@@ -456,7 +465,12 @@ def simulate_strategy(
       # CPIパスが指定された場合 (cpi_multiplier_path は上で検証済みのため必ず存在する)
       cpi_multiplier = cpi_multiplier_path[:, m]  # type: ignore
 
-    cost_m = (strategy.annual_cost / 12.0) * cpi_multiplier
+    if isinstance(strategy.annual_cost, (int, float)):
+      cost_m = (strategy.annual_cost / 12.0) * cpi_multiplier
+    else:
+      # 年に応じた生活費を使用する
+      year = m // 12
+      cost_m = (strategy.annual_cost[year] / 12.0) * cpi_multiplier
 
     # 月次利息支払額
     interest = strategy.initial_loan * (strategy.yearly_loan_interest / 12.0)

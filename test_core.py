@@ -132,6 +132,98 @@ class TestCore(unittest.TestCase):
 
     self.assertTrue(np.allclose(net_values, 108.0))
 
+  def test_simulate_strategy_cost_withdrawal_list(self):
+    """
+    毎月の生活費取り崩し額がリストで指定された場合、
+    各年の取り崩し額が正確に差し引かれているか検証する。
+    """
+    n_sim = 2
+    years = 2
+    total_months = 24
+
+    # 価格は変動なし
+    prices_array = np.ones((n_sim, total_months + 1))
+    prices = {"AssetA": prices_array}
+
+    strategy = Strategy(
+        name="WithdrawalListTest",
+        initial_money=120.0,
+        initial_loan=0.0,
+        yearly_loan_interest=0.0,
+        initial_asset_ratio={"AssetA": 1.0},
+        annual_cost=[12.0, 24.0],  # 1年目は月1.0、2年目は月2.0の取り崩し
+        inflation_rate=0.0,
+        selling_priority=["AssetA"])
+
+    # 1年目で12.0、2年目で24.0取り崩すので、24ヶ月で36.0減る
+    # 最終的な純資産は 120.0 - 36.0 = 84.0
+    res = simulate_strategy(strategy, prices)
+    net_values = res.net_values
+
+    self.assertTrue(np.allclose(net_values, 84.0))
+
+  def test_annual_cost_validation(self):
+    """
+    annual_costの入力バリデーションを検証する。
+    """
+    # 正常系
+    Strategy(
+        name="ValidCost",
+        initial_money=100.0,
+        initial_loan=0.0,
+        yearly_loan_interest=0.0,
+        initial_asset_ratio={"A": 1.0},
+        annual_cost=10,
+        inflation_rate=0.0,
+        selling_priority=["A"])
+
+    Strategy(
+        name="ValidCostList",
+        initial_money=100.0,
+        initial_loan=0.0,
+        yearly_loan_interest=0.0,
+        initial_asset_ratio={"A": 1.0},
+        annual_cost=[10.0, 12.0],
+        inflation_rate=0.0,
+        selling_priority=["A"])
+
+    # 異常系：空リスト
+    with self.assertRaises(ValueError) as context:
+      Strategy(
+          name="EmptyCostList",
+          initial_money=100.0,
+          initial_loan=0.0,
+          yearly_loan_interest=0.0,
+          initial_asset_ratio={"A": 1.0},
+          annual_cost=[],
+          inflation_rate=0.0,
+          selling_priority=["A"])
+    self.assertIn("cannot be empty", str(context.exception))
+
+    # 異常系：不正な型
+    with self.assertRaises(TypeError):
+      Strategy(
+          name="InvalidCostType",
+          initial_money=100.0,
+          initial_loan=0.0,
+          yearly_loan_interest=0.0,
+          initial_asset_ratio={"A": 1.0},
+          annual_cost="10.0",  # type: ignore
+          inflation_rate=0.0,
+          selling_priority=["A"])
+
+    # 異常系：リスト内の不正な型
+    with self.assertRaises(TypeError):
+      Strategy(
+          name="InvalidCostListType",
+          initial_money=100.0,
+          initial_loan=0.0,
+          yearly_loan_interest=0.0,
+          initial_asset_ratio={"A": 1.0},
+          annual_cost=[10.0, "12.0"],  # type: ignore
+          inflation_rate=0.0,
+          selling_priority=["A"])
+
   def test_generate_prices_leverage(self):
     """
     レバレッジ倍率の異なる資産に対し、生成される価格に
