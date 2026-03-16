@@ -89,6 +89,31 @@ class Forex:
 
 
 @dataclasses.dataclass
+class DynamicSpending:
+  """
+  ダイナミック・スペンディング（動的支出）戦略の設定。
+  
+  Vanguard社のDynamic Spending戦略に基づき、資産の変動に合わせて支出を調整する。
+
+  ※ DynamicSpending使用時はインフレ調整（CPI）を考慮しない。
+  ※ 年間支出額の更新タイミング：
+    - 初年度 (m=0) は初期資産に基づき計算。
+    - 2年目以降の年初 (m % 12 == 0) に、その時点の純資産
+      (total_assets - initial_loan) を元に目標支出額を計算し、前年の年間支出額に対して
+      上限・下限を適用してその年の支出額を決定する。
+    - 各月の支出額はその年の年間支出額の 1/12 となる。
+    
+  Attributes:
+    target_ratio: 支出の目標割合 (例: 0.04 = 4%)
+    upper_limit: 前年比の最大上昇率 (例: 0.05 = 5%)
+    lower_limit: 前年比の最大下落率 (例: -0.015 = -1.5%)
+  """
+  target_ratio: float
+  upper_limit: float
+  lower_limit: float
+
+
+@dataclasses.dataclass
 class Strategy:
   """
   シミュレーションの初期状態と、運用期間中の取り崩し・利払いルールを定義する。
@@ -113,8 +138,8 @@ class Strategy:
   initial_loan: float
   yearly_loan_interest: float
   initial_asset_ratio: Dict[Union[str, ZeroRiskAsset], float]
-  annual_cost: Union[float, List[float]]
-  inflation_rate: Union[float, str]
+  annual_cost: Union[float, List[float], DynamicSpending]
+  inflation_rate: Union[float, str, None]
   selling_priority: List[str]
   tax_rate: float = 0.20315
   rebalance_interval: int = 0
@@ -142,13 +167,24 @@ class Strategy:
       raise ValueError(error_msg)
 
     # annual_cost の検証
-    if not isinstance(self.annual_cost, (int, float, list)):
-      raise TypeError("annual_cost must be float, int or list")
+    if not isinstance(self.annual_cost, (int, float, list, DynamicSpending)):
+      raise TypeError("annual_cost must be float, int, list or DynamicSpending")
     if isinstance(self.annual_cost, list):
       if not all(isinstance(c, (int, float)) for c in self.annual_cost):
         raise TypeError("All elements in annual_cost list must be float or int")
       if len(self.annual_cost) != YEARS:
-        raise ValueError(f"annual_cost list must have exactly {YEARS} elements, but got {len(self.annual_cost)}")
+        raise ValueError(
+            f"annual_cost list must have exactly {YEARS} elements, but got {len(self.annual_cost)}"
+        )
+    elif isinstance(self.annual_cost, DynamicSpending):
+      if self.inflation_rate is not None and self.inflation_rate != 0.0:
+        raise ValueError(
+            "inflation_rate must be None or 0.0 when using DynamicSpending")
+      if not (0.0 < self.annual_cost.target_ratio < 1.0):
+        raise ValueError("target_ratio must be between 0.0 and 1.0")
+      if self.annual_cost.lower_limit > self.annual_cost.upper_limit:
+        raise ValueError(
+            "lower_limit must be less than or equal to upper_limit")
 
 
 @dataclasses.dataclass
@@ -263,12 +299,14 @@ def generate_forex_paths(forexes: List[Forex],
   return monthly_paths
 
 
-def generate_monthly_asset_prices(assets: List[Asset],
-                                  years: int = YEARS,
-                                  trading_days: int = TRADING_DAYS,
-                                  n_sim: int = N_SIM,
-                                  seed: int = SEED,
-                                  forex_paths: Optional[Dict[str, np.ndarray]] = None) -> Dict[str, np.ndarray]:
+def generate_monthly_asset_prices(
+    assets: List[Asset],
+    years: int = YEARS,
+    trading_days: int = TRADING_DAYS,
+    n_sim: int = N_SIM,
+    seed: int = SEED,
+    forex_paths: Optional[Dict[str,
+                               np.ndarray]] = None) -> Dict[str, np.ndarray]:
   """
   幾何ブラウン運動に基づいて、各資産の月次価格推移をシミュレーションする。
   
@@ -439,6 +477,13 @@ def simulate_strategy(
   # 最終的な純資産総額を保存する配列
   net_values = np.zeros(n_sim, dtype=np.float64)
 
+  # DynamicSpending用の年間支出追跡配列
+  annual_spending = np.zeros(n_sim, dtype=np.float64)
+  if isinstance(strategy.annual_cost, DynamicSpending):
+    # 初期資金に対する目標支出額を初年度の年間支出とする
+    annual_spending.fill(total_capital * strategy.annual_cost.target_ratio)
+  prev_annual_spending = np.zeros(n_sim, dtype=np.float64)
+
   # 月次ループ
   for m in range(total_months):
     # すべてのパスが破産していればループ終了
@@ -458,19 +503,62 @@ def simulate_strategy(
           cash[active_paths] += yield_payment[active_paths]
 
     # mヶ月目の生活費 (インフレ考慮)
-    if isinstance(strategy.inflation_rate, float):
+    if strategy.inflation_rate is None:
+      # インフレなし、またはDynamicSpendingの場合
+      cpi_multiplier = 1.0
+    elif isinstance(strategy.inflation_rate, float):
       # 定数インフレの場合
       cpi_multiplier = (1.0 + strategy.inflation_rate)**(m / 12.0)
     else:
       # CPIパスが指定された場合 (cpi_multiplier_path は上で検証済みのため必ず存在する)
       cpi_multiplier = cpi_multiplier_path[:, m]  # type: ignore
 
-    if isinstance(strategy.annual_cost, (int, float)):
-      cost_m = (strategy.annual_cost / 12.0) * cpi_multiplier
-    else:
+    if isinstance(strategy.annual_cost, DynamicSpending):
+      if m > 0 and m % 12 == 0:
+        # 2年目以降の年初に年間支出を再計算
+        prev_annual_spending[active_paths] = annual_spending[active_paths]
+
+        # 現在の総資産 (月初、取り崩し前) = 現金 + 各資産の評価額
+        current_net_worth = cash.copy()
+        for asset_name, unit_array in units.items():
+          # m月(年初)の価格を使用する
+          current_net_worth[active_paths] += unit_array[
+              active_paths] * local_monthly_asset_prices[asset_name][
+                  active_paths, m]
+        # 純資産 = 総資産 - 初期借入額
+        current_net_worth[active_paths] -= strategy.initial_loan
+
+        # ターゲット支出額: 純資産 * target_ratio (0を下回らないよう制限)
+        target_spending = np.maximum(
+            0.0, current_net_worth * strategy.annual_cost.target_ratio)
+
+        # 上限と下限の計算
+        ceiling = prev_annual_spending * (1.0 +
+                                          strategy.annual_cost.upper_limit)
+        floor = prev_annual_spending * (1.0 + strategy.annual_cost.lower_limit)
+
+        # 最終的な年間支出の決定
+        annual_spending[active_paths] = np.maximum(
+            floor[active_paths],
+            np.minimum(ceiling[active_paths], target_spending[active_paths]))
+
+      cost_m = annual_spending / 12.0
+    elif isinstance(strategy.annual_cost, (int, float)):
+      cost_m_scalar: Union[float, np.ndarray] = (strategy.annual_cost /
+                                                 12.0) * cpi_multiplier
+      cost_m = np.full(n_sim, cost_m_scalar, dtype=np.float64) if isinstance(
+          cost_m_scalar, (float, int)) else cost_m_scalar
+    elif isinstance(strategy.annual_cost, list):
       # 年に応じた生活費を使用する
       year = m // 12
-      cost_m = (strategy.annual_cost[year] / 12.0) * cpi_multiplier
+      cost_m_scalar_list: Union[float,
+                                np.ndarray] = (strategy.annual_cost[year] /
+                                               12.0) * cpi_multiplier
+      cost_m = np.full(
+          n_sim, cost_m_scalar_list, dtype=np.float64) if isinstance(
+              cost_m_scalar_list, (float, int)) else cost_m_scalar_list
+    else:
+      raise ValueError("Invalid type for annual_cost")
 
     # 月次利息支払額
     interest = strategy.initial_loan * (strategy.yearly_loan_interest / 12.0)
