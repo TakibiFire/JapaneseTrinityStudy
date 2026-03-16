@@ -121,7 +121,7 @@ class Strategy:
 
   def __post_init__(self):
     """
-    selling_priority に含まれる資産名が initial_asset_ratio に存在するか検証する。
+    selling_priority に全ての投資資産が含まれているか検証する。
     """
     valid_names = set()
     for key in self.initial_asset_ratio.keys():
@@ -130,11 +130,16 @@ class Strategy:
       else:
         valid_names.add(key)
 
-    for name in self.selling_priority:
-      if name not in valid_names:
-        raise ValueError(
-            f"Selling priority asset '{name}' not found in initial_asset_ratio."
-        )
+    # 全ての資産が selling_priority に含まれている必要がある
+    if set(self.selling_priority) != valid_names:
+      missing = valid_names - set(self.selling_priority)
+      extra = set(self.selling_priority) - valid_names
+      error_msg = "selling_priority must contain all assets in initial_asset_ratio."
+      if missing:
+        error_msg += f" Missing: {missing}."
+      if extra:
+        error_msg += f" Extra assets not in ratio: {extra}."
+      raise ValueError(error_msg)
 
 
 @dataclasses.dataclass
