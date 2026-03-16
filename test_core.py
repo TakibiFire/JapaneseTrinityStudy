@@ -3,9 +3,9 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from core import (MU, N_SIM, SIGMA, TRADING_DAYS, YEARS, Asset, Cpi, Forex,
-                  SimulationResult, Strategy, ZeroRiskAsset,
-                  generate_cpi_paths, generate_forex_paths,
+from core import (MU, N_SIM, SIGMA, TRADING_DAYS, YEARS, Asset, Cpi,
+                  DynamicSpending, Forex, SimulationResult, Strategy,
+                  ZeroRiskAsset, generate_cpi_paths, generate_forex_paths,
                   generate_monthly_asset_prices, simulate_strategy)
 
 
@@ -145,13 +145,17 @@ class TestCore(unittest.TestCase):
     prices_array = np.ones((n_sim, total_months + 1))
     prices = {"AssetA": prices_array}
 
+    annual_cost_list = [12.0] * YEARS
+    annual_cost_list[0] = 12.0
+    annual_cost_list[1] = 24.0
+
     strategy = Strategy(
         name="WithdrawalListTest",
         initial_money=120.0,
         initial_loan=0.0,
         yearly_loan_interest=0.0,
         initial_asset_ratio={"AssetA": 1.0},
-        annual_cost=[12.0, 24.0],  # 1年目は月1.0、2年目は月2.0の取り崩し
+        annual_cost=annual_cost_list,  # 1年目は月1.0、2年目は月2.0の取り崩し
         inflation_rate=0.0,
         selling_priority=["AssetA"])
 
@@ -167,38 +171,35 @@ class TestCore(unittest.TestCase):
     annual_costの入力バリデーションを検証する。
     """
     # 正常系
-    Strategy(
-        name="ValidCost",
-        initial_money=100.0,
-        initial_loan=0.0,
-        yearly_loan_interest=0.0,
-        initial_asset_ratio={"A": 1.0},
-        annual_cost=10,
-        inflation_rate=0.0,
-        selling_priority=["A"])
+    Strategy(name="ValidCost",
+             initial_money=100.0,
+             initial_loan=0.0,
+             yearly_loan_interest=0.0,
+             initial_asset_ratio={"A": 1.0},
+             annual_cost=10,
+             inflation_rate=0.0,
+             selling_priority=["A"])
 
-    Strategy(
-        name="ValidCostList",
-        initial_money=100.0,
-        initial_loan=0.0,
-        yearly_loan_interest=0.0,
-        initial_asset_ratio={"A": 1.0},
-        annual_cost=[10.0, 12.0],
-        inflation_rate=0.0,
-        selling_priority=["A"])
+    Strategy(name="ValidCostList",
+             initial_money=100.0,
+             initial_loan=0.0,
+             yearly_loan_interest=0.0,
+             initial_asset_ratio={"A": 1.0},
+             annual_cost=[10.0] * YEARS,
+             inflation_rate=0.0,
+             selling_priority=["A"])
 
     # 異常系：空リスト
     with self.assertRaises(ValueError) as context:
-      Strategy(
-          name="EmptyCostList",
-          initial_money=100.0,
-          initial_loan=0.0,
-          yearly_loan_interest=0.0,
-          initial_asset_ratio={"A": 1.0},
-          annual_cost=[],
-          inflation_rate=0.0,
-          selling_priority=["A"])
-    self.assertIn("cannot be empty", str(context.exception))
+      Strategy(name="EmptyCostList",
+               initial_money=100.0,
+               initial_loan=0.0,
+               yearly_loan_interest=0.0,
+               initial_asset_ratio={"A": 1.0},
+               annual_cost=[],
+               inflation_rate=0.0,
+               selling_priority=["A"])
+    self.assertIn("must have exactly", str(context.exception))
 
     # 異常系：不正な型
     with self.assertRaises(TypeError):
@@ -213,16 +214,257 @@ class TestCore(unittest.TestCase):
           selling_priority=["A"])
 
     # 異常系：リスト内の不正な型
+    invalid_cost_list: list = [10.0] * YEARS
+    invalid_cost_list[1] = "12.0"
     with self.assertRaises(TypeError):
-      Strategy(
-          name="InvalidCostListType",
-          initial_money=100.0,
-          initial_loan=0.0,
-          yearly_loan_interest=0.0,
-          initial_asset_ratio={"A": 1.0},
-          annual_cost=[10.0, "12.0"],  # type: ignore
-          inflation_rate=0.0,
-          selling_priority=["A"])
+      Strategy(name="InvalidCostListType",
+               initial_money=100.0,
+               initial_loan=0.0,
+               yearly_loan_interest=0.0,
+               initial_asset_ratio={"A": 1.0},
+               annual_cost=invalid_cost_list,
+               inflation_rate=0.0,
+               selling_priority=["A"])
+
+  def test_dynamic_spending_validation(self):
+    """
+    DynamicSpendingを用いた場合のStrategy初期化時のバリデーションを検証する。
+    """
+    spending = DynamicSpending(target_ratio=0.04,
+                               upper_limit=0.05,
+                               lower_limit=-0.015)
+
+    # 正常系: inflation_rate が None または 0.0
+    Strategy(name="ValidDynamicSpending",
+             initial_money=100.0,
+             initial_loan=0.0,
+             yearly_loan_interest=0.0,
+             initial_asset_ratio={"A": 1.0},
+             annual_cost=spending,
+             inflation_rate=None,
+             selling_priority=["A"])
+
+    Strategy(name="ValidDynamicSpendingZeroInflation",
+             initial_money=100.0,
+             initial_loan=0.0,
+             yearly_loan_interest=0.0,
+             initial_asset_ratio={"A": 1.0},
+             annual_cost=spending,
+             inflation_rate=0.0,
+             selling_priority=["A"])
+
+    # 異常系: inflation_rate が指定されている
+    with self.assertRaises(ValueError):
+      Strategy(name="InvalidDynamicSpendingInflation",
+               initial_money=100.0,
+               initial_loan=0.0,
+               yearly_loan_interest=0.0,
+               initial_asset_ratio={"A": 1.0},
+               annual_cost=spending,
+               inflation_rate=0.02,
+               selling_priority=["A"])
+
+    with self.assertRaises(ValueError):
+      Strategy(name="InvalidDynamicSpendingInflationStr",
+               initial_money=100.0,
+               initial_loan=0.0,
+               yearly_loan_interest=0.0,
+               initial_asset_ratio={"A": 1.0},
+               annual_cost=spending,
+               inflation_rate="CPI",
+               selling_priority=["A"])
+
+    # 異常系: target_ratio が範囲外
+    with self.assertRaises(ValueError):
+      Strategy(name="InvalidTargetRatio",
+               initial_money=100.0,
+               initial_loan=0.0,
+               yearly_loan_interest=0.0,
+               initial_asset_ratio={"A": 1.0},
+               annual_cost=DynamicSpending(target_ratio=1.5,
+                                           upper_limit=0.05,
+                                           lower_limit=-0.015),
+               inflation_rate=None,
+               selling_priority=["A"])
+
+    # 異常系: lower_limit > upper_limit
+    with self.assertRaises(ValueError):
+      Strategy(name="InvalidLimits",
+               initial_money=100.0,
+               initial_loan=0.0,
+               yearly_loan_interest=0.0,
+               initial_asset_ratio={"A": 1.0},
+               annual_cost=DynamicSpending(target_ratio=0.04,
+                                           upper_limit=0.02,
+                                           lower_limit=0.05),
+               inflation_rate=None,
+               selling_priority=["A"])
+
+  def test_dynamic_spending_initial_cost(self):
+    """
+    DynamicSpendingを用いた場合、初年度の年間支出額が
+    (初期資産 * target_ratio) として計算されることを検証する。
+    """
+    n_sim = 1
+    years = 1
+    total_months = 12
+    prices = {"A": np.ones((n_sim, total_months + 1))}
+
+    # 初期資産 100.0, ターゲット 5% -> 初年度支出は 5.0
+    spending = DynamicSpending(target_ratio=0.05,
+                               upper_limit=0.05,
+                               lower_limit=-0.015)
+    strategy = Strategy(name="TestSpendingInitial",
+                        initial_money=100.0,
+                        initial_loan=0.0,
+                        yearly_loan_interest=0.0,
+                        initial_asset_ratio={"A": 1.0},
+                        annual_cost=spending,
+                        inflation_rate=None,
+                        selling_priority=["A"])
+
+    # 年間5.0取り崩すため、最終資産は 100.0 - 5.0 = 95.0
+    res = simulate_strategy(strategy, prices)
+    self.assertTrue(np.allclose(res.net_values, 95.0))
+
+  def test_dynamic_spending_ceiling(self):
+    """
+    DynamicSpendingを用いた場合、資産が急増しても
+    前年の支出額 * (1 + upper_limit) に支出が抑えられることを検証する。
+    """
+    n_sim = 1
+    years = 2
+    total_months = 24
+
+    # m=12 (1年目最後の取り崩し) 以降で価格が10倍に急増するシナリオ
+    prices_array = np.ones((n_sim, total_months + 1))
+    prices_array[:, 12:] = 10.0
+    prices = {"A": prices_array}
+
+    # 初期資産 100.0, ターゲット 5%, 上限 5%
+    # 税金の影響を排除するため tax_rate=0 とする
+    spending = DynamicSpending(target_ratio=0.05,
+                               upper_limit=0.05,
+                               lower_limit=-0.015)
+    strategy = Strategy(name="TestSpendingCeiling",
+                        initial_money=100.0,
+                        initial_loan=0.0,
+                        yearly_loan_interest=0.0,
+                        initial_asset_ratio={"A": 1.0},
+                        annual_cost=spending,
+                        inflation_rate=None,
+                        selling_priority=["A"],
+                        tax_rate=0.0)
+
+    # 1年目: m=0..10 は price 1.0。売却口数 = (5/12)*11 = 4.583333
+    # m=11 は price 10.0。売却口数 = (5/12)/10 = 0.0416666
+    # 1年目合計売却口数 = 4.625。残口数 = 95.375
+    # 2年目年始評価額 = 95.375 * 10 = 953.75
+    # 2年目支出 = min(953.75 * 0.05, 5.0 * 1.05) = min(47.6875, 5.25) = 5.25
+    # 2年目売却口数 = 5.25 / 10 = 0.525
+    # 最終口数 = 95.375 - 0.525 = 94.85
+    # 最終評価額 = 94.85 * 10 = 948.5
+    res = simulate_strategy(strategy, prices)
+    self.assertTrue(np.allclose(res.net_values, 948.5))
+
+  def test_dynamic_spending_floor(self):
+    """
+    DynamicSpendingを用いた場合、資産が急落しても
+    前年の支出額 * (1 + lower_limit) までしか支出が減らないことを検証する。
+    """
+    n_sim = 1
+    years = 2
+    total_months = 24
+
+    # 1年目は価格変動なし
+    # 2年目(m=12以降)に価格が半減するシナリオ
+    prices_array = np.ones((n_sim, total_months + 1))
+    prices_array[:, 12:] = 0.5
+    prices = {"A": prices_array}
+
+    # 初期資産 100.0, ターゲット 5%, 下限 -2%
+    # 税金の影響を排除するため tax_rate=0 とする
+    spending = DynamicSpending(target_ratio=0.05,
+                               upper_limit=0.05,
+                               lower_limit=-0.02)
+    strategy = Strategy(name="TestSpendingFloor",
+                        initial_money=100.0,
+                        initial_loan=0.0,
+                        yearly_loan_interest=0.0,
+                        initial_asset_ratio={"A": 1.0},
+                        annual_cost=spending,
+                        inflation_rate=None,
+                        selling_priority=["A"],
+                        tax_rate=0.0)
+
+    # 1年目: m=0..10 は price 1.0。売却口数 = 4.583333
+    # m=11 は price 0.5。売却口数 = (5/12)/0.5 = 0.833333
+    # 1年目合計売却口数 = 5.416666。残口数 = 94.583333
+    # 2年目年始評価額 = 94.583333 * 0.5 = 47.291666
+    # 2年目目標支出 = 47.291666 * 0.05 = 2.364583
+    # 2年目下限支出 = 5.0 * (1 - 0.02) = 4.90
+    # 2年目支出 = 4.90
+    # 2年目売却口数 = 4.90 / 0.5 = 9.8
+    # 最終口数 = 94.583333 - 9.8 = 84.783333
+    # 最終評価額 = 84.783333 * 0.5 = 42.391666
+    res = simulate_strategy(strategy, prices)
+    self.assertTrue(np.allclose(res.net_values, 42.391666666666666))
+
+  def test_dynamic_spending_three_years(self):
+    """
+    DynamicSpendingを用いた場合、3年間の資産の増減に対し、
+    天井(ceiling)と床(floor)の両方が年ごとに正しく適用されることを検証する。
+    """
+    n_sim = 1
+    years = 3
+    total_months = 36
+
+    # 1年目(m=0..11)は1.0、2年目(m=12..23)は10.0、3年目(m=24..35)は0.5
+    prices_array = np.ones((n_sim, total_months + 1))
+    prices_array[:, 12:24] = 10.0
+    prices_array[:, 24:] = 0.5
+    prices = {"A": prices_array}
+
+    # 初期資産 100.0, ターゲット 5%, 上限 5%, 下限 -2%
+    # 税金の影響を排除するため tax_rate=0 とする
+    spending = DynamicSpending(target_ratio=0.05,
+                               upper_limit=0.05,
+                               lower_limit=-0.02)
+    strategy = Strategy(name="TestSpendingThreeYears",
+                        initial_money=100.0,
+                        initial_loan=0.0,
+                        yearly_loan_interest=0.0,
+                        initial_asset_ratio={"A": 1.0},
+                        annual_cost=spending,
+                        inflation_rate=None,
+                        selling_priority=["A"],
+                        tax_rate=0.0)
+
+    # 1年目(m=0..11)
+    # m=0..10 は price 1.0。売却口数 = (5/12)*11 = 4.583333...
+    # m=11 は price 10.0。売却口数 = (5/12)/10 = 0.041666...
+    # 1年目合計売却口数 = 4.625。残口数 = 95.375
+    # 2年目年始評価額(m=12) = 95.375 * 10 = 953.75
+
+    # 2年目(m=12..23)
+    # 2年目目標支出 = 953.75 * 0.05 = 47.6875
+    # 2年目上限支出 = 5.0 * 1.05 = 5.25 -> 上限適用
+    # 2年目年間支出 = 5.25
+    # m=12..22 は price 10.0。売却口数 = (5.25/12)*11 / 10 = 0.48125
+    # m=23 は price 0.5。売却口数 = (5.25/12) / 0.5 = 0.875
+    # 2年目合計売却口数 = 1.35625。残口数 = 95.375 - 1.35625 = 94.01875
+    # 3年目年始評価額(m=24) = 94.01875 * 0.5 = 47.009375
+
+    # 3年目(m=24..35)
+    # 3年目目標支出 = 47.009375 * 0.05 = 2.35046875
+    # 3年目下限支出 = 5.25 * (1 - 0.02) = 5.145 -> 下限適用
+    # 3年目年間支出 = 5.145
+    # m=24..35 は price 0.5。売却口数 = 5.145 / 0.5 = 10.29
+    # 最終口数 = 94.01875 - 10.29 = 83.72875
+    # 最終評価額(m=36) = 83.72875 * 0.5 = 41.864375
+
+    res = simulate_strategy(strategy, prices)
+    self.assertTrue(np.allclose(res.net_values, 41.864375))
 
   def test_generate_prices_leverage(self):
     """
@@ -547,9 +789,14 @@ class TestCore(unittest.TestCase):
     """
     assets = [
         Asset(name="NoFX", trust_fee=0.0, leverage=1, mu=0.0, sigma=0.0),
-        Asset(name="WithFX", trust_fee=0.0, leverage=1, mu=0.0, sigma=0.0, forex="USDJPY")
+        Asset(name="WithFX",
+              trust_fee=0.0,
+              leverage=1,
+              mu=0.0,
+              sigma=0.0,
+              forex="USDJPY")
     ]
-    
+
     n_sim = 5
     years = 1
     total_months = years * 12
@@ -559,7 +806,10 @@ class TestCore(unittest.TestCase):
     fx_paths[:, 0] = 1.0
     forex_paths_dict = {"USDJPY": fx_paths}
 
-    prices = generate_monthly_asset_prices(assets, years=years, n_sim=n_sim, forex_paths=forex_paths_dict)
+    prices = generate_monthly_asset_prices(assets,
+                                           years=years,
+                                           n_sim=n_sim,
+                                           forex_paths=forex_paths_dict)
 
     # NoFXは為替の影響を受けず1.0のまま
     self.assertTrue(np.allclose(prices["NoFX"], 1.0))
@@ -570,13 +820,14 @@ class TestCore(unittest.TestCase):
 
     # forex_pathsが不足している場合はValueErrorになるべき
     with self.assertRaises(ValueError):
-      generate_monthly_asset_prices(assets, years=years, n_sim=n_sim, forex_paths={})
-    
+      generate_monthly_asset_prices(assets,
+                                    years=years,
+                                    n_sim=n_sim,
+                                    forex_paths={})
+
     with self.assertRaises(ValueError):
       generate_monthly_asset_prices(assets, years=years, n_sim=n_sim)
 
 
 if __name__ == "__main__":
-  unittest.main()
-  unittest.main()
   unittest.main()
