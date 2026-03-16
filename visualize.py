@@ -173,28 +173,21 @@ def visualize_and_save(results: Dict[str, SimulationResult],
 
   df_plot = pd.DataFrame(plot_data)
 
-  # Altair チャート描画（領域グラフ＋線グラフ）
-  area_chart = alt.Chart(df_plot).mark_area(opacity=0.3).encode(
+  # Altair チャート描画（線グラフ）
+  line_chart = alt.Chart(df_plot).mark_line(point=False).encode(
       x=alt.X('Quantile (%):Q', title='運の良さ (パーセンタイル %)'),
       y=alt.Y('Final Value (万円):Q',
               title='最終評価額(万円), 対数スケール',
-              scale=alt.Scale(type='log'),
-              stack=None),
-      y2=alt.Y2(datum=1),
-      color=alt.Color('Strategy:N', legend=alt.Legend(title="戦略", symbolOpacity=1)),
+              scale=alt.Scale(type='log')),
+      color=alt.Color('Strategy:N', legend=alt.Legend(title="戦略")),
       tooltip=[
           'Quantile (%)', 'Strategy',
           alt.Tooltip('Final Value (万円):Q', format=',.0f')
       ])
 
-  line_chart = alt.Chart(df_plot).mark_line(point=False).encode(
-      x=alt.X('Quantile (%):Q'),
-      y=alt.Y('Final Value (万円):Q', scale=alt.Scale(type='log')),
-      color='Strategy:N')
-
-  final_chart = (area_chart + line_chart).properties(title=distribution_title,
-                                                     width=600,
-                                                     height=300).interactive()
+  final_chart = line_chart.properties(title=distribution_title,
+                                      width=600,
+                                      height=300).interactive()
 
   # 生存確率のチャートを作成
   _, survival_chart = create_survival_probability_chart(results, max_years=50)
