@@ -106,7 +106,8 @@ def main():
                      distribution_image_file=distribution_image_file,
                      title='資産売却の優先順位による生存確率の比較',
                      summary_title='売却順序の影響サマリー（1,000回試行）',
-                     bankruptcy_years=[10, 20, 30, 40, 50])
+                     bankruptcy_years=[10, 20, 30, 40, 50],
+                     survival_height=400)
 
   # ---------------------------------------------------------------------------
   # 5. Markdown レポートの更新

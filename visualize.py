@@ -87,7 +87,8 @@ def create_styled_summary(
 
 def create_survival_probability_chart(
     results: Dict[str, SimulationResult],
-    max_years: int = 50) -> Tuple[pd.DataFrame, alt.Chart]:
+    max_years: int = 50,
+    height: int = 250) -> Tuple[pd.DataFrame, alt.Chart]:
   """
   各戦略の生存確率 (1 - 破産確率) の推移を年単位で計算し、
   データフレームと Altairの折れ線グラフを返す。
@@ -95,6 +96,7 @@ def create_survival_probability_chart(
   Args:
     results: 戦略名をキー、SimulationResult を値とする辞書。
     max_years: 何年後までを計算するか。デフォルトは50年。
+    height: グラフの高さ。
 
   Returns:
     生データの DataFrame と Altair チャートのタプル。
@@ -125,7 +127,7 @@ def create_survival_probability_chart(
       tooltip=[
           'Year', 'Strategy',
           alt.Tooltip('Survival Probability (%):Q', format='.1f')
-      ]).properties(title='経過年数と生存確率の推移', width=600, height=250).interactive()
+      ]).properties(title='経過年数と生存確率の推移', width=600, height=height).interactive()
 
   return df_plot, chart
 
@@ -137,7 +139,9 @@ def visualize_and_save(results: Dict[str, SimulationResult],
                        title: str = 'シミュレーション結果の可視化',
                        distribution_title: str = '50年後の資産の分布',
                        summary_title: str = '最終評価額サマリー（1,000回試行）',
-                       bankruptcy_years: List[int] = [20, 30, 40, 50]) -> None:
+                       bankruptcy_years: List[int] = [20, 30, 40, 50],
+                       distribution_height: int = 300,
+                       survival_height: int = 250) -> None:
   """
   シミュレーション結果を可視化し、HTMLファイルに保存してブラウザで開く。
   オプションで画像ファイル（PNG/SVG等）としても保存する。
@@ -152,6 +156,8 @@ def visualize_and_save(results: Dict[str, SimulationResult],
     distribution_title: 最終評価額分布グラフのタイトル
     summary_title: サマリー表のタイトル
     bankruptcy_years: サマリーに含める破産確率の年数リスト
+    distribution_height: 最終評価額分布グラフの高さ
+    survival_height: 生存確率推移グラフの高さ
   """
   # 可視化用に最終純資産額のみの DataFrame を作成
   df_results_net_values = pd.DataFrame({
@@ -187,10 +193,11 @@ def visualize_and_save(results: Dict[str, SimulationResult],
 
   final_chart = line_chart.properties(title=distribution_title,
                                       width=600,
-                                      height=300).interactive()
+                                      height=distribution_height).interactive()
 
   # 生存確率のチャートを作成
-  _, survival_chart = create_survival_probability_chart(results, max_years=50)
+  _, survival_chart = create_survival_probability_chart(
+      results, max_years=50, height=survival_height)
 
   # HTML表示用に垂直結合し、各グラフに凡例を独立して表示させる
   combined_chart = (final_chart & survival_chart).properties(
