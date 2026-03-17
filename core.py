@@ -6,7 +6,7 @@
 """
 
 import dataclasses
-from typing import Dict, List, Optional, Union, cast
+from typing import Callable, Dict, List, Optional, Union, cast
 
 import numpy as np
 import pandas as pd
@@ -113,6 +113,13 @@ class DynamicSpending:
   lower_limit: float
 
 
+# ダイナミックリバランス用のコールバック関数の型定義
+# 引数: net_values (純資産配列), annual_spends (年間支出配列), remaining_years (残り年数)
+# 戻り値: 資産名をキー、目標割合（配列またはスカラ）を値とする辞書
+DynamicRebalanceFn = Callable[[np.ndarray, np.ndarray, float],
+                              Dict[str, Union[float, np.ndarray]]]
+
+
 @dataclasses.dataclass
 class Strategy:
   """
@@ -132,6 +139,7 @@ class Strategy:
     selling_priority: 現金不足時に売却する資産の優先順位 (資産の name のリスト)
     tax_rate: 譲渡益に対する税率。デフォルトは 20.315% (0.20315)
     rebalance_interval: リバランスを実行する間隔 (月数)。0 の場合は実行しない。
+    dynamic_rebalance_fn: ダイナミックリバランス用のコールバック関数（オプション）
   """
   name: str
   initial_money: float
@@ -143,6 +151,7 @@ class Strategy:
   selling_priority: List[str]
   tax_rate: float = 0.20315
   rebalance_interval: int = 0
+  dynamic_rebalance_fn: Optional[DynamicRebalanceFn] = None
 
   def __post_init__(self):
     """
@@ -635,9 +644,25 @@ def simulate_strategy(
           current_values[asset_name] = current_val
           current_total_net_value += current_val
 
+        # 目標割合の決定
+        if strategy.dynamic_rebalance_fn is not None:
+          # 残り年数の計算
+          remaining_years = (total_months - (m + 1)) / 12.0
+          # 現在の年間支出の近似 (直近月の支出 * 12)
+          current_annual_spend = cost_m[rebalance_paths] * 12.0
+          target_ratios_dict = strategy.dynamic_rebalance_fn(
+              current_total_net_value, current_annual_spend, remaining_years)
+        else:
+          # 固定割合を使用
+          target_ratios_dict = {
+              k: np.full(len(current_total_net_value), v)
+              for k, v in normalized_ratio.items()
+          }
+
         # 売却処理 (目標よりも多い資産を売る)
-        for asset_name, ratio in normalized_ratio.items():
-          target_val = current_total_net_value * ratio
+        for asset_name in normalized_ratio.keys():
+          target_ratio = target_ratios_dict[asset_name]
+          target_val = current_total_net_value * target_ratio
           current_val = current_values[asset_name]
           diff = current_val - target_val
 
@@ -663,9 +688,10 @@ def simulate_strategy(
             cash[sell_paths_idx] += sell_amount
 
         # 購入処理 (目標よりも少ない資産を買う)
-        for asset_name, ratio in normalized_ratio.items():
+        for asset_name in normalized_ratio.keys():
           # 現時点での評価額を再計算（売却後の現金を反映するため、というより目標値と比較するため）
-          target_val = current_total_net_value * ratio
+          target_ratio = target_ratios_dict[asset_name]
+          target_val = current_total_net_value * target_ratio
           current_price_full = local_monthly_asset_prices[asset_name][
               rebalance_paths, m + 1]
           current_val = units[asset_name][rebalance_paths] * current_price_full
