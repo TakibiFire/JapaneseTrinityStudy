@@ -22,44 +22,47 @@ def main():
   # 資産の定義 (オルカン)
   asset_name = "オルカン"
   assets_def = [
-      Asset(name=asset_name, trust_fee=0.0005775, mu=0.07, sigma=0.15, leverage=1, forex="USDJPY"),
+      Asset(name=asset_name,
+            trust_fee=0.0005775,
+            mu=0.07,
+            sigma=0.15,
+            leverage=1,
+            forex="USDJPY"),
   ]
 
   print("月次価格推移を生成中...")
-  monthly_asset_prices = generate_monthly_asset_prices(assets_def, forex_paths=forex_paths)
+  monthly_asset_prices = generate_monthly_asset_prices(assets_def,
+                                                       forex_paths=forex_paths)
 
   # ---------------------------------------------------------------------------
   # 2. 戦略(Plan)の定義
   # ---------------------------------------------------------------------------
   # (比率, リバランス間隔) のペア
   test_cases = [
-      (1.0, 0),   # オルカン100% (基準)
-      (0.8, 0),   # 80/20 リバランスなし
+      (1.0, 0),  # オルカン100% (基準)
+      (0.8, 0),  # 80/20 リバランスなし
       (0.8, 12),  # 80/20 毎年リバランス
-      (0.7, 0),   # 70/30 リバランスなし
+      (0.7, 0),  # 70/30 リバランスなし
       (0.7, 12),  # 70/30 毎年リバランス
-      (0.5, 0),   # 50/50 リバランスなし
+      (0.5, 0),  # 50/50 リバランスなし
       (0.5, 12),  # 50/50 毎年リバランス
   ]
-  
+
   strategies = []
 
   for ratio, interval in test_cases:
     suffix = "リバランスなし" if interval == 0 else "毎年リバランス"
     strategies.append(
-        Strategy(
-            name=f"オルカン {round(ratio*100)}% ({suffix})",
-            initial_money=10000,
-            initial_loan=0,
-            yearly_loan_interest=0,
-            initial_asset_ratio={asset_name: ratio},
-            annual_cost=400,
-            inflation_rate=0.02,
-            tax_rate=0.20315,
-            selling_priority=[asset_name],
-            rebalance_interval=interval
-        )
-    )
+        Strategy(name=f"オルカン {round(ratio*100)}% ({suffix})",
+                 initial_money=10000,
+                 initial_loan=0,
+                 yearly_loan_interest=0,
+                 initial_asset_ratio={asset_name: ratio},
+                 annual_cost=400,
+                 inflation_rate=0.02,
+                 tax_rate=0.20315,
+                 selling_priority=[asset_name],
+                 rebalance_interval=interval))
 
   # ---------------------------------------------------------------------------
   # 3. シミュレーションの実行
@@ -73,8 +76,8 @@ def main():
   # ---------------------------------------------------------------------------
   # 4. 可視化と保存
   # ---------------------------------------------------------------------------
-  survival_image_file = 'imgs/ratio_rebalance_comp_survival.svg'
-  distribution_image_file = 'imgs/ratio_rebalance_comp_distribution.svg'
+  survival_image_file = 'docs/imgs/ratio_rebalance_comp_survival.svg'
+  distribution_image_file = 'docs/imgs/ratio_rebalance_comp_distribution.svg'
   visualize_and_save(results=results,
                      html_file='temp/ratio_rebalance_comp_result.html',
                      survival_image_file=survival_image_file,

@@ -59,7 +59,7 @@ def main():
   # ---------------------------------------------------------------------------
   visualize_and_save(results=results,
                      html_file='temp/volatility_result.html',
-                     distribution_image_file='imgs/volatility_result.svg',
+                     distribution_image_file='docs/imgs/volatility_result.svg',
                      title='ボラティリティ違いによる50年後の最終評価額',
                      summary_title='ボラティリティ比較サマリー（1,000回試行）',
                      bankruptcy_years=[])

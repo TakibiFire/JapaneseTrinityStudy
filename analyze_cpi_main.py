@@ -144,7 +144,7 @@ def main() -> None:
                      start_year=1970,
                      mu=mu,
                      sigma=sigma,
-                     output_path="imgs/cpi.svg")
+                     output_path="docs/imgs/cpi.svg")
 
 
 if __name__ == "__main__":

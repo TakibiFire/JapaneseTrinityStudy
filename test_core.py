@@ -834,36 +834,38 @@ class TestCore(unittest.TestCase):
     """
     orukan = Asset(name="オルカン", trust_fee=0.0, leverage=1)
     cash_asset = ZeroRiskAsset(name="無リスク資産", yield_rate=0.0)
-    
+
     # 資産価格推移 (全て1.0)
     prices = {
         "オルカン": np.ones((10, 12 * 5 + 1)),
         "無リスク資産": np.ones((10, 12 * 5 + 1))
     }
-    
+
     # ダイナミックリバランス関数: 常に 0.5 / 0.5 にする
     def dummy_rebalance_fn(net_value, annual_spend, remaining_years):
       return {
           "オルカン": np.full_like(net_value, 0.5),
           "無リスク資産": np.full_like(net_value, 0.5)
       }
-    
+
     # 初期状態は オルカン 100%、無リスク資産 0%
-    strategy = Strategy(
-        name="Test",
-        initial_money=1000.0,
-        initial_loan=0.0,
-        yearly_loan_interest=0.0,
-        initial_asset_ratio={orukan.name: 1.0, cash_asset: 0.0},
-        annual_cost=0.0,
-        inflation_rate=0.0,
-        selling_priority=["オルカン", "無リスク資産"],
-        rebalance_interval=1,
-        dynamic_rebalance_fn=dummy_rebalance_fn
-    )
-    
+    strategy = Strategy(name="Test",
+                        initial_money=1000.0,
+                        initial_loan=0.0,
+                        yearly_loan_interest=0.0,
+                        initial_asset_ratio={
+                            orukan.name: 1.0,
+                            cash_asset: 0.0
+                        },
+                        annual_cost=0.0,
+                        inflation_rate=0.0,
+                        selling_priority=["オルカン", "無リスク資産"],
+                        rebalance_interval=1,
+                        dynamic_rebalance_fn=dummy_rebalance_fn)
+
     res = simulate_strategy(strategy, prices)
     self.assertEqual(len(res.net_values), 10)
+
 
 if __name__ == "__main__":
   unittest.main()

@@ -127,7 +127,8 @@ def create_survival_probability_chart(
       tooltip=[
           'Year', 'Strategy',
           alt.Tooltip('Survival Probability (%):Q', format='.1f')
-      ]).properties(title='経過年数と生存確率の推移', width=600, height=height).interactive()
+      ]).properties(title='経過年数と生存確率の推移', width=600,
+                    height=height).interactive()
 
   return df_plot, chart
 
@@ -196,8 +197,9 @@ def visualize_and_save(results: Dict[str, SimulationResult],
                                       height=distribution_height).interactive()
 
   # 生存確率のチャートを作成
-  _, survival_chart = create_survival_probability_chart(
-      results, max_years=50, height=survival_height)
+  _, survival_chart = create_survival_probability_chart(results,
+                                                        max_years=50,
+                                                        height=survival_height)
 
   # HTML表示用に垂直結合し、各グラフに凡例を独立して表示させる
   combined_chart = (final_chart & survival_chart).properties(

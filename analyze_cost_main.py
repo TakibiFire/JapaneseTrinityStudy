@@ -39,7 +39,7 @@ def main():
 
   # グラフ描画用データフレーム作成
   df_actual = pd.DataFrame({
-      "Age": ages[:-1], # 最後の仮想データポイント(85.2歳)はオリジナルデータではないのでプロットから除外
+      "Age": ages[:-1],  # 最後の仮想データポイント(85.2歳)はオリジナルデータではないのでプロットから除外
       "Cost": costs[:-1],
       "Type": ["Original Data"] * (len(ages) - 1)
   })
@@ -54,22 +54,18 @@ def main():
   chart_actual = alt.Chart(df_actual).mark_point(size=100, filled=True).encode(
       x=alt.X("Age:Q", title="年齢", scale=alt.Scale(domain=[30, 100])),
       y=alt.Y("Cost:Q", title="消費支出(円)"),
-      color=alt.Color("Type:N", title="データ種類")
-  )
+      color=alt.Color("Type:N", title="データ種類"))
 
   chart_spline = alt.Chart(df_spline).mark_line().encode(
       x=alt.X("Age:Q", title="年齢", scale=alt.Scale(domain=[30, 100])),
       y=alt.Y("Cost:Q", title="消費支出(円)"),
-      color=alt.Color("Type:N", title="データ種類")
-  )
+      color=alt.Color("Type:N", title="データ種類"))
 
-  chart = (chart_actual + chart_spline).properties(
-      width=500,
-      height=300,
-      title="年齢別消費支出の推移"
-  )
+  chart = (chart_actual + chart_spline).properties(width=500,
+                                                   height=300,
+                                                   title="年齢別消費支出の推移")
 
-  output_path = "imgs/cost_by_age.svg"
+  output_path = "docs/imgs/cost_by_age.svg"
   chart.save(output_path)
   print(f"グラフを保存しました: {output_path}")
 

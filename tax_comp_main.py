@@ -73,8 +73,8 @@ def main():
   # ---------------------------------------------------------------------------
   # 4. 可視化と保存
   # ---------------------------------------------------------------------------
-  survival_image_file = 'imgs/tax_comp_survival.svg'
-  distribution_image_file = 'imgs/tax_comp_distribution.svg'
+  survival_image_file = 'docs/imgs/tax_comp_survival.svg'
+  distribution_image_file = 'docs/imgs/tax_comp_distribution.svg'
   visualize_and_save(results=results,
                      html_file='temp/tax_comp_result.html',
                      survival_image_file=survival_image_file,

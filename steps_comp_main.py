@@ -24,86 +24,88 @@ def main():
       # Step 1: 7%固定 (ボラ0)
       Asset(name="Asset_Step1", trust_fee=0.0, mu=0.07, sigma=0.0, leverage=1),
       # Step 2-4: ボラ15%
-      Asset(name="Asset_Step2-4", trust_fee=0.0, mu=0.07, sigma=0.15, leverage=1),
+      Asset(name="Asset_Step2-4",
+            trust_fee=0.0,
+            mu=0.07,
+            sigma=0.15,
+            leverage=1),
       # Step 5: 信託報酬あり
-      Asset(name="Asset_Step5", trust_fee=0.0005775, mu=0.07, sigma=0.15, leverage=1),
+      Asset(name="Asset_Step5",
+            trust_fee=0.0005775,
+            mu=0.07,
+            sigma=0.15,
+            leverage=1),
       # Step 6: 為替リスクあり (Step 5 の設定を引き継ぐ)
-      Asset(name="Asset_Step6", trust_fee=0.0005775, mu=0.07, sigma=0.15, leverage=1, forex="USDJPY"),
+      Asset(name="Asset_Step6",
+            trust_fee=0.0005775,
+            mu=0.07,
+            sigma=0.15,
+            leverage=1,
+            forex="USDJPY"),
   ]
 
   print("月次価格推移を生成中...")
-  monthly_asset_prices = generate_monthly_asset_prices(assets_def, forex_paths=forex_paths)
+  monthly_asset_prices = generate_monthly_asset_prices(assets_def,
+                                                       forex_paths=forex_paths)
 
   # ---------------------------------------------------------------------------
   # 2. 戦略(Plan)の定義
   # ---------------------------------------------------------------------------
   strategies = [
-      Strategy(
-          name="1. 7%固定運用 (リスク0)",
-          initial_money=10000,
-          initial_loan=0,
-          yearly_loan_interest=0,
-          initial_asset_ratio={"Asset_Step1": 1.0},
-          annual_cost=400,
-          inflation_rate=0.0,
-          tax_rate=0.0,
-          selling_priority=["Asset_Step1"]
-      ),
-      Strategy(
-          name="2. ボラティリティ 15% を設定",
-          initial_money=10000,
-          initial_loan=0,
-          yearly_loan_interest=0,
-          initial_asset_ratio={"Asset_Step2-4": 1.0},
-          annual_cost=400,
-          inflation_rate=0.0,
-          tax_rate=0.0,
-          selling_priority=["Asset_Step2-4"]
-      ),
-      Strategy(
-          name="3. 物価上昇率 2% を設定",
-          initial_money=10000,
-          initial_loan=0,
-          yearly_loan_interest=0,
-          initial_asset_ratio={"Asset_Step2-4": 1.0},
-          annual_cost=400,
-          inflation_rate=0.02,
-          tax_rate=0.0,
-          selling_priority=["Asset_Step2-4"]
-      ),
-      Strategy(
-          name="4. 譲渡所得税 20.315% を設定",
-          initial_money=10000,
-          initial_loan=0,
-          yearly_loan_interest=0,
-          initial_asset_ratio={"Asset_Step2-4": 1.0},
-          annual_cost=400,
-          inflation_rate=0.02,
-          tax_rate=0.20315,
-          selling_priority=["Asset_Step2-4"]
-      ),
-      Strategy(
-          name="5. 信託報酬 0.05775% を設定",
-          initial_money=10000,
-          initial_loan=0,
-          yearly_loan_interest=0,
-          initial_asset_ratio={"Asset_Step5": 1.0},
-          annual_cost=400,
-          inflation_rate=0.02,
-          tax_rate=0.20315,
-          selling_priority=["Asset_Step5"]
-      ),
-      Strategy(
-          name="6. 為替リスク 10.5% を設定",
-          initial_money=10000,
-          initial_loan=0,
-          yearly_loan_interest=0,
-          initial_asset_ratio={"Asset_Step6": 1.0},
-          annual_cost=400,
-          inflation_rate=0.02,
-          tax_rate=0.20315,
-          selling_priority=["Asset_Step6"]
-      ),
+      Strategy(name="1. 7%固定運用 (リスク0)",
+               initial_money=10000,
+               initial_loan=0,
+               yearly_loan_interest=0,
+               initial_asset_ratio={"Asset_Step1": 1.0},
+               annual_cost=400,
+               inflation_rate=0.0,
+               tax_rate=0.0,
+               selling_priority=["Asset_Step1"]),
+      Strategy(name="2. ボラティリティ 15% を設定",
+               initial_money=10000,
+               initial_loan=0,
+               yearly_loan_interest=0,
+               initial_asset_ratio={"Asset_Step2-4": 1.0},
+               annual_cost=400,
+               inflation_rate=0.0,
+               tax_rate=0.0,
+               selling_priority=["Asset_Step2-4"]),
+      Strategy(name="3. 物価上昇率 2% を設定",
+               initial_money=10000,
+               initial_loan=0,
+               yearly_loan_interest=0,
+               initial_asset_ratio={"Asset_Step2-4": 1.0},
+               annual_cost=400,
+               inflation_rate=0.02,
+               tax_rate=0.0,
+               selling_priority=["Asset_Step2-4"]),
+      Strategy(name="4. 譲渡所得税 20.315% を設定",
+               initial_money=10000,
+               initial_loan=0,
+               yearly_loan_interest=0,
+               initial_asset_ratio={"Asset_Step2-4": 1.0},
+               annual_cost=400,
+               inflation_rate=0.02,
+               tax_rate=0.20315,
+               selling_priority=["Asset_Step2-4"]),
+      Strategy(name="5. 信託報酬 0.05775% を設定",
+               initial_money=10000,
+               initial_loan=0,
+               yearly_loan_interest=0,
+               initial_asset_ratio={"Asset_Step5": 1.0},
+               annual_cost=400,
+               inflation_rate=0.02,
+               tax_rate=0.20315,
+               selling_priority=["Asset_Step5"]),
+      Strategy(name="6. 為替リスク 10.5% を設定",
+               initial_money=10000,
+               initial_loan=0,
+               yearly_loan_interest=0,
+               initial_asset_ratio={"Asset_Step6": 1.0},
+               annual_cost=400,
+               inflation_rate=0.02,
+               tax_rate=0.20315,
+               selling_priority=["Asset_Step6"]),
   ]
 
   # ---------------------------------------------------------------------------
@@ -118,8 +120,8 @@ def main():
   # ---------------------------------------------------------------------------
   # 4. 可視化と保存
   # ---------------------------------------------------------------------------
-  survival_image_file = 'imgs/steps_comp_survival.svg'
-  distribution_image_file = 'imgs/steps_comp_distribution.svg'
+  survival_image_file = 'docs/imgs/steps_comp_survival.svg'
+  distribution_image_file = 'docs/imgs/steps_comp_distribution.svg'
   visualize_and_save(results=results,
                      html_file='temp/steps_comp_result.html',
                      survival_image_file=survival_image_file,

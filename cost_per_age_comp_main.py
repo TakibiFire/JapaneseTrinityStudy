@@ -94,7 +94,9 @@ def main():
 
   for i, start_age in enumerate(start_ages):
     multipliers = get_cost_multiplier(start_age, 50)
-    print(f"[{start_age}歳からの50年間] 出費乗数: {[round(m, 2) for m in multipliers[:5]]} ... {[round(m, 2) for m in multipliers[-5:]]}")
+    print(
+        f"[{start_age}歳からの50年間] 出費乗数: {[round(m, 2) for m in multipliers[:5]]} ... {[round(m, 2) for m in multipliers[-5:]]}"
+    )
     annual_costs = [base_annual_cost * m for m in multipliers]
 
     strategies.append(
@@ -124,8 +126,8 @@ def main():
   # ---------------------------------------------------------------------------
   # 4. 可視化と保存
   # ---------------------------------------------------------------------------
-  survival_image_file = 'imgs/cost_per_age_comp_survival.svg'
-  distribution_image_file = 'imgs/cost_per_age_comp_distribution.svg'
+  survival_image_file = 'docs/imgs/cost_per_age_comp_survival.svg'
+  distribution_image_file = 'docs/imgs/cost_per_age_comp_distribution.svg'
   visualize_and_save(results=results,
                      html_file='temp/cost_per_age_comp_result.html',
                      survival_image_file=survival_image_file,

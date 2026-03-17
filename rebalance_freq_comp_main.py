@@ -22,11 +22,17 @@ def main():
   # 資産の定義 (オルカン)
   asset_name = "オルカン"
   assets_def = [
-      Asset(name=asset_name, trust_fee=0.0005775, mu=0.07, sigma=0.15, leverage=1, forex="USDJPY"),
+      Asset(name=asset_name,
+            trust_fee=0.0005775,
+            mu=0.07,
+            sigma=0.15,
+            leverage=1,
+            forex="USDJPY"),
   ]
 
   print("月次価格推移を生成中...")
-  monthly_asset_prices = generate_monthly_asset_prices(assets_def, forex_paths=forex_paths)
+  monthly_asset_prices = generate_monthly_asset_prices(assets_def,
+                                                       forex_paths=forex_paths)
 
   # 無リスク資産の定義 (4%)
   rf = ZeroRiskAsset(name="無リスク資産(4%)", yield_rate=0.04)
@@ -35,50 +41,44 @@ def main():
   # 2. 戦略(Plan)の定義
   # ---------------------------------------------------------------------------
   ratio = 0.8
-  
+
   strategies = []
-  
+
   # リバランスなし
   strategies.append(
-      Strategy(
-          name=f"1. リバランスなし",
-          initial_money=10000,
-          initial_loan=0,
-          yearly_loan_interest=0,
-          initial_asset_ratio={asset_name: ratio, rf: (1.0 - ratio)},
-          annual_cost=400,
-          inflation_rate=0.02,
-          tax_rate=0.20315,
-          selling_priority=[rf.name, asset_name],
-          rebalance_interval=0
-      )
-  )
+      Strategy(name=f"1. リバランスなし",
+               initial_money=10000,
+               initial_loan=0,
+               yearly_loan_interest=0,
+               initial_asset_ratio={
+                   asset_name: ratio,
+                   rf: (1.0 - ratio)
+               },
+               annual_cost=400,
+               inflation_rate=0.02,
+               tax_rate=0.20315,
+               selling_priority=[rf.name, asset_name],
+               rebalance_interval=0))
 
   # リバランス頻度
-  intervals = [
-      (1, "1ヶ月"),
-      (3, "3ヶ月"),
-      (12, "1年"),
-      (24, "2年"),
-      (60, "5年"),
-      (120, "10年")
-  ]
+  intervals = [(1, "1ヶ月"), (3, "3ヶ月"), (12, "1年"), (24, "2年"), (60, "5年"),
+               (120, "10年")]
 
   for i, (interval, label) in enumerate(intervals):
     strategies.append(
-        Strategy(
-            name=f"{i+2}. リバランス={label}ごと",
-            initial_money=10000,
-            initial_loan=0,
-            yearly_loan_interest=0,
-            initial_asset_ratio={asset_name: ratio, rf: (1.0 - ratio)},
-            annual_cost=400,
-            inflation_rate=0.02,
-            tax_rate=0.20315,
-            selling_priority=[rf.name, asset_name],
-            rebalance_interval=interval
-        )
-    )
+        Strategy(name=f"{i+2}. リバランス={label}ごと",
+                 initial_money=10000,
+                 initial_loan=0,
+                 yearly_loan_interest=0,
+                 initial_asset_ratio={
+                     asset_name: ratio,
+                     rf: (1.0 - ratio)
+                 },
+                 annual_cost=400,
+                 inflation_rate=0.02,
+                 tax_rate=0.20315,
+                 selling_priority=[rf.name, asset_name],
+                 rebalance_interval=interval))
 
   # ---------------------------------------------------------------------------
   # 3. シミュレーションの実行
@@ -92,8 +92,8 @@ def main():
   # ---------------------------------------------------------------------------
   # 4. 可視化と保存
   # ---------------------------------------------------------------------------
-  survival_image_file = 'imgs/rebalance_freq_comp_survival.svg'
-  distribution_image_file = 'imgs/rebalance_freq_comp_distribution.svg'
+  survival_image_file = 'docs/imgs/rebalance_freq_comp_survival.svg'
+  distribution_image_file = 'docs/imgs/rebalance_freq_comp_distribution.svg'
   visualize_and_save(results=results,
                      html_file='temp/rebalance_freq_comp_result.html',
                      survival_image_file=survival_image_file,

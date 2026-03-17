@@ -22,11 +22,17 @@ def main():
   # 資産の定義 (オルカン)
   asset_name = "オルカン"
   assets_def = [
-      Asset(name=asset_name, trust_fee=0.0005775, mu=0.07, sigma=0.15, leverage=1, forex="USDJPY"),
+      Asset(name=asset_name,
+            trust_fee=0.0005775,
+            mu=0.07,
+            sigma=0.15,
+            leverage=1,
+            forex="USDJPY"),
   ]
 
   print("月次価格推移を生成中...")
-  monthly_asset_prices = generate_monthly_asset_prices(assets_def, forex_paths=forex_paths)
+  monthly_asset_prices = generate_monthly_asset_prices(assets_def,
+                                                       forex_paths=forex_paths)
 
   # 無リスク資産の定義 (4%)
   rf = ZeroRiskAsset(name="無リスク資産(4%)", yield_rate=0.04)
@@ -35,56 +41,53 @@ def main():
   # 2. 戦略(Plan)の定義
   # ---------------------------------------------------------------------------
   stock_ratios = [0.8, 0.7, 0.5]
-  
+
   strategies = []
-  
+
   # Baseline: 100% Stock
   strategies.append(
-      Strategy(
-          name="オルカン 100% (基準)",
-          initial_money=10000,
-          initial_loan=0,
-          yearly_loan_interest=0,
-          initial_asset_ratio={asset_name: 1.0},
-          annual_cost=400,
-          inflation_rate=0.02,
-          tax_rate=0.20315,
-          selling_priority=[asset_name],
-          rebalance_interval=0
-      )
-  )
+      Strategy(name="オルカン 100% (基準)",
+               initial_money=10000,
+               initial_loan=0,
+               yearly_loan_interest=0,
+               initial_asset_ratio={asset_name: 1.0},
+               annual_cost=400,
+               inflation_rate=0.02,
+               tax_rate=0.20315,
+               selling_priority=[asset_name],
+               rebalance_interval=0))
 
   for ratio in stock_ratios:
     # 1. Sell Stock then RF
     strategies.append(
-        Strategy(
-            name=f"オルカン {round(ratio*100)}% (売却順: 1.株, 2.無リスク)",
-            initial_money=10000,
-            initial_loan=0,
-            yearly_loan_interest=0,
-            initial_asset_ratio={asset_name: ratio, rf: (1.0 - ratio)},
-            annual_cost=400,
-            inflation_rate=0.02,
-            tax_rate=0.20315,
-            selling_priority=[asset_name, rf.name],
-            rebalance_interval=0
-        )
-    )
+        Strategy(name=f"オルカン {round(ratio*100)}% (売却順: 1.株, 2.無リスク)",
+                 initial_money=10000,
+                 initial_loan=0,
+                 yearly_loan_interest=0,
+                 initial_asset_ratio={
+                     asset_name: ratio,
+                     rf: (1.0 - ratio)
+                 },
+                 annual_cost=400,
+                 inflation_rate=0.02,
+                 tax_rate=0.20315,
+                 selling_priority=[asset_name, rf.name],
+                 rebalance_interval=0))
     # 2. Sell RF then Stock
     strategies.append(
-        Strategy(
-            name=f"オルカン {round(ratio*100)}% (売却順: 1.無リスク, 2.株)",
-            initial_money=10000,
-            initial_loan=0,
-            yearly_loan_interest=0,
-            initial_asset_ratio={asset_name: ratio, rf: (1.0 - ratio)},
-            annual_cost=400,
-            inflation_rate=0.02,
-            tax_rate=0.20315,
-            selling_priority=[rf.name, asset_name],
-            rebalance_interval=0
-        )
-    )
+        Strategy(name=f"オルカン {round(ratio*100)}% (売却順: 1.無リスク, 2.株)",
+                 initial_money=10000,
+                 initial_loan=0,
+                 yearly_loan_interest=0,
+                 initial_asset_ratio={
+                     asset_name: ratio,
+                     rf: (1.0 - ratio)
+                 },
+                 annual_cost=400,
+                 inflation_rate=0.02,
+                 tax_rate=0.20315,
+                 selling_priority=[rf.name, asset_name],
+                 rebalance_interval=0))
 
   # ---------------------------------------------------------------------------
   # 3. シミュレーションの実行
@@ -98,8 +101,8 @@ def main():
   # ---------------------------------------------------------------------------
   # 4. 可視化と保存
   # ---------------------------------------------------------------------------
-  survival_image_file = 'imgs/zero_risk_priority_comp_survival.svg'
-  distribution_image_file = 'imgs/zero_risk_priority_comp_distribution.svg'
+  survival_image_file = 'docs/imgs/zero_risk_priority_comp_survival.svg'
+  distribution_image_file = 'docs/imgs/zero_risk_priority_comp_distribution.svg'
   visualize_and_save(results=results,
                      html_file='temp/zero_risk_priority_comp_result.html',
                      survival_image_file=survival_image_file,

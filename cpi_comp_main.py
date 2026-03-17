@@ -80,8 +80,8 @@ def main():
   # ---------------------------------------------------------------------------
   # 5. 可視化と保存
   # ---------------------------------------------------------------------------
-  survival_image_file = 'imgs/cpi_comp_survival.svg'
-  distribution_image_file = 'imgs/cpi_comp_distribution.svg'
+  survival_image_file = 'docs/imgs/cpi_comp_survival.svg'
+  distribution_image_file = 'docs/imgs/cpi_comp_distribution.svg'
   visualize_and_save(results=results,
                      html_file='temp/cpi_comp_result.html',
                      survival_image_file=survival_image_file,

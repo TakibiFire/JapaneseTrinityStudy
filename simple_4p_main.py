@@ -7,8 +7,8 @@ import re
 import sys
 from typing import Dict, List, Union
 
-from core import (Asset, Strategy, ZeroRiskAsset,
-                  generate_monthly_asset_prices, simulate_strategy)
+from core import (Asset, Strategy, ZeroRiskAsset, generate_monthly_asset_prices,
+                  simulate_strategy)
 from visualize import create_styled_summary, visualize_and_save
 
 
@@ -85,8 +85,8 @@ def main():
   # ---------------------------------------------------------------------------
   # 4. 可視化と保存
   # ---------------------------------------------------------------------------
-  survival_image_file = 'imgs/simple_4p_survival.svg'
-  distribution_image_file = 'imgs/simple_4p_distribution.svg'
+  survival_image_file = 'docs/imgs/simple_4p_survival.svg'
+  distribution_image_file = 'docs/imgs/simple_4p_distribution.svg'
   visualize_and_save(results=results,
                      html_file='temp/simple_4p_result.html',
                      survival_image_file=survival_image_file,

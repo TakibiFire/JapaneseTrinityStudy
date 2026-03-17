@@ -5,8 +5,8 @@
 シミュレーションを比較し、最終純資産の分布や破産確率などを視覚化して `new_result.html` に出力する。
 """
 
-from core import (Asset, Strategy, ZeroRiskAsset,
-                  generate_monthly_asset_prices, simulate_strategy)
+from core import (Asset, Strategy, ZeroRiskAsset, generate_monthly_asset_prices,
+                  simulate_strategy)
 from visualize import visualize_and_save
 
 

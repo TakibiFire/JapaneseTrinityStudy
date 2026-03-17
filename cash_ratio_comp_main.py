@@ -22,11 +22,17 @@ def main():
   # 資産の定義 (オルカン)
   asset_name = "オルカン"
   assets_def = [
-      Asset(name=asset_name, trust_fee=0.0005775, mu=0.07, sigma=0.15, leverage=1, forex="USDJPY"),
+      Asset(name=asset_name,
+            trust_fee=0.0005775,
+            mu=0.07,
+            sigma=0.15,
+            leverage=1,
+            forex="USDJPY"),
   ]
 
   print("月次価格推移を生成中...")
-  monthly_asset_prices = generate_monthly_asset_prices(assets_def, forex_paths=forex_paths)
+  monthly_asset_prices = generate_monthly_asset_prices(assets_def,
+                                                       forex_paths=forex_paths)
 
   # ---------------------------------------------------------------------------
   # 2. 戦略(Plan)の定義
@@ -36,18 +42,15 @@ def main():
 
   for ratio in ratios:
     strategies.append(
-        Strategy(
-            name=f"オルカン {round(ratio*100)}% / 現金 {round((1-ratio)*100)}%",
-            initial_money=10000,
-            initial_loan=0,
-            yearly_loan_interest=0,
-            initial_asset_ratio={asset_name: ratio},
-            annual_cost=400,
-            inflation_rate=0.02,
-            tax_rate=0.20315,
-            selling_priority=[asset_name]
-        )
-    )
+        Strategy(name=f"オルカン {round(ratio*100)}% / 現金 {round((1-ratio)*100)}%",
+                 initial_money=10000,
+                 initial_loan=0,
+                 yearly_loan_interest=0,
+                 initial_asset_ratio={asset_name: ratio},
+                 annual_cost=400,
+                 inflation_rate=0.02,
+                 tax_rate=0.20315,
+                 selling_priority=[asset_name]))
 
   # ---------------------------------------------------------------------------
   # 3. シミュレーションの実行
@@ -61,8 +64,8 @@ def main():
   # ---------------------------------------------------------------------------
   # 4. 可視化と保存
   # ---------------------------------------------------------------------------
-  survival_image_file = 'imgs/cash_ratio_comp_survival.svg'
-  distribution_image_file = 'imgs/cash_ratio_comp_distribution.svg'
+  survival_image_file = 'docs/imgs/cash_ratio_comp_survival.svg'
+  distribution_image_file = 'docs/imgs/cash_ratio_comp_distribution.svg'
   visualize_and_save(results=results,
                      html_file='temp/cash_ratio_comp_result.html',
                      survival_image_file=survival_image_file,

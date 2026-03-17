@@ -99,8 +99,8 @@ def main():
   # ---------------------------------------------------------------------------
   # 4. 可視化と保存
   # ---------------------------------------------------------------------------
-  survival_image_file = 'imgs/dynamic_spending_comp_survival.svg'
-  distribution_image_file = 'imgs/dynamic_spending_comp_distribution.svg'
+  survival_image_file = 'docs/imgs/dynamic_spending_comp_survival.svg'
+  distribution_image_file = 'docs/imgs/dynamic_spending_comp_distribution.svg'
   visualize_and_save(results=results,
                      html_file='temp/dynamic_spending_comp_result.html',
                      survival_image_file=survival_image_file,
