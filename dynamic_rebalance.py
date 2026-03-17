@@ -30,18 +30,23 @@ def calculate_optimal_strategy(S: np.ndarray, N: float) -> np.ndarray:
 
   # 1. 資産寿命 (N_ruin) の計算
   # S <= delta の場合は理論上無限 (999年とする)
-  n_ruin = np.where(S_safe <= delta, 999.0,
-                    np.log(1.0 - delta / S_safe) / (-delta))
+  # np.log への不正な入力を防ぐため、S_safe を使用しつつ、1.0 - delta / S_safe が
+  # 正になるように保護する
+  log_arg = np.maximum(1.0 - delta / S_safe, 1e-10)
+  n_ruin = np.where(S_safe <= delta, 999.0, np.log(log_arg) / (-delta))
 
   n = N / 50.0
   m = (N - n_ruin) / 50.0
 
   ratio = np.zeros_like(S_safe)
 
+  # 極端に大きな S をクリップして overflow を防ぐ (例: 純資産がほぼ0の場合 S が巨大になる)
+  S_clipped = np.clip(S_safe, 1e-10, 100.0)
+
   # Region 1: N <= n_ruin (資産寿命内)
   mask1 = N <= n_ruin
   if np.any(mask1):
-    S1 = S_safe[mask1]
+    S1 = S_clipped[mask1]
     # n が極端に小さい場合のゼロ除算回避
     n_safe = max(n, 1e-6)
     ratio[mask1] = -0.8088 - 0.3832 * np.log(n_safe * S1) + 0.1134 * (
@@ -50,7 +55,7 @@ def calculate_optimal_strategy(S: np.ndarray, N: float) -> np.ndarray:
   # Region 2: N > n_ruin (資産寿命超)
   mask2 = ~mask1
   if np.any(mask2):
-    S2 = S_safe[mask2]
+    S2 = S_clipped[mask2]
     m2 = np.maximum(m[mask2], 0.0001)
     ratio[mask2] = +0.6431 + 0.1640 * np.log(m2) - 0.0194 * (
         1 / S2) + 0.8301 * np.exp(S2) + 0.2235 * np.sqrt(m2)
