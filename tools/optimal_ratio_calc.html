@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>最適オルカン比率シミュレーター</title>
+    <style>
+        body { font-family: sans-serif; line-height: 1.6; max-width: 600px; margin: 2em auto; padding: 0 1em; }
+        .input-group { margin-bottom: 1em; }
+        label { display: block; margin-bottom: 0.5em; }
+        input { width: 100%; padding: 0.5em; box-sizing: border-box; }
+        button { padding: 0.7em 1.5em; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background-color: #0056b3; }
+        #results { margin-top: 2em; padding: 1em; border: 1px solid #ddd; border-radius: 4px; background-color: #f9f9f9; }
+        .log-line { margin: 0.2em 0; font-family: monospace; }
+        .summary { font-weight: bold; color: #333; margin-top: 1em; }
+    </style>
+</head>
+<body>
+    <h1>最適オルカン比率シミュレーター</h1>
+    <p>支出率と目標年数から、生存確率を最大化する「オルカン」と「無リスク資産（4%利回り）」の最適な配分比率を計算します。</p>
+
+    <div class="input-group">
+        <label for="spend_rate">年間支出率 (例: 0.04 = 4%)</label>
+        <input type="number" id="spend_rate" step="0.001" value="0.04">
+    </div>
+    <div class="input-group">
+        <label for="years">目標経過年数 (例: 30)</label>
+        <input type="number" id="years" step="1" value="30">
+    </div>
+    <button onclick="runSimulation()">計算する</button>
+
+    <div id="results" style="display: none;">
+        <h3>シミュレーション結果</h3>
+        <div id="log-container"></div>
+    </div>
+
+    <script src="optimal_ratio_calc.js"></script>
+    <script>
+        function runSimulation() {
+            const S = parseFloat(document.getElementById('spend_rate').value);
+            const N = parseFloat(document.getElementById('years').value);
+            const resultsDiv = document.getElementById('results');
+            const logContainer = document.getElementById('log-container');
+
+            resultsDiv.style.display = 'block';
+            logContainer.innerHTML = '';
+
+            const logToDiv = (message) => {
+                const p = document.createElement('div');
+                p.className = 'log-line';
+                p.textContent = message;
+                logContainer.appendChild(p);
+            };
+
+            const result = calculateOptimalStrategy(S, N, logToDiv);
+
+            const summary = document.createElement('div');
+            summary.className = 'summary';
+            summary.innerHTML = `
+                <hr>
+                🎉 推奨オルカン比率: <span style="font-size: 1.2em; color: #007bff;">${(result.ratio * 100).toFixed(1)}%</span><br>
+                📉 期待生存確率: ${(result.probability * 100).toFixed(1)}%
+            `;
+            logContainer.appendChild(summary);
+        }
+    </script>
+</body>
+</html>
