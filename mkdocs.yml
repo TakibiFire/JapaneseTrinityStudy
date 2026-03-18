@@ -1,16 +1,81 @@
-site_name: Lebakan
+site_name: 日本版4%ルール | たきびFIRE
 site_dir: dist
 use_directory_urls: false
 
 theme:
   name: material
+  favicon: imgs/favicon.png
+  logo: imgs/takibi.png
+  font:
+    text: Noto Sans JP
+    code: Roboto Mono
+  palette:
+    # Light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: deep orange
+      toggle:
+        icon: material/brightness-7
+        name: ダークモードに切り替え
+    # Dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: deep orange
+      toggle:
+        icon: material/brightness-4
+        name: ライトモードに切り替え
   features:
+    - content.code.copy
+    - content.tooltips
+    - header.autohide
+    - navigation.expand
     - navigation.instant
+    - navigation.path
     - navigation.sections
     - navigation.top
+    - navigation.tracking
+    - search.highlight
+    - search.suggest
+    - toc.follow
+
+copyright: Copyright &copy; 2026 たきびFIRE
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/TakibiFire/JapaneseTrinityStudy
+    - icon: fontawesome/brands/twitter
+      link: https://twitter.com/takibi333
+      name: たきび@FIRE
 
 extra_css:
   - stylesheets/tailwind.css
+  - stylesheets/extra.css
+
+plugins:
+  - search:
+      lang: ja
+      separator: '[\s\-\.]+'
+      prebuild_index: true
+  - git-revision-date-localized:
+      type: datetime
+      timezone: Asia/Tokyo
+      locale: ja
+      fallback_to_build_date: true
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - toc:
+      permalink: "🔗"
+      slugify: !!python/name:pymdownx.slugs.uslugify
 
 nav:
   - Home: report.md
