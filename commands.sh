@@ -8,8 +8,8 @@
 
 # [action]:
 # - format: Format all Python files using yapf
-# - docs-serve: Start MkDocs server and Tailwind watcher
-# - docs-build: Build the static site to the dist/ directory
+# - docs_serve: Start MkDocs server and Tailwind watcher
+# - docs_build: Build the static site to the dist/ directory
 
 set -e # Exit immediately if a command exits with a non-zero status.
 
@@ -49,14 +49,16 @@ while (( "$#" )); do
         format)
             execute_cmd yapf --style "{based_on_style: google, column_limit: 80, indent_width: 2}" --in-place *.py
             ;;
-        docs-serve)
+        docs_serve)
             # Run tailwind and mkdocs in parallel.
-            npx tailwindcss -i ./src/input.css -o ./docs/stylesheets/tailwind.css --watch &
-            execute_cmd mkdocs serve
+            # Kill existing tailwind process if running to avoid duplicates.
+            pkill -f "@tailwindcss/cli" || true
+            pnpm dlx @tailwindcss/cli -i ./src/input.css -o ./docs/stylesheets/tailwind.css --watch &
+            execute_cmd .venv/bin/mkdocs serve
             ;;
-        docs-build)
-            npx tailwindcss -i ./src/input.css -o ./docs/stylesheets/tailwind.css --minify
-            execute_cmd mkdocs build
+        docs_build)
+            pnpm dlx @tailwindcss/cli -i ./src/input.css -o ./docs/stylesheets/tailwind.css --minify
+            execute_cmd .venv/bin/mkdocs build
             ;;
         *)
             echo "Error: Invalid action '$ACTION'." >&2

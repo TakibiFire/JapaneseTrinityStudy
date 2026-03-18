@@ -168,3 +168,12 @@ cython_debug/
 # Internal directories
 tasks/
 temp/
+
+# Node.js
+node_modules/
+
+# MkDocs Output
+dist/
+
+# Generated CSS
+docs/stylesheets/tailwind.css

@@ -1,0 +1,16 @@
+site_name: Lebakan
+site_dir: dist
+use_directory_urls: false
+
+theme:
+  name: material
+  features:
+    - navigation.instant
+    - navigation.sections
+    - navigation.top
+
+extra_css:
+  - stylesheets/tailwind.css
+
+nav:
+  - Home: report.md

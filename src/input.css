@@ -1,0 +1,4 @@
+@import "tailwindcss";
+
+@source "../docs/**/*.md";
+@source "../overrides/**/*.html";
