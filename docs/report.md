@@ -19,14 +19,7 @@ See also core.py, main.py, optimization_main.py for the context.
 - Write tests
 -->
 
-<style>
-details {
-  margin-bottom: 1em;
-  padding-left: 1em;
-}
-</style>
-
-# 日本語版 4% ルール
+# 日本版 4% ルール
 
 <!--
 TODO: ここに素敵な導入を入れるが、それは後で考える。

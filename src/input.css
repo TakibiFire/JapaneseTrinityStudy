@@ -1,4 +1,21 @@
-@import "tailwindcss";
+@import "tailwindcss/theme";
+@import "tailwindcss/utilities";
 
 @source "../docs/**/*.md";
 @source "../overrides/**/*.html";
+
+:root {
+  /* Design Tokens (RGB components) */
+  --base-text: 12 10 9;
+  --base-background: 245 245 245;
+
+  /* Overriding MkDocs Material internal variables */
+  --md-default-fg-color: rgb(var(--base-text));
+  --md-default-bg-color: rgb(var(--base-background));
+  --md-typeset-color: rgb(var(--base-text));
+}
+
+details {
+  margin-bottom: 1em;
+  padding-left: 1em;
+}
