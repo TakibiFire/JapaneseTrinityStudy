@@ -58,7 +58,6 @@ plugins:
   - search:
       lang: ja
       separator: '[\s\-\.]+'
-      prebuild_index: true
   - git-revision-date-localized:
       type: datetime
       timezone: Asia/Tokyo
@@ -80,11 +79,11 @@ markdown_extensions:
       strip_comments: true
   - toc:
       permalink: true
-      slugify: !!python/name:pymdownx.slugs.uslugify
+      slugify: !!python/object/apply:pymdownx.slugs.slugify {kwds: {case: lower}}
 
 extra_javascript:
   - javascripts/mathjax.js
   - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
 
 nav:
-  - Home: report.md
+  - Home: index.md
