@@ -79,6 +79,9 @@ markdown_extensions:
       strip_comments: true
   - toc:
       permalink: true
+      slugify: !!python/object/apply:pymdownx.slugs.slugify
+        kwds:
+          case: lower
 
 extra_javascript:
   - javascripts/mathjax.js

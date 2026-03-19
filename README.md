@@ -8,7 +8,6 @@ The project has migrated from MkDocs 1.x to **Zensical** (the modern successor t
 
 ### Migration Notes (Trade-offs)
 Due to Zensical's move to a high-performance Rust-based architecture (MiniJinja), some Python-specific features were retired:
-*   **Slugify**: Removed the complex `!!python/object/apply` YAML tag in `mkdocs.yml` in favor of default slugification.
 *   **Git Revision Date**: The `git-revision-date-localized` plugin is currently a Tier 2 priority in Zensical's alpha; while configuration is preserved, full localized footer functionality may be limited until the module system is finalized.
 
 ### Development
