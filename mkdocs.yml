@@ -29,7 +29,6 @@ theme:
   features:
     - content.code.copy
     - content.tooltips
-    - header.autohide
     - navigation.expand
     - navigation.instant
     - navigation.path
