@@ -4,7 +4,12 @@ This project simulates the "4% rule" for investment withdrawal strategies in the
 
 ## Documentation and SPA Build
 
-The project uses **MkDocs** and **Tailwind CSS v4** to generate a Single Page Application (SPA) style report.
+The project has migrated from MkDocs 1.x to **Zensical** (the modern successor to MkDocs 1.x developed by the Material for MkDocs team) and uses **Tailwind CSS v4** to generate a Single Page Application (SPA) style report.
+
+### Migration Notes (Trade-offs)
+Due to Zensical's move to a high-performance Rust-based architecture (MiniJinja), some Python-specific features were retired:
+*   **Slugify**: Removed the complex `!!python/object/apply` YAML tag in `mkdocs.yml` in favor of default slugification.
+*   **Git Revision Date**: The `git-revision-date-localized` plugin is currently a Tier 2 priority in Zensical's alpha; while configuration is preserved, full localized footer functionality may be limited until the module system is finalized.
 
 ### Development
 
@@ -14,7 +19,7 @@ To start the development server with live-reload and Tailwind CSS watching:
 ./commands.sh docs_serve
 ```
 
-*   **MkDocs Server**: [http://127.0.0.1:8000/report.html](http://127.0.0.1:8000/report.html)
+*   **Zensical Server**: [http://127.0.0.1:8000/report.html](http://127.0.0.1:8000/report.html)
 *   **VSCode Preview**: You can use the "Simple Browser: Show" command in VSCode and paste the URL to see the preview side-by-side with your code.
 
 ### Production Build

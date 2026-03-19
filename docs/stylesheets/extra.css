@@ -19,12 +19,34 @@
 }
 
 .md-nav__link {
-  border-radius: 0.1rem;
+  border-radius: 0.5rem;
+  padding-left: 0.4rem;
+  padding-right: 0.4rem;
   transition: background-color 125ms;
 }
 
 .md-nav__link:hover {
-  background-color: var(--md-accent-fg-color--transparent);
+  background-color: var(--md-default-fg-color--lightest) !important;
+}
+
+/* Zensical modern theme overrides for classic look */
+.md-header {
+  background-color: var(--md-primary-fg-color);
+  color: var(--md-primary-bg-color);
+}
+.md-header .md-icon,
+.md-header .md-search__button {
+  color: var(--md-primary-bg-color) !important;
+}
+.md-search__button:before {
+  background-color: var(--md-primary-bg-color) !important;
+}
+.md-search__button:after {
+  display: none !important;
+}
+.md-nav__link--active {
+  background: transparent !important;
+  color: var(--md-typeset-color) !important;
 }
 
 /* ページ遷移アニメーション */

@@ -50,17 +50,17 @@ while (( "$#" )); do
             execute_cmd yapf --style "{based_on_style: google, column_limit: 80, indent_width: 2}" --in-place *.py
             ;;
         docs_serve)
-            # Run tailwind and mkdocs in parallel.
+            # Run tailwind and zensical in parallel.
             # Kill existing tailwind process if running to avoid duplicates.
             pkill -f "@tailwindcss/cli" || true
+            # Free port 8000 for zensical server
+            lsof -ti:8000 | xargs kill -9 2>/dev/null || true
             pnpm dlx @tailwindcss/cli -i ./src/input.css -o ./docs/stylesheets/tailwind.css --watch &
-            # Use polling and explicit livereload flag to work around click/mac issues.
-            export WATCHDOG_USE_POLLING=1
-            execute_cmd .venv/bin/mkdocs serve --livereload
+            execute_cmd .venv/bin/zensical serve
             ;;
         docs_build)
             pnpm dlx @tailwindcss/cli -i ./src/input.css -o ./docs/stylesheets/tailwind.css --minify
-            execute_cmd .venv/bin/mkdocs build
+            execute_cmd .venv/bin/zensical build
             ;;
         *)
             echo "Error: Invalid action '$ACTION'." >&2
