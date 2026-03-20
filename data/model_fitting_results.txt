@@ -1,0 +1,64 @@
+=== Model Fitting Results ===
+
+--- SP500 ---
+[Daily]
+Model A (Simple Normal): mu=0.001427, std=0.019557, BIC=-56277.88
+Model B (Log Normal):    mu=0.001237, std=0.019409, BIC=-56447.80
+Failed to fit reciprocal: Optimization converged to parameters that are outside the range allowed by the distribution.
+Model C (Best Dist MSE): dist=t, params=(np.float64(1.6997361387907421), np.float64(0.0009735367806684074), np.float64(0.007282946526247136)), MSE=0.035276
+[Monthly]
+Model A (Simple Normal): mu=0.008344, std=0.042105, BIC=-6493.38
+Model B (Log Normal):    mu=0.007437, std=0.041840, BIC=-6516.88
+Failed to fit reciprocal: Optimization converged to parameters that are outside the range allowed by the distribution.
+Model C (Best Dist MSE): dist=genlogistic, params=(np.float64(0.5983257553837089), np.float64(0.02390227903421411), np.float64(0.017141333060447166)), MSE=0.085347
+
+--- ACWI ---
+[Daily]
+Model A (Simple Normal): mu=0.000383, std=0.012726, BIC=-26613.14
+Model B (Log Normal):    mu=0.000302, std=0.012756, BIC=-26592.16
+Failed to fit reciprocal: Optimization converged to parameters that are outside the range allowed by the distribution.
+Model C (Best Dist MSE): dist=johnsonsu, params=(np.float64(0.11580572498285248), np.float64(1.0273468890271844), np.float64(0.0016752571823533632), np.float64(0.00757826018491759)), MSE=0.393696
+[Monthly]
+Model A (Simple Normal): mu=0.007573, std=0.047802, BIC=-689.85
+Model B (Log Normal):    mu=0.006393, std=0.048285, BIC=-685.50
+Failed to fit reciprocal: Optimization converged to parameters that are outside the range allowed by the distribution.
+Model C (Best Dist MSE): dist=laplace, params=(np.float64(0.013064061331624157), np.float64(0.035430040868965756)), MSE=4.725183
+
+--- BTC ---
+[Daily]
+Model A (Simple Normal): mu=0.001820, std=0.035124, BIC=-16198.65
+Model B (Log Normal):    mu=0.001198, std=0.035358, BIC=-16142.75
+Failed to fit reciprocal: Optimization converged to parameters that are outside the range allowed by the distribution.
+Model C (Best Dist MSE): dist=loglaplace, params=(np.float64(62785467.20699079), np.float64(-1447831.3625754137), np.float64(1447831.363678408)), MSE=0.169578
+[Monthly]
+Model A (Simple Normal): mu=0.058086, std=0.207162, BIC=-33.01
+Model B (Log Normal):    mu=0.037671, std=0.193847, BIC=-51.35
+Failed to fit reciprocal: Optimization converged to parameters that are outside the range allowed by the distribution.
+Model C (Best Dist MSE): dist=dweibull, params=(np.float64(1.2990026195512003), np.float64(0.019694149733772044), np.float64(0.16674089203304912)), MSE=0.681882
+
+=== S&P500 1871-2024 Verify Claim ===
+Expected Return (CAGR): 9.31% (Claim: 9.9%)
+Risk (Annualized Std): 14.53% (Claim: 14.0%)
+
+=== Correlation ACWI vs S&P500 ===
+ACWI = 0.7980 * SP500 + -0.000461
+R-squared: 0.7612
+Failed to fit reciprocal: Optimization converged to parameters that are outside the range allowed by the distribution.
+Noise Best Fit: dist=johnsonsu, params=(np.float64(0.16913567817904987), np.float64(0.92723801224686), np.float64(0.0009323166076281807), np.float64(0.0023486377120876404)), MSE=2.430015
+
+=== MR-GBM (BTC Daily) ===
+Theta: 0.1172, Mu: 12.8303, Sigma: 0.6758
+
+=== BTC Seasonality ===
+Month 1: -0.0336
+Month 2: 0.0833
+Month 3: -0.0091
+Month 4: 0.0818
+Month 5: 0.0506
+Month 6: 0.0016
+Month 7: 0.0813
+Month 8: -0.0203
+Month 9: -0.0209
+Month 10: 0.1413
+Month 11: 0.0400
+Month 12: 0.0517

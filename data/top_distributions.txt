@@ -1,0 +1,92 @@
+=== Model Fitting Results ===
+
+--- SP500 ---
+[Daily]
+Model A (Simple Normal): mu=0.001427, std=0.019557, BIC=-56277.88, MSE=0.000382
+Model B (Log Normal):    mu=0.001237, std=0.019409, BIC=-56447.80, MSE=0.000377
+Model C (Top 5 Dist by MSE):
+  1. dist=t, params=(np.float64(1.6997361387907421), np.float64(0.0009735367806684074), np.float64(0.007282946526247136)), BIC=-64022.47, MSE=0.035276
+  2. dist=johnsonsu, params=(np.float64(-0.03556003709338639), np.float64(0.7836711717554719), np.float64(0.0007148427304504257), np.float64(0.0062082475386837175)), BIC=-64131.91, MSE=0.102442
+  3. dist=laplace, params=(np.float64(0.0009389752735467058), np.float64(0.010972307843450536)), BIC=-63075.80, MSE=0.436192
+  4. dist=loglaplace, params=(np.float64(133039802.03609334), np.float64(-1459743.721761896), np.float64(1459743.7227004282)), BIC=-63066.48, MSE=0.436282
+  5. dist=cauchy, params=(np.float64(0.0009399095452734326), np.float64(0.005808209326081395)), BIC=-63425.20, MSE=0.825625
+[Monthly]
+Model A (Simple Normal): mu=0.008344, std=0.042105, BIC=-6493.38, MSE=0.001773
+Model B (Log Normal):    mu=0.007437, std=0.041840, BIC=-6516.88, MSE=0.001751
+Model C (Top 5 Dist by MSE):
+  1. dist=genlogistic, params=(np.float64(0.5983257553837089), np.float64(0.02390227903421411), np.float64(0.017141333060447166)), BIC=-6833.06, MSE=0.085347
+  2. dist=burr, params=(np.float64(93.6845312204053), np.float64(0.551287456754171), np.float64(-1.535247625699704), np.float64(1.5610741551547669)), BIC=-6826.99, MSE=0.086659
+  3. dist=johnsonsu, params=(np.float64(0.4346401448051088), np.float64(1.4660995784596877), np.float64(0.024162845460151742), np.float64(0.04435700572095158)), BIC=-6857.08, MSE=0.090633
+  4. dist=t, params=(np.float64(4.1232426498532515), np.float64(0.010027810962867981), np.float64(0.029729567673532884)), BIC=-6833.36, MSE=0.138771
+  5. dist=hypsecant, params=(np.float64(0.009888641671009387), np.float64(0.025353628212618426)), BIC=-6812.48, MSE=0.150908
+
+--- ACWI ---
+[Daily]
+Model A (Simple Normal): mu=0.000383, std=0.012726, BIC=-26613.14, MSE=0.000162
+Model B (Log Normal):    mu=0.000302, std=0.012756, BIC=-26592.16, MSE=0.000163
+Model C (Top 5 Dist by MSE):
+  1. dist=johnsonsu, params=(np.float64(0.11580572498285248), np.float64(1.0273468890271844), np.float64(0.0016752571823533632), np.float64(0.00757826018491759)), BIC=-28250.82, MSE=0.393696
+  2. dist=t, params=(np.float64(2.5177380296660647), np.float64(0.0008170611752521064), np.float64(0.006942214792765732)), BIC=-28235.68, MSE=0.518479
+  3. dist=loglaplace, params=(np.float64(3027479.150036766), np.float64(-24766.592554107352), np.float64(24766.59338168517)), BIC=-28109.70, MSE=0.978945
+  4. dist=laplace, params=(np.float64(0.0008276451528078742), np.float64(0.008190887568014176)), BIC=-28118.13, MSE=0.984450
+  5. dist=gennorm, params=(np.float64(0.8507298630137216), np.float64(0.0008751691186138422), np.float64(0.006288130412520049)), BIC=-28156.44, MSE=1.937421
+[Monthly]
+Model A (Simple Normal): mu=0.007573, std=0.047802, BIC=-689.85, MSE=0.002285
+Model B (Log Normal):    mu=0.006393, std=0.048285, BIC=-685.50, MSE=0.002331
+Model C (Top 5 Dist by MSE):
+  1. dist=laplace, params=(np.float64(0.013064061331624157), np.float64(0.035430040868965756)), BIC=-700.77, MSE=4.725183
+  2. dist=loglaplace, params=(np.float64(140418452.2941339), np.float64(-4975584.742250575), np.float64(4975584.755187361)), BIC=-695.40, MSE=4.737208
+  3. dist=gennorm, params=(np.float64(1.1343071066655361), np.float64(0.012063189715441985), np.float64(0.041663817005558254)), BIC=-696.17, MSE=4.824641
+  4. dist=johnsonsu, params=(np.float64(0.5985794609028992), np.float64(1.5979947040822444), np.float64(0.0338427825931812), np.float64(0.05883263137905962)), BIC=-695.84, MSE=5.001342
+  5. dist=genlogistic, params=(np.float64(0.5260502416781963), np.float64(0.030697387948468033), np.float64(0.019313015859354077)), BIC=-701.95, MSE=5.027018
+
+--- BTC ---
+[Daily]
+Model A (Simple Normal): mu=0.001820, std=0.035124, BIC=-16198.65, MSE=0.001234
+Model B (Log Normal):    mu=0.001198, std=0.035358, BIC=-16142.75, MSE=0.001250
+Model C (Top 5 Dist by MSE):
+  1. dist=loglaplace, params=(np.float64(62785467.20699079), np.float64(-1447831.3625754137), np.float64(1447831.363678408)), BIC=-17421.27, MSE=0.169578
+  2. dist=laplace, params=(np.float64(0.0011030020343775215), np.float64(0.023061443820596116)), BIC=-17429.61, MSE=0.169666
+  3. dist=johnsonsu, params=(np.float64(-0.007121525847645247), np.float64(0.9327196290676045), np.float64(0.001213831844035198), np.float64(0.018518266346771166)), BIC=-17437.20, MSE=0.216104
+  4. dist=cauchy, params=(np.float64(0.0011877115000029108), np.float64(0.013606756242292498)), BIC=-17017.26, MSE=0.223572
+  5. dist=gennorm, params=(np.float64(0.7992322628220532), np.float64(0.0009758709737060322), np.float64(0.01568670291384365)), BIC=-17494.68, MSE=0.322259
+[Monthly]
+Model A (Simple Normal): mu=0.058086, std=0.207162, BIC=-33.01, MSE=0.042916
+Model B (Log Normal):    mu=0.037671, std=0.193847, BIC=-51.35, MSE=0.037577
+Model C (Top 5 Dist by MSE):
+  1. dist=dweibull, params=(np.float64(1.2990026195512003), np.float64(0.019694149733772044), np.float64(0.16674089203304912)), BIC=-47.81, MSE=0.681882
+  2. dist=dgamma, params=(np.float64(1.495573682518466), np.float64(0.036046967044846154), np.float64(0.10275454837486286)), BIC=-46.94, MSE=0.706971
+  3. dist=genlogistic, params=(np.float64(1.2100284149120957), np.float64(0.0032999401192027656), np.float64(0.11631489212530931)), BIC=-45.98, MSE=0.708336
+  4. dist=alpha, params=(np.float64(30.323829218176236), np.float64(-5.8628239108925815), np.float64(178.6844133755195)), BIC=-45.41, MSE=0.709130
+  5. dist=invgamma, params=(np.float64(305.3412396872144), np.float64(-3.397107452573305), np.float64(1045.6812909612288)), BIC=-45.06, MSE=0.709592
+
+=== S&P500 1871-2024 Verify Claim ===
+Expected Return (CAGR): 9.31% (Claim: 9.9%)
+Risk (Annualized Std): 14.53% (Claim: 14.0%)
+
+=== Correlation ACWI vs S&P500 ===
+ACWI = 0.7980 * SP500 + -0.000461
+R-squared: 0.7612
+Noise Best Fit (Top 5):
+  1. dist=johnsonsu, params=(np.float64(0.16913567817904987), np.float64(0.92723801224686), np.float64(0.0009323166076281807), np.float64(0.0023486377120876404)), BIC=-37307.84, MSE=2.430015
+  2. dist=t, params=(np.float64(1.8158963334581162), np.float64(0.00045606369302513385), np.float64(0.0022353174573427554)), BIC=-37299.79, MSE=3.866082
+  3. dist=laplace, params=(np.float64(0.00046960480633854014), np.float64(0.0031765317005690236)), BIC=-36683.00, MSE=9.508982
+  4. dist=loglaplace, params=(np.float64(619523505.9591177), np.float64(-1975227.7172267525), np.float64(1975227.7176963487)), BIC=-36674.52, MSE=9.755283
+  5. dist=cauchy, params=(np.float64(0.0005318137524025923), np.float64(0.0018224605073699075)), BIC=-36849.93, MSE=16.980375
+
+=== MR-GBM (BTC Daily) ===
+Theta: 0.1172, Mu: 12.8303, Sigma: 0.6758
+
+=== BTC Seasonality ===
+Month 1: -0.0336
+Month 2: 0.0833
+Month 3: -0.0091
+Month 4: 0.0818
+Month 5: 0.0506
+Month 6: 0.0016
+Month 7: 0.0813
+Month 8: -0.0203
+Month 9: -0.0209
+Month 10: 0.1413
+Month 11: 0.0400
+Month 12: 0.0517
