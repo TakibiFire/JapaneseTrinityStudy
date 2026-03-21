@@ -5,12 +5,13 @@
 複数のセットアップを比較します。
 """
 
+import os
 import sys
 
 from src.core import Strategy, simulate_strategy
 from src.lib.asset_generator import (Asset, MonthlyLogNormal,
                                      generate_monthly_asset_prices)
-from visualize import create_styled_summary
+from src.lib.visualize import create_styled_summary, visualize_and_save
 
 
 def main():
@@ -60,15 +61,33 @@ def main():
 
   # 4. サマリーの出力
   print("\n--- シミュレーション結果 ---")
-  formatted_df, raw_df = create_styled_summary(
-      results,  # type: ignore
-      quantiles=[0.01, 0.10, 0.25, 0.50, 0.75, 0.90],
+
+  # 結果の可視化と保存
+  visualize_and_save(
+      results,
+      html_file="temp/volatility_comp_result.html",
+      distribution_image_file="docs/imgs/volatility_comp_result.svg",
+      survival_image_file=None,  # このスクリプトでは生存確率グラフは不要の場合
+      title="ボラティリティ比較のシミュレーション結果",
+      distribution_title="50年後の資産の分布 (ボラティリティ比較)",
+      summary_title="最終評価額サマリー (1,000回試行)",
       bankruptcy_years=[])
 
+  formatted_df, _ = create_styled_summary(
+      results,
+      quantiles=[0.01, 0.10, 0.25, 0.50, 0.75, 0.90],
+      bankruptcy_years=[])
   # Markdown形式で表示
   print(
       formatted_df.to_markdown(colalign=("left",) +
                                ("right",) * len(formatted_df.columns)))
+
+  # CSVとして保存
+  csv_dir = "docs/data"
+  os.makedirs(csv_dir, exist_ok=True)
+  csv_path = os.path.join(csv_dir, "volatility_result.csv")
+  formatted_df.to_csv(csv_path)
+  print(f"✅ CSVデータを {csv_path} に保存しました。")
 
 
 if __name__ == "__main__":
