@@ -14,8 +14,8 @@
 - `docs/imgs/volatility/hist_years.svg`: ボラ15%の各年ごとの資産分布ヒストグラム
 - `docs/data/volatility/prob_10x.md`: 10倍達成確率のテーブル
 - `docs/data/volatility/prob_100x.md`: 100倍達成確率のテーブル
-- `docs/imgs/volatility/withdrawal_result.svg`: 300万取り崩し時の結果グラフ
-- `docs/data/volatility/withdrawal_result.md`: 300万取り崩し時の結果のサマリーテーブル
+- `docs/imgs/volatility/withdrawal_result.svg`: 400万取り崩し時の結果グラフ
+- `docs/data/volatility/withdrawal_result.md`: 400万取り崩し時の結果のサマリーテーブル
 """
 
 import os
@@ -257,15 +257,15 @@ def main():
     f.write(df_prob_100x.to_markdown(index=False))
   print(f"✅ 100倍達成確率を {prob_100x_path} に保存しました。")
 
-  # 5. 年間300万取り崩しシミュレーション
-  print("\n年間300万円取り崩しシミュレーションを実行中...")
+  # 5. 年間400万取り崩しシミュレーション
+  print("\n年間400万円取り崩しシミュレーションを実行中...")
   withdrawal_strategies = [
       Strategy(name=f"ボラ={v}% (取崩)",
                initial_money=10000,
                initial_loan=0,
                yearly_loan_interest=2.125 / 100,
                initial_asset_ratio={f"オルカン v{v}%": 1.0},
-               annual_cost=300.0,
+               annual_cost=400.0,
                inflation_rate=None,
                tax_rate=0.0,
                selling_priority=[f"オルカン v{v}%"]) for v in sigmas
@@ -282,9 +282,9 @@ def main():
                      html_file=withdrawal_html_path,
                      distribution_image_file=withdrawal_img_path,
                      survival_image_file=None,
-                     title="ボラティリティ比較 (年間300万取り崩し)",
-                     distribution_title="50年後の資産の分布 (300万/年 取崩)",
-                     summary_title="最終評価額サマリー (年間300万取り崩し)",
+                     title="ボラティリティ比較 (年間400万取り崩し)",
+                     distribution_title="50年後の資産の分布 (400万/年 取崩)",
+                     summary_title="最終評価額サマリー (年間400万取り崩し)",
                      bankruptcy_years=[],
                      open_browser=False)
   print(f"✅ 取り崩しシミュレーションのグラフを {withdrawal_img_path} に保存しました。")
