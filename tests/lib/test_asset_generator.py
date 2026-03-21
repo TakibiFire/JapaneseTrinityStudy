@@ -8,6 +8,9 @@ from scipy import stats
 from src.lib.asset_generator import (Asset, AssetConfig, CpiAsset,
                                      DerivedAsset, ForexAsset, MonthlyDist,
                                      MonthlyLogNormal, MonthlySimpleNormal,
+                                     YearlyLogNormal,
+                                     YearlyLogNormalArithmetic,
+                                     YearlySimpleNormal,
                                      generate_monthly_asset_prices)
 
 
@@ -26,10 +29,10 @@ def test_distribution_simple_normal():
 
 
 def test_distribution_log_normal():
-  """MonthlyLogNormal が年次パラメータを正しく月次に変換して生成することを確認する。"""
+  """YearlyLogNormal が年次パラメータを正しく月次に変換して生成することを確認する。"""
   # 年次期待リターン 7%, ボラティリティ 15%
   mu_annual, sigma_annual = 0.07, 0.15
-  dist = MonthlyLogNormal(mu=mu_annual, sigma=sigma_annual)
+  dist = YearlyLogNormal(mu=mu_annual, sigma=sigma_annual)
   n_paths, n_months = 100000, 1
   seed = 42
 
@@ -45,6 +48,49 @@ def test_distribution_log_normal():
 
   assert np.mean(returns) == pytest.approx(expected_mean, abs=0.001)
   assert np.std(returns) == pytest.approx(expected_std, abs=0.001)
+
+
+def test_distribution_monthly_log_normal():
+  """MonthlyLogNormal がパラメータを正しく使用して生成することを確認する。"""
+  mu, sigma = 0.01, 0.05
+  dist = MonthlyLogNormal(mu=mu, sigma=sigma)
+  n_paths, n_months = 100000, 1
+  seed = 42
+
+  ret = dist.generate((n_paths, n_months), seed)
+  assert ret.shape == (n_paths, n_months)
+  # 理論平均: exp(mu - 0.5*sigma^2 + 0.5*sigma^2) - 1 = exp(mu) - 1
+  expected_mean = np.exp(mu) - 1.0
+  np.testing.assert_allclose(np.mean(ret), expected_mean, rtol=0.1)
+
+
+def test_distribution_yearly_simple_normal():
+  """YearlySimpleNormal が年次パラメータから単純リターンを生成することを確認する。"""
+  mu_annual, sigma_annual = 0.07, 0.15
+  dist = YearlySimpleNormal(mu=mu_annual, sigma=sigma_annual)
+  n_paths, n_months = 100000, 1
+  seed = 42
+
+  ret = dist.generate((n_paths, n_months), seed)
+  assert ret.shape == (n_paths, n_months)
+  # 月次の平均は 0.07 / 12, 標準偏差は 0.15 / sqrt(12) に近いはず
+  np.testing.assert_allclose(np.mean(ret), 0.07 / 12, rtol=0.1)
+  np.testing.assert_allclose(np.std(ret), 0.15 / np.sqrt(12), rtol=0.1)
+
+
+def test_distribution_yearly_log_normal_arithmetic():
+  """YearlyLogNormalArithmetic が算術平均から正しく幾何リターンを生成することを確認する。"""
+  mu_annual, sigma_annual = 0.07, 0.15
+  dist = YearlyLogNormalArithmetic(mu=mu_annual, sigma=sigma_annual)
+  n_paths, n_months = 100000, 1
+  seed = 42
+
+  ret = dist.generate((n_paths, n_months), seed)
+  assert ret.shape == (n_paths, n_months)
+  # 期待される算術リターン（月次）は近似的に mu_annual / 12 になるが、
+  # より正確には (1 + mu_annual)**(1/12) - 1 に近い。
+  np.testing.assert_allclose(np.mean(ret), (1 + mu_annual)**(1 / 12) - 1,
+                             rtol=0.1)
 
 
 def test_distribution_scipy():
