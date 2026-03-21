@@ -1,5 +1,6 @@
 - 2-space indent
 - mypy compatible. Always make sure mypy passes
+- import sentences must be put at the top of the file below the file-level comments
 - Use Japanese as code comment
 - Never use `cat` to read a file. Use `read_file`
 - Never use `cat` to write a file. Use `write_to_file` or `apply_diff`
