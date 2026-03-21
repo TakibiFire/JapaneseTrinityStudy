@@ -175,7 +175,7 @@ def visualize_and_save(results: Dict[str, SimulationResult],
       plot_data.append({
           'Quantile (%)': q * 100,
           'Strategy': col,
-          'Final Value (万円)': val
+          'Final Value (億円)': val / 10000.0
       })
 
   df_plot = pd.DataFrame(plot_data)
@@ -183,13 +183,13 @@ def visualize_and_save(results: Dict[str, SimulationResult],
   # Altair チャート描画（線グラフ）
   line_chart = alt.Chart(df_plot).mark_line(point=False).encode(
       x=alt.X('Quantile (%):Q', title='運の良さ (パーセンタイル %)'),
-      y=alt.Y('Final Value (万円):Q',
-              title='最終評価額(万円), 対数スケール',
+      y=alt.Y('Final Value (億円):Q',
+              title='最終評価額(億円), 対数スケール',
               scale=alt.Scale(type='log')),
       color=alt.Color('Strategy:N', legend=alt.Legend(title="戦略")),
       tooltip=[
           'Quantile (%)', 'Strategy',
-          alt.Tooltip('Final Value (万円):Q', format=',.0f')
+          alt.Tooltip('Final Value (億円):Q', format=',.1f')
       ])
 
   final_chart = line_chart.properties(title=distribution_title,
