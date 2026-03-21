@@ -15,6 +15,7 @@
 - `docs/data/volatility_prob_10x.md`: 10倍達成確率のテーブル
 - `docs/data/volatility_prob_100x.md`: 100倍達成確率のテーブル
 - `docs/imgs/volatility_withdrawal_result.svg`: 300万取り崩し時の結果グラフ
+- `docs/data/volatility_withdrawal_result.md`: 300万取り崩し時の結果のサマリーテーブル
 """
 
 import os
@@ -51,7 +52,7 @@ def main():
 
   # 2. 戦略(Plan)の定義
   strategies = [
-      Strategy(name=f"オルカン, ボラ={v}%",
+      Strategy(name=f"ボラ={v}%",
                initial_money=10000,
                initial_loan=0,
                yearly_loan_interest=2.125 / 100,
@@ -157,7 +158,7 @@ def main():
   for v in sigmas:
     if v == 0:
       continue
-    strategy_name = f"オルカン, ボラ={v}%"
+    strategy_name = f"ボラ={v}%"
     asset_name = f"オルカン v{v}%"
 
     # 取り崩しなしのため、単純に初期資産 × 価格倍率
@@ -167,18 +168,18 @@ def main():
     kde = gaussian_kde(values_30y_okuen)
     y_eval = kde(x_eval_30y)
     for x, y_val in zip(x_eval_30y, y_eval):
-      plot_data.append({'Strategy': strategy_name, 'Value (億円)': x, 'Density': y_val})
+      plot_data.append({
+          'Strategy': strategy_name,
+          'Value (億円)': x,
+          'Density': y_val
+      })
 
   df_hist_30y = pd.DataFrame(plot_data)
-  chart_hist_30y = alt.Chart(df_hist_30y).mark_line(
-      clip=True).encode(
-          x=alt.X('Value (億円):Q',
-                  title='資産額 (億円)',
-                  scale=alt.Scale(domain=[0, 30])),
-          y=alt.Y('Density:Q', title='頻度'),
-          color='Strategy:N').properties(title='30年後の資産分布',
-                                         width=600,
-                                         height=300)
+  chart_hist_30y = alt.Chart(df_hist_30y).mark_line(clip=True).encode(
+      x=alt.X('Value (億円):Q', title='資産額 (億円)',
+              scale=alt.Scale(domain=[0, 30])),
+      y=alt.Y('Density:Q', title='頻度'),
+      color='Strategy:N').properties(title='30年後の資産分布', width=600, height=300)
   hist_30y_path = "docs/imgs/volatility_hist_30y.svg"
   chart_hist_30y.save(hist_30y_path)
   print(f"✅ ヒストグラムを {hist_30y_path} に保存しました。")
@@ -201,15 +202,13 @@ def main():
       plot_data.append({'Year': f"{y}年後", 'Value (億円)': x, 'Density': y_val})
 
   df_hist_years = pd.DataFrame(plot_data)
-  chart_hist_years = alt.Chart(df_hist_years).mark_line(
-      clip=True).encode(
-          x=alt.X('Value (億円):Q',
-                  title='資産額 (億円)',
-                  scale=alt.Scale(domain=[0, 60])),
-          y=alt.Y('Density:Q', title='頻度'),
-          color='Year:N').properties(title='15% ボラティリティでの資産分布の推移',
-                                     width=600,
-                                     height=300)
+  chart_hist_years = alt.Chart(df_hist_years).mark_line(clip=True).encode(
+      x=alt.X('Value (億円):Q', title='資産額 (億円)',
+              scale=alt.Scale(domain=[0, 60])),
+      y=alt.Y('Density:Q', title='頻度'),
+      color='Year:N').properties(title='15% ボラティリティでの資産分布の推移',
+                                 width=600,
+                                 height=300)
   hist_years_path = "docs/imgs/volatility_hist_years.svg"
   chart_hist_years.save(hist_years_path)
   print(f"✅ ヒストグラムを {hist_years_path} に保存しました。")
@@ -257,7 +256,7 @@ def main():
   # 5. 年間300万取り崩しシミュレーション
   print("\n年間300万円取り崩しシミュレーションを実行中...")
   withdrawal_strategies = [
-      Strategy(name=f"オルカン, ボラ={v}% (300万/年 取崩)",
+      Strategy(name=f"ボラ={v}% (取崩)",
                initial_money=10000,
                initial_loan=0,
                yearly_loan_interest=2.125 / 100,
@@ -283,6 +282,19 @@ def main():
                      summary_title="最終評価額サマリー (年間300万取り崩し)",
                      bankruptcy_years=[])
   print(f"✅ 取り崩しシミュレーションのグラフを {withdrawal_img_path} に保存しました。")
+
+  # 取り崩しシナリオのサマリーテーブル
+  withdrawal_df, _ = create_styled_summary(
+      withdrawal_results,
+      quantiles=[0.01, 0.10, 0.25, 0.50, 0.75, 0.90],
+      bankruptcy_years=[])
+
+  withdrawal_md_path = os.path.join(md_dir, "volatility_withdrawal_result.md")
+  with open(withdrawal_md_path, "w") as f:
+    f.write(
+        withdrawal_df.to_markdown(colalign=("left",) +
+                                  ("right",) * len(withdrawal_df.columns)))
+  print(f"✅ 取り崩しシミュレーションのMarkdownデータを {withdrawal_md_path} に保存しました。")
 
 
 if __name__ == "__main__":
