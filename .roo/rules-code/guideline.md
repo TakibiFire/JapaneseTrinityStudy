@@ -9,3 +9,4 @@
 - Write tests
   - Aim for high coverage (> 99%)
 - When I ask something, stop editting the file and always respond to it in a chat
+- When you complete the task, dump all the details of the entire task, even if you mentioned it before.
