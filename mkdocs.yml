@@ -91,4 +91,5 @@ extra_javascript:
 nav:
   - 日本版4%ルール: index.md
   - シミュレーションの際に気をつけること:
-    - ボラティリティ: volatility.md
+    - ボラティリティの影響: volatility.md
+

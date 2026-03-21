@@ -142,7 +142,8 @@ def visualize_and_save(results: Dict[str, SimulationResult],
                        summary_title: str = '最終評価額サマリー（1,000回試行）',
                        bankruptcy_years: List[int] = [20, 30, 40, 50],
                        distribution_height: int = 300,
-                       survival_height: int = 250) -> None:
+                       survival_height: int = 250,
+                       open_browser: bool = True) -> None:
   """
   シミュレーション結果を可視化し、HTMLファイルに保存してブラウザで開く。
   オプションで画像ファイル（PNG/SVG等）としても保存する。
@@ -159,6 +160,7 @@ def visualize_and_save(results: Dict[str, SimulationResult],
     bankruptcy_years: サマリーに含める破産確率の年数リスト
     distribution_height: 最終評価額分布グラフの高さ
     survival_height: 生存確率推移グラフの高さ
+    open_browser: 保存後にブラウザで開くかどうか
   """
   # 可視化用に最終純資産額のみの DataFrame を作成
   df_results_net_values = pd.DataFrame({
@@ -262,8 +264,9 @@ def visualize_and_save(results: Dict[str, SimulationResult],
     survival_chart.save(survival_image_file)
     print(f"✅ グラフを {survival_image_file} に保存しました。")
 
-  print("🌐 ブラウザで開いています...")
+  if open_browser:
+    print("🌐 ブラウザで開いています...")
 
-  # file:// URIを作成してブラウザで開く
-  abs_path = os.path.abspath(html_file)
-  webbrowser.open('file://' + abs_path)
+    # file:// URIを作成してブラウザで開く
+    abs_path = os.path.abspath(html_file)
+    webbrowser.open('file://' + abs_path)

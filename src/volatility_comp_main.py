@@ -6,16 +6,16 @@
 
 出力ファイル:
 - `temp/volatility_comp_result.html`: HTML形式の詳細結果
-- `docs/imgs/volatility_comp_result.svg`: 資産分布グラフ
-- `docs/data/volatility_result.md`: 結果のサマリーテーブル
-- `docs/imgs/volatility_paths_0.svg`: ボラ0%の100パスグラフ
-- `docs/imgs/volatility_paths_17.svg`: ボラ17%の100パスグラフ
-- `docs/imgs/volatility_hist_30y.svg`: 30年後の資産分布ヒストグラム
-- `docs/imgs/volatility_hist_years.svg`: ボラ15%の各年ごとの資産分布ヒストグラム
-- `docs/data/volatility_prob_10x.md`: 10倍達成確率のテーブル
-- `docs/data/volatility_prob_100x.md`: 100倍達成確率のテーブル
-- `docs/imgs/volatility_withdrawal_result.svg`: 300万取り崩し時の結果グラフ
-- `docs/data/volatility_withdrawal_result.md`: 300万取り崩し時の結果のサマリーテーブル
+- `docs/imgs/volatility/comp_result.svg`: 資産分布グラフ
+- `docs/data/volatility/result.md`: 結果のサマリーテーブル
+- `docs/imgs/volatility/paths_0.svg`: ボラ0%の100パスグラフ
+- `docs/imgs/volatility/paths_17.svg`: ボラ17%の100パスグラフ
+- `docs/imgs/volatility/hist_30y.svg`: 30年後の資産分布ヒストグラム
+- `docs/imgs/volatility/hist_years.svg`: ボラ15%の各年ごとの資産分布ヒストグラム
+- `docs/data/volatility/prob_10x.md`: 10倍達成確率のテーブル
+- `docs/data/volatility/prob_100x.md`: 100倍達成確率のテーブル
+- `docs/imgs/volatility/withdrawal_result.svg`: 300万取り崩し時の結果グラフ
+- `docs/data/volatility/withdrawal_result.md`: 300万取り崩し時の結果のサマリーテーブル
 """
 
 import os
@@ -78,16 +78,23 @@ def main():
   # 4. サマリーの出力
   print("\n--- シミュレーション結果 ---")
 
+  img_dir = "docs/imgs/volatility"
+  md_dir = "docs/data/volatility"
+  os.makedirs(img_dir, exist_ok=True)
+  os.makedirs(md_dir, exist_ok=True)
+
   # 結果の可視化と保存
+  html_path = "temp/volatility_comp_result.html"
   visualize_and_save(
       results,
-      html_file="temp/volatility_comp_result.html",
-      distribution_image_file="docs/imgs/volatility_comp_result.svg",
+      html_file=html_path,
+      distribution_image_file=os.path.join(img_dir, "comp_result.svg"),
       survival_image_file=None,  # このスクリプトでは生存確率グラフは不要の場合
       title="ボラティリティ比較のシミュレーション結果",
       distribution_title="50年後の資産の分布 (ボラティリティ比較)",
       summary_title="最終評価額サマリー (1,000回試行)",
-      bankruptcy_years=[])
+      bankruptcy_years=[],
+      open_browser=False)
 
   formatted_df, _ = create_styled_summary(
       results,
@@ -99,9 +106,7 @@ def main():
                                ("right",) * len(formatted_df.columns)))
 
   # Markdownとして保存
-  md_dir = "docs/data"
-  os.makedirs(md_dir, exist_ok=True)
-  md_path = os.path.join(md_dir, "volatility_result.md")
+  md_path = os.path.join(md_dir, "result.md")
   with open(md_path, "w") as f:
     f.write(
         formatted_df.to_markdown(colalign=("left",) +
@@ -144,7 +149,7 @@ def main():
             detail='Path:N',
         ).properties(title=f'{v}% ボラティリティでの資産推移 (100パス)', width=600, height=300)
 
-    img_path = f"docs/imgs/volatility_paths_{v}.svg"
+    img_path = os.path.join(img_dir, f"paths_{v}.svg")
     chart.save(img_path)
     print(f"✅ パスのグラフを {img_path} に保存しました。")
 
@@ -179,7 +184,7 @@ def main():
               scale=alt.Scale(domain=[0, 30])),
       y=alt.Y('Density:Q', title='頻度'),
       color='Strategy:N').properties(title='30年後の資産分布', width=600, height=300)
-  hist_30y_path = "docs/imgs/volatility_hist_30y.svg"
+  hist_30y_path = os.path.join(img_dir, "hist_30y.svg")
   chart_hist_30y.save(hist_30y_path)
   print(f"✅ ヒストグラムを {hist_30y_path} に保存しました。")
 
@@ -208,7 +213,7 @@ def main():
       color='Year:N').properties(title='15% ボラティリティでの資産分布の推移',
                                  width=600,
                                  height=300)
-  hist_years_path = "docs/imgs/volatility_hist_years.svg"
+  hist_years_path = os.path.join(img_dir, "hist_years.svg")
   chart_hist_years.save(hist_years_path)
   print(f"✅ ヒストグラムを {hist_years_path} に保存しました。")
 
@@ -242,12 +247,12 @@ def main():
   df_prob_10x = pd.DataFrame(prob_10x_data)
   df_prob_100x = pd.DataFrame(prob_100x_data)
 
-  prob_10x_path = os.path.join(md_dir, "volatility_prob_10x.md")
+  prob_10x_path = os.path.join(md_dir, "prob_10x.md")
   with open(prob_10x_path, "w") as f:
     f.write(df_prob_10x.to_markdown(index=False))
   print(f"✅ 10倍達成確率を {prob_10x_path} に保存しました。")
 
-  prob_100x_path = os.path.join(md_dir, "volatility_prob_100x.md")
+  prob_100x_path = os.path.join(md_dir, "prob_100x.md")
   with open(prob_100x_path, "w") as f:
     f.write(df_prob_100x.to_markdown(index=False))
   print(f"✅ 100倍達成確率を {prob_100x_path} に保存しました。")
@@ -271,15 +276,17 @@ def main():
     res = simulate_strategy(strategy, monthly_asset_prices)
     withdrawal_results[strategy.name] = res
 
-  withdrawal_img_path = "docs/imgs/volatility_withdrawal_result.svg"
+  withdrawal_img_path = os.path.join(img_dir, "withdrawal_result.svg")
+  withdrawal_html_path = "temp/volatility_withdrawal_result.html"
   visualize_and_save(withdrawal_results,
-                     html_file="temp/volatility_withdrawal_result.html",
+                     html_file=withdrawal_html_path,
                      distribution_image_file=withdrawal_img_path,
                      survival_image_file=None,
                      title="ボラティリティ比較 (年間300万取り崩し)",
                      distribution_title="50年後の資産の分布 (300万/年 取崩)",
                      summary_title="最終評価額サマリー (年間300万取り崩し)",
-                     bankruptcy_years=[])
+                     bankruptcy_years=[],
+                     open_browser=False)
   print(f"✅ 取り崩しシミュレーションのグラフを {withdrawal_img_path} に保存しました。")
 
   # 取り崩しシナリオのサマリーテーブル
@@ -288,12 +295,15 @@ def main():
       quantiles=[0.01, 0.10, 0.25, 0.50, 0.75, 0.90],
       bankruptcy_years=[])
 
-  withdrawal_md_path = os.path.join(md_dir, "volatility_withdrawal_result.md")
+  withdrawal_md_path = os.path.join(md_dir, "withdrawal_result.md")
   with open(withdrawal_md_path, "w") as f:
     f.write(
         withdrawal_df.to_markdown(colalign=("left",) +
                                   ("right",) * len(withdrawal_df.columns)))
   print(f"✅ 取り崩しシミュレーションのMarkdownデータを {withdrawal_md_path} に保存しました。")
+
+  print(f"\nRun this to see results: open {html_path}")
+  print(f"Run this to see withdrawal results: open {withdrawal_html_path}")
 
 
 if __name__ == "__main__":
