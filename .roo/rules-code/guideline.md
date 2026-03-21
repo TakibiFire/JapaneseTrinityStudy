@@ -1,0 +1,10 @@
+- 2-space indent
+- mypy compatible. Always make sure mypy passes
+- Use Japanese as code comment
+- Never use `cat` to read a file. Use `read_file`
+- Never use `cat` to write a file. Use `write_to_file` or `apply_diff`
+  - Use `temp/` directory for temp scripts or temp outputs.
+- DO NOT add code comments like "// editted here", "// added here", "// changed to gray" etc. to highlight your change. They are useless for the future code readers. The comments are for the future readers, not for the current conversation.
+- Write tests
+  - Aim for high coverage (> 99%)
+- When I ask something, stop editting the file and always respond to it in a chat
