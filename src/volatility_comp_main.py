@@ -19,7 +19,6 @@
 """
 
 import os
-import sys
 
 import altair as alt
 import numpy as np
