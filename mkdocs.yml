@@ -93,6 +93,7 @@ extra_javascript:
 
 nav:
   - 日本版4%ルール: index.md
-  - 知っておくべきこと:
+  - 取り崩し戦略に必要な知識:
     - ボラティリティが長期投資に与える影響: volatility.md
     - 資産が枯渇するパターン：収益率配列のリスク: sequence.md
+    - 物価上昇率の影響: cpi.md
