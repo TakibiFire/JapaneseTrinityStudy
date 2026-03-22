@@ -100,3 +100,4 @@ nav:
     - 資産が枯渇するパターン：収益率配列のリスク: sequence.md
     - 物価上昇率の影響: cpi.md
     - 譲渡所得税の影響: tax.md
+    - 信託報酬の影響: trust_fee.md
