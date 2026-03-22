@@ -1,4 +1,4 @@
-site_name: 日本版4%ルール | たきびFIRE
+site_name: リタイア後の取り崩し戦略 〜 4%ルールを信じるな | たきびFIRE
 site_dir: dist
 use_directory_urls: false
 
@@ -65,8 +65,10 @@ plugins:
 
 markdown_extensions:
   - admonition
+  - attr_list
   - markdown_include.include:
       base_path: docs
+  - md_in_html
   - pymdownx.arithmatex:
       generic: true
       smart_dollar: false
@@ -92,7 +94,7 @@ extra_javascript:
   - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
 
 nav:
-  - 日本版4%ルール: index.md
+  - リタイア後の取り崩し戦略: index.md
   - 取り崩し戦略に必要な知識:
     - ボラティリティが長期投資に与える影響: volatility.md
     - 資産が枯渇するパターン：収益率配列のリスク: sequence.md

@@ -19,3 +19,8 @@ details {
   margin-bottom: 1em;
   padding-left: 1em;
 }
+
+.md-typeset .grid.cards>ol>li, .md-typeset .grid.cards>ul>li, .md-typeset .grid>.card {
+  border: .05rem solid var(--md-default-fg-color--light) !important;
+  padding: .4rem !important;
+}
