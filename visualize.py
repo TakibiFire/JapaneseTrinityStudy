@@ -79,7 +79,7 @@ def create_styled_summary(
     formatted_df[f"{y}年破産確率 (%)"] = formatted_df[f"{y}年破産確率 (%)"].map(
         format_pct)
 
-  styled_summary = summary_df.style.format(format_dict)
+  styled_summary = summary_df.style.format(format_dict)  # type: ignore
   styled_summary.index.name = "戦略"
 
   return formatted_df, styled_summary
@@ -142,7 +142,7 @@ def visualize_and_save(results: Dict[str, SimulationResult],
                        summary_title: str = '最終評価額サマリー（1,000回試行）',
                        bankruptcy_years: List[int] = [20, 30, 40, 50],
                        distribution_height: int = 300,
-                       survival_height: int = 250) -> None:
+                       survival_height: int = 300) -> None:
   """
   シミュレーション結果を可視化し、HTMLファイルに保存してブラウザで開く。
   オプションで画像ファイル（PNG/SVG等）としても保存する。
