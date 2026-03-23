@@ -123,7 +123,8 @@ def create_survival_probability_chart(
       y=alt.Y('Survival Probability (%):Q',
               title='生存確率 (%)',
               scale=alt.Scale(domain=[0, 100])),
-      color=alt.Color('Strategy:N', legend=alt.Legend(title="戦略")),
+      color=alt.Color('Strategy:N', legend=alt.Legend(title="戦略",
+                                                      orient='top')),
       tooltip=[
           'Year', 'Strategy',
           alt.Tooltip('Survival Probability (%):Q', format='.1f')
@@ -187,7 +188,8 @@ def visualize_and_save(results: Dict[str, SimulationResult],
       y=alt.Y('Final Value (億円):Q',
               title='最終評価額(億円), 対数スケール',
               scale=alt.Scale(type='log')),
-      color=alt.Color('Strategy:N', legend=alt.Legend(title="戦略")),
+      color=alt.Color('Strategy:N', legend=alt.Legend(title="戦略",
+                                                      orient='top')),
       tooltip=[
           'Quantile (%)', 'Strategy',
           alt.Tooltip('Final Value (億円):Q', format=',.1f')
