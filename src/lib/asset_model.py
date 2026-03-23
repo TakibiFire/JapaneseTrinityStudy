@@ -14,11 +14,22 @@ logger = logging.getLogger(__name__)
 
 # フィッティングを試行する主要な連続分布のリスト
 # 過去の広範な探索結果(data/top_distributions.txt)から抽出された上位分布のユニオン
-ALL_DISTRIBUTIONS = [
-    stats.alpha, stats.burr, stats.cauchy, stats.dgamma, stats.dweibull,
-    stats.genlogistic, stats.gennorm, stats.hypsecant, stats.invgamma,
-    stats.johnsonsu, stats.laplace, stats.loglaplace, stats.t, stats.norm
+
+# 左右対称な分布。極端なテール（暴落など）を学習すると、反対側のテール（暴騰）も
+# 非現実的な確率で発生するように設定されてしまうため、株式リターンのモデリングでは避けるべき分布。
+SYMMETRIC_DISTRIBUTIONS = [
+    stats.cauchy, stats.dweibull, stats.laplace, stats.logistic, stats.t, stats.norm
 ]
+
+# 左右非対称な分布（または非対称性を表現できる分布）。
+# 現実の株式市場の歪み（負の歪度＝暴落の方が急激で大きい）やファットテールを適切に表現できる。
+ASYMMETRIC_DISTRIBUTIONS = [
+    stats.alpha, stats.burr, stats.dgamma, stats.genlogistic, stats.gennorm,
+    stats.hypsecant, stats.invgamma, stats.johnsonsu, stats.loglaplace, stats.skewnorm
+]
+
+ALL_DISTRIBUTIONS = SYMMETRIC_DISTRIBUTIONS + ASYMMETRIC_DISTRIBUTIONS
+
 
 
 def process_returns(df: pd.DataFrame, freq: str) -> pd.DataFrame:
@@ -51,13 +62,18 @@ def process_returns(df: pd.DataFrame, freq: str) -> pd.DataFrame:
   return returns
 
 
-def find_best_distribution(data: pd.Series, bins: int = 100, top_n: int = 1):
+def find_best_distribution(data: pd.Series,
+                           distributions: list = ALL_DISTRIBUTIONS,
+                           bins: int = 100,
+                           top_n: int = 1):
   """
-  与えられたデータに対してALL_DISTRIBUTIONS内のすべての連続分布をフィッティングし、
+  与えられたデータに対してdistributions内のすべての連続分布をフィッティングし、
   ヒストグラムとのMean Squared Error (MSE)が小さい「上位」分布を探索する。
 
   Args:
     data (pd.Series): フィッティング対象の一次元データ（例：対数リターン）。NaNは自動で除外される。
+    distributions (list): フィッティングを試行するscipy.statsの分布オブジェクトのリスト。
+                          デフォルトはALL_DISTRIBUTIONS。
     bins (int, optional): MSE計算時にヒストグラムを作成する際のビン数。デフォルトは100。
     top_n (int, optional): 返す上位モデルの数。デフォルトは1。
 
@@ -81,7 +97,7 @@ def find_best_distribution(data: pd.Series, bins: int = 100, top_n: int = 1):
   x = (x + np.roll(x, -1))[:-1] / 2.0
 
   results = []
-  for distribution in ALL_DISTRIBUTIONS:
+  for distribution in distributions:
     try:
       with warnings.catch_warnings():
         warnings.filterwarnings('ignore')
@@ -124,6 +140,94 @@ def find_best_distribution(data: pd.Series, bins: int = 100, top_n: int = 1):
     return None
 
   # MSEが最も小さいものを選択
+  results.sort(key=lambda x: x['mse'])
+  return results[:top_n]
+
+
+def find_best_distribution_with_fixed_mean(data: pd.Series,
+                                           distributions: list = ASYMMETRIC_DISTRIBUTIONS,
+                                           bins: int = 100,
+                                           top_n: int = 1):
+  """
+  与えられたデータの期待値 (Mean) を維持したまま、distributions内の分布をフィッティングし、
+  MSEが小さい上位分布を探索する。
+  主に株式の対数リターンにおいて、長期的な資産成長率 (CAGR) を過去の実績と一致させつつ、
+  ファットテールや歪み（リスク）をモデリングしたい場合に使用する。
+
+  計算ロジック:
+  1. データの経験的平均 (mu_emp) を計算。
+  2. 分布をデータに自由にフィットさせる (params_raw)。
+  3. フィット後の分布の理論的平均 (mu_theo) を計算。
+  4. 理論的平均が mu_emp と一致するように、loc パラメータをオフセット (mu_emp - mu_theo) させる。
+  これにより、分布の形状（分散・歪度・尖度）を保ったまま、期待値だけを過去の実績に固定できる。
+
+  Args:
+    data (pd.Series): フィッティング対象の一次元データ。NaNは自動で除外される。
+    distributions (list): フィッティングを試行する分布リスト。デフォルトはASYMMETRIC_DISTRIBUTIONS。
+    bins (int, optional): ヒストグラムのビン数。
+    top_n (int, optional): 返す上位モデルの数。
+
+  Returns:
+    list or None: 最適な分布の情報を格納した辞書のリスト。
+  """
+  data = data.dropna()
+  if len(data) == 0:
+    return None
+
+  mu_emp = data.mean()
+
+  # ヒストグラムの作成（評価用）
+  y, x = np.histogram(data, bins=bins, density=True)
+  x = (x + np.roll(x, -1))[:-1] / 2.0
+
+  results = []
+  for distribution in distributions:
+    try:
+      with warnings.catch_warnings():
+        warnings.filterwarnings('ignore')
+        # まずは制約なしで自由にフィットさせる
+        params_raw = distribution.fit(data)
+        
+        # フィットした分布の理論的平均を計算
+        mu_theo = distribution.mean(*params_raw)
+        
+        # 理論的平均が経験的平均と一致するようにlocをシフトさせる
+        # scipy.stats のパラメータは一般に (*shape, loc, scale) なので、
+        # 後ろから2番目の loc を調整する。
+        params_list = list(params_raw)
+        if len(params_list) >= 2:
+          offset = mu_emp - mu_theo
+          params_list[-2] += offset
+        params_shifted = tuple(params_list)
+
+        # シフト後の分布でPDFを生成
+        pdf = distribution.pdf(x, *params_shifted)
+        if np.any(np.isnan(pdf)) or np.any(np.isinf(pdf)):
+          continue
+        
+        mse = np.mean((y - pdf)**2)
+        loglik = distribution.logpdf(data, *params_shifted).sum()
+        
+        k = len(params_shifted)
+        n = len(data)
+        aic = 2 * k - 2 * loglik
+        bic = k * np.log(n) - 2 * loglik
+
+        results.append({
+            'name': distribution.name,
+            'params': params_shifted,
+            'mse': mse,
+            'loglik': loglik,
+            'aic': aic,
+            'bic': bic
+        })
+    except Exception as e:
+      logger.warning(f"Failed to fit/evaluate {distribution.name} with fixed mean: {e}")
+      continue
+
+  if not results:
+    return None
+
   results.sort(key=lambda x: x['mse'])
   return results[:top_n]
 

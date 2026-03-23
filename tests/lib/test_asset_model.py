@@ -65,27 +65,95 @@ def test_fit_normal_log():
   assert res["mu"] == pytest.approx(0.02, abs=0.05)
   assert res["std"] == pytest.approx(0.05, abs=0.05)
 
+def test_distribution_lists():
+  """分布リストの分割が正しく行われているかのテスト"""
+  assert len(asset_model.SYMMETRIC_DISTRIBUTIONS) > 0
+  assert len(asset_model.ASYMMETRIC_DISTRIBUTIONS) > 0
+  assert len(asset_model.ALL_DISTRIBUTIONS) == len(asset_model.SYMMETRIC_DISTRIBUTIONS) + len(asset_model.ASYMMETRIC_DISTRIBUTIONS)
+  # 重複がないことの確認
+  assert len(set(asset_model.ALL_DISTRIBUTIONS)) == len(asset_model.ALL_DISTRIBUTIONS)
+
 def test_find_best_distribution():
   """モデルC（最適な連続分布探索）のテスト"""
   np.random.seed(42)
   # 明確にラプラス分布に従うデータを生成
   data = pd.Series(stats.laplace.rvs(loc=0.05, scale=0.1, size=500))
   
-  # 探索のテスト (時間がかかるのでテスト時は一部の分布のみでモックするのもありだが、
-  # ここではALL_DISTRIBUTIONSを一時的に絞ってテストを高速化する)
-  original_dists = asset_model.ALL_DISTRIBUTIONS
-  asset_model.ALL_DISTRIBUTIONS = [stats.norm, stats.laplace, stats.t]
+  # 探索のテスト
+  distributions = [stats.norm, stats.laplace, stats.t]
+  res = asset_model.find_best_distribution(data, distributions=distributions, bins=20)
   
-  try:
-    res = asset_model.find_best_distribution(data, bins=20)
-    assert res is not None
-    assert len(res) > 0
-    assert "name" in res[0]
-    assert "params" in res[0]
-    assert "mse" in res[0]
-  finally:
-    # 元に戻す
-    asset_model.ALL_DISTRIBUTIONS = original_dists
+  assert res is not None
+  assert len(res) > 0
+  assert "name" in res[0]
+  assert "params" in res[0]
+  assert "mse" in res[0]
+  assert res[0]["name"] in ["laplace", "t", "norm"] # 期待されるいずれかが選ばれる
+
+  # 空のデータの場合
+  assert asset_model.find_best_distribution(pd.Series([])) is None
+
+
+def test_find_best_distribution_with_fixed_mean():
+  """期待値固定の最適分布探索テスト"""
+  np.random.seed(42)
+  # 平均0.1のデータを生成
+  mu_true = 0.1
+  data = pd.Series(stats.norm.rvs(loc=mu_true, scale=0.05, size=500))
+  
+  distributions = [stats.norm, stats.johnsonsu]
+  res = asset_model.find_best_distribution_with_fixed_mean(data, distributions=distributions, bins=20)
+  
+  assert res is not None
+  assert len(res) > 0
+  best_model = res[0]
+  
+  # 理論的期待値がデータの経験的平均と一致していることを確認
+  emp_mean = data.mean()
+  dist_obj = getattr(stats, best_model["name"])
+  theo_mean = dist_obj.mean(*best_model["params"])
+  assert pytest.approx(theo_mean, 1e-10) == emp_mean
+
+  # 空のデータの場合
+  assert asset_model.find_best_distribution_with_fixed_mean(pd.Series([])) is None
+
+
+def test_find_best_distribution_failures():
+  """フィッティング時の例外ハンドリングおよび異常値テスト"""
+  class FailingDist:
+    name = "failing_dist"
+    def fit(self, data, floc=None):
+      raise ValueError("Mock fitting error")
+      
+  class PDFErrorDist:
+    name = "pdferror_dist"
+    def fit(self, data, floc=None):
+      return (0.0, 1.0)
+    def mean(self, *params):
+      return 0.0
+    def pdf(self, x, *params):
+      raise ValueError("Mock PDF error")
+      
+  class NaNPDFDist:
+    name = "nanpdf_dist"
+    def fit(self, data, floc=None):
+      return (0.0, 1.0)
+    def mean(self, *params):
+      return 0.0
+    def pdf(self, x, *params):
+      return np.full_like(x, np.nan)
+      
+  data = pd.Series([1.0, 2.0, 3.0])
+  mock_dists = [FailingDist(), PDFErrorDist(), NaNPDFDist()]
+  
+  # 通常の分布探索
+  res1 = asset_model.find_best_distribution(data, distributions=mock_dists)
+  assert res1 is None
+  
+  # 平均固定の分布探索
+  res2 = asset_model.find_best_distribution_with_fixed_mean(data, distributions=mock_dists)
+  assert res2 is None
+
 
 def test_calculate_mrgbm():
   """MR-GBMパラメータ推定のテスト"""

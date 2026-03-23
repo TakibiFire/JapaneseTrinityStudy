@@ -58,20 +58,40 @@ def analyze():
       res_a = asset_model.fit_normal_simple(simple)
       res_b = asset_model.fit_normal_log(log)
 
+      try:
+        mu_a, sig_a = asset_model.simulate_annual_stats_simple(stats.norm, (res_a['mu'], res_a['std']), n_sims=100000)
+        ann_str_a = f", Ann(mu={mu_a*100:.2f}%, sig={sig_a*100:.2f}%)"
+      except:
+        ann_str_a = ""
+
+      try:
+        mu_b, sig_b = asset_model.simulate_annual_stats_log(stats.norm, (res_b['mu'], res_b['std']), n_sims=100000)
+        ann_str_b = f", Ann(mu={mu_b*100:.2f}%, sig={sig_b*100:.2f}%)"
+      except:
+        ann_str_b = ""
+
       print(
-          f"Model A (Simple Normal): mu={res_a['mu']:.6f}, std={res_a['std']:.6f}, BIC={res_a['bic']:.2f}, MSE={res_a['mse']:.6f}"
+          f"Model A (Simple Normal): mu={res_a['mu']:.6f}, std={res_a['std']:.6f}, BIC={res_a['bic']:.2f}, MSE={res_a['mse']:.6f}{ann_str_a}"
       )
       print(
-          f"Model B (Log Normal):    mu={res_b['mu']:.6f}, std={res_b['std']:.6f}, BIC={res_b['bic']:.2f}, MSE={res_b['mse']:.6f}"
+          f"Model B (Log Normal):    mu={res_b['mu']:.6f}, std={res_b['std']:.6f}, BIC={res_b['bic']:.2f}, MSE={res_b['mse']:.6f}{ann_str_b}"
       )
 
-      # For C, run best distribution fit
+      # For C, run best distribution fit with fixed mean
       # Since it might be slow, print it with caution
-      res_c_list = asset_model.find_best_distribution(log, top_n=1)
+      res_c_list = asset_model.find_best_distribution_with_fixed_mean(log, top_n=1)
       if res_c_list:
         res_c = res_c_list[0]
+        # Also compute annualized stats for Model C to show it doesn't explode
+        dist_obj = getattr(stats, res_c['name'])
+        try:
+          mu_a, sig_a = asset_model.simulate_annual_stats_log(dist_obj, res_c['params'], n_sims=100000)
+          ann_str = f", Ann(mu={mu_a*100:.2f}%, sig={sig_a*100:.2f}%)"
+        except:
+          ann_str = ""
+
         print(
-            f"Model C (Best Dist MSE): dist={res_c['name']}, params={res_c['params']}, BIC={res_c['bic']:.2f}, MSE={res_c['mse']:.6f}"
+            f"Model C (Best Asymmetric Dist Fixed Mean): dist={res_c['name']}, params={res_c['params']}, BIC={res_c['bic']:.2f}, MSE={res_c['mse']:.6f}{ann_str}"
         )
       else:
         print("Model C: Failed to fit")
@@ -86,10 +106,10 @@ def analyze():
   print(f"Period: {overlap_dates[0].date()} to {overlap_dates[-1].date()}")
   print(f"Model A (Simple): mu={res_a_local['mu']:.6f}, std={res_a_local['std']:.6f}, BIC={res_a_local['bic']:.2f}, MSE={res_a_local['mse']:.6f}")
   print(f"Model B (Log):    mu={res_b_local['mu']:.6f}, std={res_b_local['std']:.6f}, BIC={res_b_local['bic']:.2f}, MSE={res_b_local['mse']:.6f}")
-  res_c_local_list = asset_model.find_best_distribution(local_sp500_log, top_n=1)
+  res_c_local_list = asset_model.find_best_distribution_with_fixed_mean(local_sp500_log, top_n=1)
   if res_c_local_list:
     res_c_local = res_c_local_list[0]
-    print(f"Model C (Best):  dist={res_c_local['name']}, params={res_c_local['params']}, BIC={res_c_local['bic']:.2f}, MSE={res_c_local['mse']:.6f}")
+    print(f"Model C (Best Asymmetric):  dist={res_c_local['name']}, params={res_c_local['params']}, BIC={res_c_local['bic']:.2f}, MSE={res_c_local['mse']:.6f}")
 
   print("\n=== S&P500 1871-2024 Verify Claim ===")
   df['Date'] = pd.to_datetime(df['Date'])
@@ -218,7 +238,7 @@ def analyze():
   # Baseline: Simple GBM (Log-Normal)
   # X_t = log(P_t). dx_t = mu_gbm * dt + sigma_gbm * dW_t
   _btc_div_s = btc_data.pct_change().dropna() + 1.0
-  log_rets = np.log(_btc_div_s)
+  log_rets = pd.Series(np.log(_btc_div_s.values.astype(float)), index=_btc_div_s.index)
   res_baseline = asset_model.fit_normal_log(log_rets)
   print(f"a) Baseline (Log-Normal): BIC={res_baseline['bic']:.2f}")
 
