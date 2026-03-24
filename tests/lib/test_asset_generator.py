@@ -68,14 +68,15 @@ def test_distribution_yearly_simple_normal():
   """YearlySimpleNormal が年次パラメータから単純リターンを生成することを確認する。"""
   mu_annual, sigma_annual = 0.07, 0.15
   dist = YearlySimpleNormal(mu=mu_annual, sigma=sigma_annual)
-  n_paths, n_months = 100000, 1
+  n_paths, n_months = 1000000, 1
   seed = 42
 
   ret = dist.generate((n_paths, n_months), seed)
   assert ret.shape == (n_paths, n_months)
-  # 月次の平均は 0.07 / 12, 標準偏差は 0.15 / sqrt(12) に近いはず
-  np.testing.assert_allclose(np.mean(ret), 0.07 / 12, rtol=0.1)
-  np.testing.assert_allclose(np.std(ret), 0.15 / np.sqrt(12), rtol=0.1)
+  # 月次の平均は (1 + mu_annual)**(1/12) - 1, 標準偏差は 0.15 / sqrt(12) に近いはず
+  np.testing.assert_allclose(np.mean(ret), (1 + mu_annual)**(1 / 12) - 1,
+                             rtol=0.01)
+  np.testing.assert_allclose(np.std(ret), 0.15 / np.sqrt(12), rtol=0.01)
 
 
 def test_distribution_yearly_log_normal_arithmetic():

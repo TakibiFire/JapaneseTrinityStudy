@@ -120,8 +120,8 @@ class YearlySimpleNormal(Distribution):
 
   def generate(self, shape: Tuple[int, int], seed: int) -> np.ndarray:
     rng = np.random.default_rng(seed)
-    # 単純な月次への変換: リターンは12分割、ボラティリティはルート12で割る
-    monthly_mu = self.mu / 12.0
+    # 月次への変換: 12ヶ月複利で (1 + mu) になるように逆算
+    monthly_mu = (1.0 + self.mu) ** (1.0 / 12.0) - 1.0
     monthly_sigma = self.sigma / np.sqrt(12.0)
     return rng.normal(monthly_mu, monthly_sigma, size=shape)
 
