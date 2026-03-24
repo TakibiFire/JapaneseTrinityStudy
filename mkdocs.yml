@@ -102,3 +102,4 @@ nav:
     - 譲渡所得税の影響: tax.md
     - 信託報酬の影響: trust_fee.md
     - 為替リスクの影響: forex.md
+    - ファットテール分布の影響: fat_tails.md
