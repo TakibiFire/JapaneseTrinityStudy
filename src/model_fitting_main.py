@@ -111,6 +111,20 @@ def analyze():
     res_c_local = res_c_local_list[0]
     print(f"Model C (Best Asymmetric):  dist={res_c_local['name']}, params={res_c_local['params']}, BIC={res_c_local['bic']:.2f}, MSE={res_c_local['mse']:.6f}")
 
+  print("\n=== S&P 500 Monthly Fit (30 Years: 1996-01 to 2025-12) ===")
+  sp500_monthly_log = monthly_returns['SP500_log'].dropna()
+  sp500_monthly_log_30y = sp500_monthly_log[(sp500_monthly_log.index >= '1996-01-01') & (sp500_monthly_log.index <= '2025-12-31')]
+  res_c_30y_list = asset_model.find_best_distribution_with_fixed_mean(sp500_monthly_log_30y, top_n=1)
+  if res_c_30y_list:
+    res_c_30y = res_c_30y_list[0]
+    dist_obj = getattr(stats, res_c_30y['name'])
+    try:
+      mu_y, sig_y = asset_model.simulate_annual_stats_log(dist_obj, res_c_30y['params'], n_sims=100000)
+      ann_str = f", Ann(mu={mu_y*100:.2f}%, sig={sig_y*100:.2f}%)"
+    except:
+      ann_str = ""
+    print(f"Model C (Best Asymmetric):  dist={res_c_30y['name']}, params={res_c_30y['params']}, BIC={res_c_30y['bic']:.2f}, MSE={res_c_30y['mse']:.6f}{ann_str}")
+
   print("\n=== S&P500 1871-2024 Verify Claim ===")
   df['Date'] = pd.to_datetime(df['Date'])
   sp500_data = df.set_index('Date')['SP500']
@@ -159,8 +173,30 @@ def analyze():
   res_noise_m_list = asset_model.find_best_distribution(residuals_m, top_n=1)
   if res_noise_m_list:
     res_noise_m = res_noise_m_list[0]
+    
+    # Calculate annualized stats for the induced ACWI model (Approx)
+    # ACWI_log = slope * SP500_log + intercept + noise
+    # We use SP500 155y Model C (genlogistic) as the base
+    res_c_sp500_list = asset_model.find_best_distribution_with_fixed_mean(monthly_returns['SP500_log'].dropna(), top_n=1)
+    if res_c_sp500_list:
+      res_c_sp500 = res_c_sp500_list[0]
+      sp500_dist_obj = getattr(stats, res_c_sp500['name'])
+      
+      noise_dist_obj = getattr(stats, res_noise_m['name'])
+      
+      n_sims = 100000
+      sp500_sims = sp500_dist_obj.rvs(*res_c_sp500['params'], size=(n_sims, 12))
+      noise_sims = noise_dist_obj.rvs(*res_noise_m['params'], size=(n_sims, 12))
+      acwi_log_sims = slope_m * sp500_sims + intercept_m + noise_sims
+      annual_acwi_sims = np.exp(np.sum(acwi_log_sims, axis=1)) - 1
+      mu_y_app = np.mean(annual_acwi_sims)
+      sig_y_app = np.std(annual_acwi_sims)
+      ann_str_app = f", Ann(mu={mu_y_app*100:.2f}%, sig={sig_y_app*100:.2f}%)"
+    else:
+      ann_str_app = ""
+
     print(
-        f"Noise Best Fit: dist={res_noise_m['name']}, params={res_noise_m['params']}, BIC={res_noise_m['bic']:.2f}, MSE={res_noise_m['mse']:.6f}"
+        f"Noise Best Fit: dist={res_noise_m['name']}, params={res_noise_m['params']}, BIC={res_noise_m['bic']:.2f}, MSE={res_noise_m['mse']:.6f}{ann_str_app}"
     )
   else:
     print("Noise Best Fit: Failed")
@@ -221,15 +257,43 @@ def analyze():
         print(f"  Cycle Month {m:02d}: {seasonal_means[m]:.4f}")
 
   print("\n=== MR-GBM for S&P 500 and ACWI (Daily) ===")
-  dt = 1 / 365.25
+  dt_daily = 1 / 365.25
   for asset in ['SP500', 'ACWI']:
     asset_prices = df.set_index('Date')[asset].dropna()
-    res = asset_model.calculate_mrgbm(asset_prices, dt)
+    res = asset_model.calculate_mrgbm(asset_prices, dt_daily)
     if res and not np.isnan(res['theta']):
       print(f"{asset} MR-GBM:")
       print(f"  Theta: {res['theta']:.4f}, Mu: {res['mu']:.4f}, Sigma: {res['sigma']:.4f}")
     else:
       print(f"{asset} MR-GBM: No mean reversion detected (theta=NaN)")
+
+  print("\n=== Monthly MR-GBM Specific Cases ===")
+  dt_monthly = 1 / 12.0
+  cases = [
+      ('SP500', '1871-03-01', '2025-12-31'),
+      ('SP500', '1996-01-01', '2025-12-31'),
+      ('ACWI', '2008-04-01', '2025-12-31'),
+  ]
+  for asset, start, end in cases:
+    sub_df = df[(df['Date'] >= start) & (df['Date'] <= end)]
+    prices = sub_df.set_index('Date')[asset].dropna()
+    if prices.empty:
+      print(f"{asset} ({start} to {end}): No data")
+      continue
+
+    # Monthly resample
+    monthly_prices = prices.resample('ME').last()
+    if monthly_prices.isnull().any():
+      print(f"{asset} ({start} to {end}) MR-GBM: Missing monthly data points (NaNs found)")
+      continue
+
+    res = asset_model.calculate_mrgbm(monthly_prices, dt_monthly)
+
+    if res and not np.isnan(res['theta']):
+      print(f"{asset} ({start} to {end}) MR-GBM:")
+      print(f"  Theta: {res['theta']:.4f}, Mu: {res['mu']:.4f}, Sigma: {res['sigma']:.4f}")
+    else:
+      print(f"{asset} ({start} to {end}) MR-GBM: No mean reversion detected")
 
   print("\n=== BTC Model Effectiveness Analysis ===")
   btc_data = df.set_index('Date')['BTC'].dropna()

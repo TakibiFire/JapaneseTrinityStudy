@@ -2,39 +2,42 @@
 
 --- SP500 ---
 [Daily]
-Model A (Simple Normal): mu=0.001427, std=0.019557, BIC=-56277.88, MSE=0.000382, Ann(mu=1.76%, sig=6.88%)
-Model B (Log Normal):    mu=0.001237, std=0.019409, BIC=-56447.80, MSE=0.000377, Ann(mu=1.73%, sig=6.83%)
-Model C (Best Asymmetric Dist Fixed Mean): dist=johnsonsu, params=(np.float64(-0.03556003709338639), np.float64(0.7836711717554719), np.float64(0.0006007924394084373), np.float64(0.0062082475386837175)), BIC=-64130.16, MSE=0.103786, Ann(mu=1.81%, sig=8.10%)
+Model A (Simple Normal): mu=0.001427, std=0.019557, BIC=-56277.88, MSE=0.000382, Ann(mu=1.74%, sig=6.89%)
+Model B (Log Normal):    mu=0.001237, std=0.019409, BIC=-56447.80, MSE=0.000377, Ann(mu=1.74%, sig=6.85%)
+Model C (Best Asymmetric Dist Fixed Mean): dist=johnsonsu, params=(np.float64(-0.03556003709338639), np.float64(0.7836711717554719), np.float64(0.0006007924394084373), np.float64(0.0062082475386837175)), BIC=-64130.16, MSE=0.103786, Ann(mu=1.79%, sig=8.09%)
 [Monthly]
-Model A (Simple Normal): mu=0.008344, std=0.042105, BIC=-6493.38, MSE=0.001773, Ann(mu=10.52%, sig=16.06%)
-Model B (Log Normal):    mu=0.007437, std=0.041840, BIC=-6516.88, MSE=0.001751, Ann(mu=10.53%, sig=16.12%)
-Model C (Best Asymmetric Dist Fixed Mean): dist=genlogistic, params=(np.float64(0.5983257553837089), np.float64(0.024055922548623175), np.float64(0.017141333060447166)), BIC=-6833.03, MSE=0.085729, Ann(mu=10.39%, sig=14.90%)
+Model A (Simple Normal): mu=0.008344, std=0.042105, BIC=-6493.38, MSE=0.001773, Ann(mu=10.59%, sig=16.05%)
+Model B (Log Normal):    mu=0.007437, std=0.041840, BIC=-6516.88, MSE=0.001751, Ann(mu=10.48%, sig=16.10%)
+Model C (Best Asymmetric Dist Fixed Mean): dist=genlogistic, params=(np.float64(0.5983257553837089), np.float64(0.024055922548623175), np.float64(0.017141333060447166)), BIC=-6833.03, MSE=0.085729, Ann(mu=10.34%, sig=15.00%)
 
 --- ACWI ---
 [Daily]
-Model A (Simple Normal): mu=0.000383, std=0.012726, BIC=-26613.14, MSE=0.000162, Ann(mu=0.45%, sig=4.42%)
-Model B (Log Normal):    mu=0.000302, std=0.012756, BIC=-26592.16, MSE=0.000163, Ann(mu=0.45%, sig=4.44%)
-Model C (Best Asymmetric Dist Fixed Mean): dist=johnsonsu, params=(np.float64(0.11580572498285248), np.float64(1.0273468890271844), np.float64(0.0016767971406800876), np.float64(0.00757826018491759)), BIC=-28250.82, MSE=0.393983, Ann(mu=0.46%, sig=4.46%)
+Model A (Simple Normal): mu=0.000383, std=0.012726, BIC=-26613.14, MSE=0.000162, Ann(mu=0.47%, sig=4.44%)
+Model B (Log Normal):    mu=0.000302, std=0.012756, BIC=-26592.16, MSE=0.000163, Ann(mu=0.43%, sig=4.44%)
+Model C (Best Asymmetric Dist Fixed Mean): dist=johnsonsu, params=(np.float64(0.11580572498285248), np.float64(1.0273468890271844), np.float64(0.0016767971406800876), np.float64(0.00757826018491759)), BIC=-28250.82, MSE=0.393983, Ann(mu=0.45%, sig=4.49%)
 [Monthly]
-Model A (Simple Normal): mu=0.007573, std=0.047802, BIC=-689.85, MSE=0.002285, Ann(mu=9.47%, sig=18.12%)
-Model B (Log Normal):    mu=0.006393, std=0.048285, BIC=-685.50, MSE=0.002331, Ann(mu=9.47%, sig=18.38%)
-Model C (Best Asymmetric Dist Fixed Mean): dist=johnsonsu, params=(np.float64(0.5985794609028992), np.float64(1.5979947040822444), np.float64(0.033828733503047), np.float64(0.05883263137905962)), BIC=-695.84, MSE=5.001263, Ann(mu=9.50%, sig=18.42%)
+Model A (Simple Normal): mu=0.007573, std=0.047802, BIC=-689.85, MSE=0.002285, Ann(mu=9.45%, sig=17.99%)
+Model B (Log Normal):    mu=0.006393, std=0.048285, BIC=-685.50, MSE=0.002331, Ann(mu=9.60%, sig=18.48%)
+Model C (Best Asymmetric Dist Fixed Mean): dist=johnsonsu, params=(np.float64(0.5985794609028992), np.float64(1.5979947040822444), np.float64(0.033828733503047), np.float64(0.05883263137905962)), BIC=-695.84, MSE=5.001263, Ann(mu=9.55%, sig=18.41%)
 
 --- BTC ---
 [Daily]
-Model A (Simple Normal): mu=0.001820, std=0.035124, BIC=-16198.65, MSE=0.001234, Ann(mu=2.18%, sig=12.41%)
-Model B (Log Normal):    mu=0.001198, std=0.035358, BIC=-16142.75, MSE=0.001250, Ann(mu=2.22%, sig=12.56%)
-Model C (Best Asymmetric Dist Fixed Mean): dist=loglaplace, params=(np.float64(62785467.20699079), np.float64(-1447831.3624807284), np.float64(1447831.363678408)), BIC=-17421.23, MSE=0.174104, Ann(mu=2.06%, sig=11.59%)
+Model A (Simple Normal): mu=0.001820, std=0.035124, BIC=-16198.65, MSE=0.001234, Ann(mu=2.20%, sig=12.47%)
+Model B (Log Normal):    mu=0.001198, std=0.035358, BIC=-16142.75, MSE=0.001250, Ann(mu=2.18%, sig=12.54%)
+Model C (Best Asymmetric Dist Fixed Mean): dist=loglaplace, params=(np.float64(62785467.20699079), np.float64(-1447831.3624807284), np.float64(1447831.363678408)), BIC=-17421.23, MSE=0.174104, Ann(mu=2.09%, sig=11.60%)
 [Monthly]
-Model A (Simple Normal): mu=0.058086, std=0.207162, BIC=-33.01, MSE=0.042916, Ann(mu=97.02%, sig=150.31%)
-Model B (Log Normal):    mu=0.037671, std=0.193847, BIC=-51.35, MSE=0.037577, Ann(mu=96.61%, sig=149.29%)
-Model C (Best Asymmetric Dist Fixed Mean): dist=dgamma, params=(np.float64(1.495573682518466), np.float64(0.037670923378720494), np.float64(0.10275454837486286)), BIC=-46.55, MSE=0.707487, Ann(mu=99.04%, sig=155.81%)
+Model A (Simple Normal): mu=0.058086, std=0.207162, BIC=-33.01, MSE=0.042916, Ann(mu=97.55%, sig=149.51%)
+Model B (Log Normal):    mu=0.037671, std=0.193847, BIC=-51.35, MSE=0.037577, Ann(mu=96.84%, sig=148.63%)
+Model C (Best Asymmetric Dist Fixed Mean): dist=dgamma, params=(np.float64(1.495573682518466), np.float64(0.037670923378720494), np.float64(0.10275454837486286)), BIC=-46.55, MSE=0.707487, Ann(mu=99.24%, sig=158.34%)
 
 === S&P 500 Local Fit (ACWI Overlap Period) ===
 Period: 2008-03-31 to 2026-03-18
 Model A (Simple): mu=0.001054, std=0.014059, BIC=-25712.77, MSE=0.000198
 Model B (Log):    mu=0.000956, std=0.013946, BIC=-25785.85, MSE=0.000194
 Model C (Best Asymmetric):  dist=johnsonsu, params=(np.float64(0.024669161240518406), np.float64(0.9044639466628221), np.float64(0.0012721953253581346), np.float64(0.006300498286378158)), BIC=-28060.74, MSE=0.476379
+
+=== S&P 500 Monthly Fit (30 Years: 1996-01 to 2025-12) ===
+Model C (Best Asymmetric):  dist=genlogistic, params=(np.float64(0.4879653982267047), np.float64(0.033214317138593324), np.float64(0.017280587830235443)), BIC=-1235.68, MSE=2.978473, Ann(mu=11.70%, sig=17.21%)
 
 === S&P500 1871-2024 Verify Claim ===
 Expected Return (CAGR): 9.31% (Claim: 9.9%)
@@ -48,7 +51,7 @@ Noise Best Fit: dist=johnsonsu, params=(np.float64(0.16913567817904987), np.floa
 === Correlation ACWI vs S&P500 (Monthly) ===
 ACWI = 1.0269 * SP500 + -0.002907
 R-squared: 0.9290
-Noise Best Fit: dist=dweibull, params=(np.float64(1.2199932203810953), np.float64(6.435697434794048e-19), np.float64(0.010652296731100462)), BIC=-1254.65, MSE=71.184537
+Noise Best Fit: dist=dweibull, params=(np.float64(1.2199932203810953), np.float64(6.435697434794048e-19), np.float64(0.010652296731100462)), BIC=-1254.65, MSE=71.184537, Ann(mu=7.05%, sig=15.77%)
 
 === BTC 4-Year Seasonality & MR-GBM ===
 De-seasonalized BTC MR-GBM:
@@ -112,6 +115,11 @@ Residual Noise Fitting:
 SP500 MR-GBM:
   Theta: 0.2294, Mu: 8.6231, Sigma: 0.3695
 ACWI MR-GBM: No mean reversion detected (theta=NaN)
+
+=== Monthly MR-GBM Specific Cases ===
+SP500 (1871-03-01 to 2025-12-31) MR-GBM: No mean reversion detected
+SP500 (1996-01-01 to 2025-12-31) MR-GBM: No mean reversion detected
+ACWI (2008-04-01 to 2025-12-31) MR-GBM: No mean reversion detected
 
 === BTC Model Effectiveness Analysis ===
 a) Baseline (Log-Normal): BIC=-16142.75
