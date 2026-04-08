@@ -29,7 +29,7 @@ def main() -> None:
   initial_money = 10000  # 1億円 (単位: 万円)
   annual_cost_base = 400  # 400万円
   tax_rate_std = 0.20315
-  inflation_rate_std = 0.02
+  inflation_rate_std = 0.0177
   trust_fee_std = 0.0005775  # 0.05775%
 
   # 1. データのパラメータ設定 (data/model_fitting_results_v3.txt より ACWI [Monthly])
@@ -42,7 +42,7 @@ def main() -> None:
   jsu_params_monthly = (0.5985794609028992, 1.5979947040822444, 0.033828733503047, 0.05883263137905962)
 
   # 2. 資産の定義
-  cpi_name = "Japan_CPI_2pct"
+  cpi_name = "Japan_CPI_1.77pct"
   
   # 為替リスクの定義 (ドル円 0%, 10.53%)
   fx_name = "USDJPY_0_10.53"
