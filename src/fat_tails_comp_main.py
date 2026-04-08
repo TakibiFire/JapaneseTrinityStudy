@@ -14,7 +14,7 @@ from scipy import stats
 
 from src.core import Strategy, simulate_strategy
 from src.lib.asset_generator import (Asset, CpiAsset, DerivedAsset, ForexAsset,
-                                     MonthlyDist, MonthlyLogNormal,
+                                     MonthlyLogDist, MonthlyLogNormal,
                                      YearlyLogNormalArithmetic,
                                      generate_monthly_asset_prices)
 from src.lib.visualize import create_styled_summary, visualize_and_save
@@ -51,8 +51,8 @@ def main() -> None:
   
   # 比較対象のベースモデル (為替・コスト適用前)
   base_configs = [
-      ("Base_ACWI_LogNormal", MonthlyLogNormal(mu=mu_log_monthly, sigma=sigma_log_monthly)),
-      ("Base_ACWI_JSU", MonthlyDist(stats.johnsonsu, params=jsu_params_monthly)),
+      ("Base_ACWI_LogNormal", MonthlyLogDist(stats.norm, params=(mu_log_monthly, sigma_log_monthly))),
+      ("Base_ACWI_JSU", MonthlyLogDist(stats.johnsonsu, params=jsu_params_monthly)),
   ]
 
   assets: List[Union[Asset, DerivedAsset, ForexAsset, CpiAsset]] = []
