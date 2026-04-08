@@ -34,11 +34,11 @@ def main():
   initial_money = 10000
   annual_cost_base = 400
   tax_rate_std = 0.20315
-  inflation_rate_std = 0.02
+  inflation_rate_std = 0.0177
   trust_fee_std = 0.0005775
 
   # 共通のCPI資産
-  cpi_name = "Japan_CPI_2pct"
+  cpi_name = "Japan_CPI_1.77pct"
   cpi_asset = CpiAsset(name=cpi_name,
                        dist=YearlyLogNormalArithmetic(mu=inflation_rate_std,
                                                       sigma=0.0))
