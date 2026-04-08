@@ -55,7 +55,8 @@ def main() -> None:
       ("Base_ACWI_JSU", MonthlyDist(stats.johnsonsu, params=jsu_params_monthly)),
   ]
 
-  assets = [fx_asset]
+  assets: List[Union[Asset, DerivedAsset, ForexAsset, CpiAsset]] = []
+  assets.append(fx_asset)
   
   # ベース資産を登録
   for base_name, dist in base_configs:
