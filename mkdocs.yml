@@ -103,3 +103,4 @@ nav:
     - 信託報酬の影響: trust_fee.md
     - 為替リスクの影響: forex.md
     - ファットテール分布の影響: fat_tails.md
+    - S&P500 vs. オルカン: sp500_vs_acwi.md
