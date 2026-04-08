@@ -33,7 +33,7 @@ def main() -> None:
   initial_money = 10000  # 1億円 (単位: 万円)
   annual_cost_base = 400  # 400万円
   tax_rate_std = 0.20315
-  inflation_rate_std = 0.02
+  inflation_rate_std = 0.0177
   
   # 信託報酬
   fee_sp500 = 0.000814   # 0.0814%
@@ -59,7 +59,7 @@ def main() -> None:
   acwi_approx_noise_params = (1.2199932203810953, acwi_approx_intercept, 0.010652296731100462)
 
   # 2. 資産の定義
-  cpi_name = "Japan_CPI_2pct"
+  cpi_name = "Japan_CPI_1.77pct"
   
   # 為替リスクの定義 (ドル円 0%, 10.53%)
   fx_name = "USDJPY_0_10.53"
@@ -120,8 +120,8 @@ def main() -> None:
     strategy_names.append(final_name)
 
   cpi_asset = CpiAsset(name=cpi_name,
-                       dist=MonthlyLogNormal(mu=inflation_rate_std / 12.0,
-                                             sigma=0.0))
+                       dist=YearlyLogNormalArithmetic(mu=inflation_rate_std,
+                                                      sigma=0.0))
   assets.append(cpi_asset)
 
   # 3. 戦略(Plan)の定義
