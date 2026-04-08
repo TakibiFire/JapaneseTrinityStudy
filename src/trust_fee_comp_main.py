@@ -34,12 +34,12 @@ def main():
   initial_money = 10000  # 1億円 (単位: 万円)
   annual_cost_base = 400  # 400万円
   tax_rate_std = 0.20315
-  inflation_rate_std = 0.02
+  inflation_rate_std = 0.0177
 
   # 1. 資産の定義
   # 全ての戦略で同じ市場環境（価格推移）を共有するために DerivedAsset を使用する
   base_asset_name = "オルカン_ベース"
-  cpi_name = "Japan_CPI_2pct"
+  cpi_name = "Japan_CPI_1.77pct"
 
   # ベースとなる資産（信託報酬 0%）
   assets = [
