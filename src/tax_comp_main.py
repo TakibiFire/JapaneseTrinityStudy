@@ -33,12 +33,12 @@ def main():
   initial_money = 10000
   annual_cost_base = 400
   tax_rate_std = 0.20315
-  inflation_rate_std = 0.02
+  inflation_rate_std = 0.0177
 
   # 1. 資産の定義
   # 全ての戦略で同じ市場環境（価格推移）を共有するために DerivedAsset を使用する
   base_asset_name = "オルカン_ベース"
-  cpi_name = "Japan_CPI_2pct"
+  cpi_name = "Japan_CPI_1.77pct"
 
   assets = [
       Asset(name=base_asset_name,
@@ -53,7 +53,7 @@ def main():
 
   # 2. 戦略(Plan)の定義
   strategies = [
-      Strategy(name="1. 譲渡所得税を考慮しない",
+      Strategy(name="1. 税を考慮しない",
                initial_money=initial_money,
                initial_loan=0,
                yearly_loan_interest=2.125 / 100,
@@ -62,7 +62,7 @@ def main():
                inflation_rate=cpi_name,
                tax_rate=0.0,
                selling_priority=["オルカン"]),
-      Strategy(name="2. 譲渡所得税が 20.315%",
+      Strategy(name="2. 税 20.315%",
                initial_money=initial_money,
                initial_loan=0,
                yearly_loan_interest=2.125 / 100,
@@ -71,7 +71,7 @@ def main():
                inflation_rate=cpi_name,
                tax_rate=tax_rate_std,
                selling_priority=["オルカン"]),
-      Strategy(name="3. 譲渡所得税は0%、出費を20.315%増やす",
+      Strategy(name="3. 税 0%、出費を 20.315% 増やす",
                initial_money=initial_money,
                initial_loan=0,
                yearly_loan_interest=2.125 / 100,
@@ -80,7 +80,7 @@ def main():
                inflation_rate=cpi_name,
                tax_rate=0.0,
                selling_priority=["オルカン"]),
-      Strategy(name="4. 譲渡所得税は0%、出費を11.5%増やす",
+      Strategy(name="4. 税 0%、出費を 11.5% 増やす",
                initial_money=initial_money,
                initial_loan=0,
                yearly_loan_interest=2.125 / 100,
