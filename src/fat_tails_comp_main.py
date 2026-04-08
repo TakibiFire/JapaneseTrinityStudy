@@ -13,9 +13,9 @@ from typing import Dict, List, Union
 from scipy import stats
 
 from src.core import Strategy, simulate_strategy
-from src.lib.asset_generator import (Asset, CpiAsset, DerivedAsset,
+from src.lib.asset_generator import (Asset, CpiAsset, DerivedAsset, ForexAsset,
                                      MonthlyDist, MonthlyLogNormal,
-                                     MonthlySimpleNormal,
+                                     YearlyLogNormalArithmetic,
                                      generate_monthly_asset_prices)
 from src.lib.visualize import create_styled_summary, visualize_and_save
 
@@ -44,20 +44,43 @@ def main() -> None:
   # 2. 資産の定義
   cpi_name = "Japan_CPI_2pct"
   
-  # 比較対象のモデル
-  model_configs = [
-      ("ACWI-1: 対数正規分布", MonthlyLogNormal(mu=mu_log_monthly, sigma=sigma_log_monthly)),
-      ("ACWI-2: Johnson SU分布", MonthlyDist(stats.johnsonsu, params=jsu_params_monthly)),
+  # 為替リスクの定義 (ドル円 0%, 10.53%)
+  fx_name = "USDJPY_0_10.53"
+  fx_asset = ForexAsset(name=fx_name,
+                        dist=YearlyLogNormalArithmetic(mu=0.0, sigma=0.1053))
+  
+  # 比較対象のベースモデル (為替・コスト適用前)
+  base_configs = [
+      ("Base_ACWI_LogNormal", MonthlyLogNormal(mu=mu_log_monthly, sigma=sigma_log_monthly)),
+      ("Base_ACWI_JSU", MonthlyDist(stats.johnsonsu, params=jsu_params_monthly)),
   ]
 
-  assets = []
-  for name, dist in model_configs:
+  assets = [fx_asset]
+  
+  # ベース資産を登録
+  for base_name, dist in base_configs:
     assets.append(
-        Asset(name=name,
+        Asset(name=base_name,
               dist=dist,
-              trust_fee=trust_fee_std,
+              trust_fee=0.0,
               leverage=1)
     )
+
+  # 為替と信託報酬を適用した資産を定義
+  model_names = []
+  for base_name, _ in base_configs:
+    if "LogNormal" in base_name:
+      final_name = "ACWI-1: 対数正規分布 (為替あり)"
+    else:
+      final_name = "ACWI-2: Johnson SU分布 (為替あり)"
+    
+    assets.append(
+        DerivedAsset(name=final_name,
+                     base=base_name,
+                     trust_fee=trust_fee_std,
+                     forex=fx_name)
+    )
+    model_names.append(final_name)
 
   cpi_asset = CpiAsset(name=cpi_name,
                        dist=MonthlyLogNormal(mu=inflation_rate_std / 12.0,
@@ -65,7 +88,7 @@ def main() -> None:
 
   # 3. 戦略(Plan)の定義
   strategies = []
-  for name, _ in model_configs:
+  for name in model_names:
     strategies.append(
         Strategy(name=name,
                  initial_money=initial_money,
