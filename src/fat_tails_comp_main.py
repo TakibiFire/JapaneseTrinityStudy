@@ -84,8 +84,8 @@ def main() -> None:
     model_names.append(final_name)
 
   cpi_asset = CpiAsset(name=cpi_name,
-                       dist=MonthlyLogNormal(mu=inflation_rate_std / 12.0,
-                                             sigma=0.0))
+                       dist=YearlyLogNormalArithmetic(mu=inflation_rate_std,
+                                                      sigma=0.0))
 
   # 3. 戦略(Plan)の定義
   strategies = []
