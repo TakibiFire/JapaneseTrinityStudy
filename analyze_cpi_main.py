@@ -113,7 +113,7 @@ def main() -> None:
   """
   メイン関数。CSVファイルを読み込み、計算結果を出力し、グラフを描画する。
   """
-  file_path = "data/cpi.csv"
+  file_path = "data/cpi_yearly_1970.csv"
   cpi_data: List[float] = []
 
   # CSVファイルからCPIデータを読み込む

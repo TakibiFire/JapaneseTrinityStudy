@@ -87,7 +87,7 @@ def load_fx_data(file_path: str) -> pd.Series:
 
 
 def main() -> None:
-  cpi_log_ret = load_cpi_data("data/cpi.csv")
+  cpi_log_ret = load_cpi_data("data/cpi_yearly_1970.csv")
   fx_log_ret = load_fx_data("data/fm08_m_1.csv")
 
   # データの結合（年次）
