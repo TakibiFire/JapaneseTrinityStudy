@@ -160,6 +160,13 @@ class YearlyLogNormalArithmetic(Distribution):
 class MonthlyDist(Distribution):
   """
   任意の scipy.stats 分布をラップするクラス (月次パラメータを直接指定)。
+
+  注意:
+  このクラスは生成した乱数を「そのまま単利リターン」として扱います。
+  パラメータが対数リターン (Log Return) にフィットされたものである場合は、
+  このクラスではなく `MonthlyLogDist` を使用してください。
+  (対数リターンをそのまま単利として用いると、複利計算の過程で年率数%の
+  下方へのズレが生じ、シミュレーション結果が破綻します)
   """
 
   def __init__(self, dist_func: Any, params: Tuple[Any, ...]):
@@ -168,6 +175,25 @@ class MonthlyDist(Distribution):
 
   def generate(self, shape: Tuple[int, int], seed: int) -> np.ndarray:
     return self.dist_func.rvs(*self.params, size=shape, random_state=seed)
+
+
+class MonthlyLogDist(Distribution):
+  """
+  任意の scipy.stats 分布をラップするクラス。
+  生成した乱数を「対数リターン」として扱い、出力時に単利リターンに変換します。
+
+  このクラスは、過去の対数リターンデータにフィットさせた分布
+  （例: stats.johnsonsu など）を用いてシミュレーションを行う際に使用します。
+  出力される単利リターン R_t は、対数リターン r_t に対して R_t = exp(r_t) - 1 となります。
+  """
+
+  def __init__(self, dist_func: Any, params: Tuple[Any, ...]):
+    self.dist_func = dist_func
+    self.params = params
+
+  def generate(self, shape: Tuple[int, int], seed: int) -> np.ndarray:
+    log_ret = self.dist_func.rvs(*self.params, size=shape, random_state=seed)
+    return np.exp(log_ret) - 1.0
 
 
 @dataclasses.dataclass
@@ -193,10 +219,29 @@ class Asset(AssetConfig):
 class DerivedAsset(AssetConfig):
   """
   他の資産(ベース)の推移に依存して生成される資産クラス。
+
+  ベース資産のリターンに multiplier を掛け、noise_dist によるノイズを加算して
+  派生資産のリターンを生成します。
+
+  Attributes:
+    base: ベースとなる資産の名前
+    multiplier: ベースリターンに乗じる係数
+    noise_dist: 追加するノイズ（残差）を生成する分布
+    log_correlation: 
+        ベース資産と派生資産の相関関係が「対数リターン」上で計算されたものかを指定します。
+        True の場合：
+          1. base_ret（単利）を対数リターン log(1 + base_ret) に変換。
+          2. 対数の世界で (log_base_ret * multiplier + log_noise) の加算を行う。
+             （※ここで noise_dist は対数リターン上の残差を直接返すことを前提とするため、
+             　noise_dist には MonthlyDist など単利変換を行わないクラスを指定してください）
+          3. 最後に exp() - 1 で全体の単利リターンに戻す。
+        False の場合（デフォルト）：
+          単純に単利リターン上で (base_ret * multiplier + noise) の加算を行います。
   """
   base: Optional[str] = None
   multiplier: float = 1.0
   noise_dist: Optional[Distribution] = None
+  log_correlation: bool = False
 
 
 @dataclasses.dataclass
@@ -296,17 +341,29 @@ def generate_monthly_asset_prices(configs: Sequence[Union[AssetConfig,
     elif isinstance(config, DerivedAsset):
       base_name = config.base
       assert base_name is not None  # 検証済み
-      base_ret = returns[base_name]  # base はすでに計算済みであることが保証される
+      base_ret = returns[base_name]  # base はすでに計算済み（単利リターン）
       noise = np.zeros((n_paths, n_months))
+      
       if config.noise_dist:
         noise_hash_str = config.name + "noise" + str(seed)
-        noise_seed = int(
-            hashlib.md5(noise_hash_str.encode('utf-8')).hexdigest(), 16) % (2**
-                                                                            32)
+        noise_seed = int(hashlib.md5(noise_hash_str.encode('utf-8')).hexdigest(), 16) % (2**32)
+        # noise_dist.generate は、log_correlation=True時は対数リターン上の残差を直接返す（MonthlyDist等を使う想定）
+        # log_correlation=False時は単利上のノイズを返す想定
         noise = config.noise_dist.generate((n_paths, n_months), noise_seed)
 
-      # ベースリターンの線形結合とノイズの加算
-      returns[config.name] = base_ret * config.multiplier + noise
+      if config.log_correlation:
+        # 相関関係が対数リターンの世界で算出されている場合の処理
+        # 1. ベース資産の単利を対数に変換
+        base_log_ret = np.log(1.0 + base_ret)
+        
+        # 2. 対数の世界で乗算とノイズ加算（このときnoiseは対数リターンの残差を想定）
+        derived_log_ret = base_log_ret * config.multiplier + noise
+        
+        # 3. 最後に単利リターンに戻す
+        returns[config.name] = np.exp(derived_log_ret) - 1.0
+      else:
+        # 単純な単利上での合成
+        returns[config.name] = base_ret * config.multiplier + noise
 
     # 2. 月次価格推移の計算 (コスト控除、レバレッジ、為替の適用)
     if isinstance(config, (ForexAsset, CpiAsset)):

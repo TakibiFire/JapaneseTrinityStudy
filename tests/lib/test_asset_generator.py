@@ -7,8 +7,8 @@ from scipy import stats
 
 from src.lib.asset_generator import (Asset, AssetConfig, CpiAsset,
                                      DerivedAsset, ForexAsset, MonthlyDist,
-                                     MonthlyLogNormal, MonthlySimpleNormal,
-                                     YearlyLogNormal,
+                                     MonthlyLogDist, MonthlyLogNormal,
+                                     MonthlySimpleNormal, YearlyLogNormal,
                                      YearlyLogNormalArithmetic,
                                      YearlySimpleNormal,
                                      generate_monthly_asset_prices)
@@ -108,6 +108,50 @@ def test_distribution_scipy():
   assert np.mean(returns) == pytest.approx(0, abs=0.05)
   # t分布(df=5)の標準偏差は sqrt(df / (df - 2)) = sqrt(5/3) = 1.29...
   assert np.std(returns) == pytest.approx(np.sqrt(5 / 3), abs=0.05)
+
+
+def test_distribution_monthly_log_dist():
+  """MonthlyLogDist が対数リターンから単利リターンへの変換を正しく行うことを確認する。"""
+  # 正規分布をそのままラップした場合、対数リターン r が出力される
+  # 単利リターン R = exp(r) - 1 になることを確認
+  mu, sigma = 0.05, 0.0  # ボラティリティ0 (r = 0.05 固定)
+  dist = MonthlyLogDist(stats.norm, params=(mu, sigma))
+  n_paths, n_months = 10, 1
+  seed = 42
+
+  returns = dist.generate((n_paths, n_months), seed)
+  
+  expected_simple_return = np.exp(mu) - 1.0
+  np.testing.assert_allclose(returns, expected_simple_return, rtol=1e-5)
+
+
+def test_engine_derived_log_correlation():
+  """DerivedAsset において log_correlation=True が正しく対数リターン上で計算を行うことを確認する。"""
+  # ベース資産: 対数リターン 0.05 (単利 exp(0.05)-1)
+  # DerivedAsset: multiplier 2.0, ノイズ -0.01 (対数リターンのノイズ)
+  # 期待される対数リターン = 0.05 * 2.0 - 0.01 = 0.09
+  # 期待される単利リターン = exp(0.09) - 1
+  
+  # 単利リターンが入力されるので、MonthlySimpleNormal でベースを生成
+  # 0.05の対数リターンに相当する単利リターン = exp(0.05)-1
+  base_simple = np.exp(0.05) - 1.0
+  
+  configs = [
+      Asset(name="Base", dist=MonthlySimpleNormal(base_simple, 0.0)),
+      DerivedAsset(name="Derived",
+                   base="Base",
+                   multiplier=2.0,
+                   noise_dist=MonthlyDist(stats.norm, params=(-0.01, 0.0)), # ノイズはMonthlyDist(対数リターン直接指定)を使う想定
+                   log_correlation=True),
+  ]
+  n_paths, n_months = 1, 1
+  seed = 42
+
+  prices = generate_monthly_asset_prices(configs, n_paths, n_months, seed)
+  
+  # 初期価格1.0なので、1ヶ月後の価格は (1 + 単利リターン)
+  expected_derived_price = np.exp(0.09)
+  assert prices["Derived"][0, 1] == pytest.approx(expected_derived_price)
 
 
 def test_engine_topological_sort_chain():
