@@ -1,4 +1,6 @@
 <!--
+THIS FILE IS DEPRECATED. WE ARE MIGRATING REPORTS INTO index.md.
+
 This task file has a special format. Some of the comment parts are the instruction
 for AI. The other parts are raw Markdown. The goal is to make a detailed report
 for the 4% rule.
