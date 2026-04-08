@@ -121,10 +121,39 @@ def main() -> None:
       chart.save(html_path)
       print(f"ℹ️ 代わりに {html_path} に保存しました。")
 
-  # 平均値の表示
-  print("\n--- 平均統計量 ---")
+  # 4. 統計量の表示
+  
+  # 年ごとの値を平均したもの
+  print("\n--- 平均統計量 (年ごとの指標の単純平均) ---")
   if not plot_df.empty:
     print(plot_df.groupby('Asset')[['Annual Arithmetic Return', 'Annual Arithmetic Volatility']].mean())
+
+  # 全期間のデータから直接算出
+  print("\n--- 全期間データから直接算出 ---")
+  
+  # 期間の定義
+  sp500_30y_rets = rets_df['SP500_simple'][(rets_df.index >= '1996-01-01') & (rets_df.index <= '2025-12-31')].dropna()
+  sp500_overlap_rets = rets_df['SP500_simple'][(rets_df.index >= '2008-03-01') & (rets_df.index <= '2025-12-31')].dropna()
+  acwi_overlap_rets = rets_df['ACWI_simple'][(rets_df.index >= '2008-03-01') & (rets_df.index <= '2025-12-31')].dropna()
+
+  stats_cases = [
+      ("S&P 500 (30y: 1996-2025)", sp500_30y_rets),
+      ("S&P 500 (Overlap: 2008-03~)", sp500_overlap_rets),
+      ("ACWI (Overlap: 2008-03~)", acwi_overlap_rets)
+  ]
+
+  overall_results = []
+  for name, rets in stats_cases:
+    ann_return = float(rets.mean()) * 12
+    ann_volatility = float(rets.std()) * np.sqrt(12)
+    overall_results.append({
+        'Case': name,
+        'Annual Arithmetic Return': ann_return,
+        'Annual Arithmetic Volatility': ann_volatility
+    })
+  
+  overall_df = pd.DataFrame(overall_results).set_index('Case')
+  print(overall_df)
 
 
 if __name__ == "__main__":
