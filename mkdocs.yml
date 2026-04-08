@@ -102,5 +102,6 @@ nav:
     - 譲渡所得税の影響: tax.md
     - 信託報酬の影響: trust_fee.md
     - 為替リスクの影響: forex.md
+    - 購買力平価とインフレの相関: ppp.md
     - ファットテール分布の影響: fat_tails.md
     - S&P500 vs. オルカン: sp500_vs_acwi.md
