@@ -31,6 +31,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
+from scipy.signal import lfilter, lfiltic
 
 
 class Distribution(ABC):
@@ -196,6 +197,72 @@ class MonthlyLogDist(Distribution):
     return np.exp(log_ret) - 1.0
 
 
+class MonthlyARLogNormal(Distribution):
+  """
+  月次対数リターンに対する AR(p) モデルに基づく正規分布。
+  r_t = c + phi_1 * r_{t-1} + ... + phi_p * r_{t-p} + e_t
+  e_t ~ N(0, sigma_e^2)
+  出力は単利リターン (exp(r_t) - 1) に変換されます。
+  """
+
+  def __init__(self,
+               c: float,
+               phis: Sequence[float],
+               sigma_e: float,
+               initial_y: Optional[Sequence[float]] = None):
+    """
+    Args:
+      c: 定数項
+      phis: 自己相関係数のリスト [phi_1, phi_2, ..., phi_p]
+      sigma_e: 誤差項の標準偏差
+      initial_y: 初期値（対数リターン）のリスト [y_{t-p}, ..., y_{t-1}]
+    """
+    self.c = c
+    self.phis = np.array(phis)
+    self.p = len(phis)
+    self.sigma_e = sigma_e
+    self.initial_y = initial_y
+
+  def generate(self, shape: Tuple[int, int], seed: int) -> np.ndarray:
+    """
+    指定されたパス数と月数でAR(p)過程に従うリターンを生成する。
+
+    Args:
+      shape: (パス数, 月数)
+      seed: 乱数シード
+    """
+    rng = np.random.default_rng(seed)
+    n_paths, n_months = shape
+
+    # y_t - phi_1 y_{t-1} - ... = c + e_t
+    a = np.concatenate(([1.0], -self.phis))
+    b = np.array([1.0])
+
+    if self.initial_y is not None:
+      if len(self.initial_y) < self.p:
+        raise ValueError(f"initial_y must have at least {self.p} elements.")
+      # 直近の p 個を使用し、lfiltic 用に逆順にする
+      y_hist = np.array(self.initial_y[-self.p:])[::-1]
+      x_hist = np.full(self.p, self.c)
+      zi_single = lfiltic(b, a, y=y_hist, x=x_hist)
+      zi = np.tile(zi_single, (n_paths, 1))
+
+      e = rng.normal(0, self.sigma_e, size=(n_paths, n_months))
+      x = self.c + e
+      r, _ = lfilter(b, a, x, axis=-1, zi=zi)
+    else:
+      # 初期値が指定されない場合は burn-in (100ヶ月) を用いて
+      # 初期状態への依存を消し、定常分布からスタートさせる
+      burn_in = 100
+      total_months = n_months + burn_in
+      e = rng.normal(0, self.sigma_e, size=(n_paths, total_months))
+      x = self.c + e
+      r_full = lfilter(b, a, x, axis=-1)
+      r = r_full[:, burn_in:]
+
+    return np.exp(r) - 1.0
+
+
 @dataclasses.dataclass
 class AssetConfig:
   """
@@ -343,7 +410,7 @@ def generate_monthly_asset_prices(configs: Sequence[Union[AssetConfig,
       assert base_name is not None  # 検証済み
       base_ret = returns[base_name]  # base はすでに計算済み（単利リターン）
       noise = np.zeros((n_paths, n_months))
-      
+
       if config.noise_dist:
         noise_hash_str = config.name + "noise" + str(seed)
         noise_seed = int(hashlib.md5(noise_hash_str.encode('utf-8')).hexdigest(), 16) % (2**32)
@@ -355,10 +422,10 @@ def generate_monthly_asset_prices(configs: Sequence[Union[AssetConfig,
         # 相関関係が対数リターンの世界で算出されている場合の処理
         # 1. ベース資産の単利を対数に変換
         base_log_ret = np.log(1.0 + base_ret)
-        
+
         # 2. 対数の世界で乗算とノイズ加算（このときnoiseは対数リターンの残差を想定）
         derived_log_ret = base_log_ret * config.multiplier + noise
-        
+
         # 3. 最後に単利リターンに戻す
         returns[config.name] = np.exp(derived_log_ret) - 1.0
       else:

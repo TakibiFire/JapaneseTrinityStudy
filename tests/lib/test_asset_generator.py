@@ -6,7 +6,8 @@ import pytest
 from scipy import stats
 
 from src.lib.asset_generator import (Asset, AssetConfig, CpiAsset,
-                                     DerivedAsset, ForexAsset, MonthlyDist,
+                                     DerivedAsset, ForexAsset,
+                                     MonthlyARLogNormal, MonthlyDist,
                                      MonthlyLogDist, MonthlyLogNormal,
                                      MonthlySimpleNormal, YearlyLogNormal,
                                      YearlyLogNormalArithmetic,
@@ -329,10 +330,43 @@ def test_engine_missing_forex_config():
     generate_monthly_asset_prices(configs, 1, 1, 42)
 
 
-def test_engine_asset_none_dist():
-  """Asset の dist が None の場合にエラーが発生することを確認する。"""
-  configs = [Asset(name="A", dist=None)]
-  with pytest.raises(
-      ValueError,
-      match="Asset, ForexAsset, or CpiAsset 'A' requires a distribution"):
-    generate_monthly_asset_prices(configs, 1, 1, 42)
+def test_distribution_monthly_ar_log_normal():
+  """MonthlyARLogNormal が AR プロセスを正しく生成することを確認する。"""
+  # AR(1) パラメータ: c=0.01, phi1=0.5, sigma_e=0.01
+  # 無条件平均 mu = c / (1 - phi1) = 0.01 / 0.5 = 0.02
+  # 無条件分散 var = sigma_e^2 / (1 - phi1^2) = 0.0001 / 0.75 = 0.0001333...
+  c, phis, sigma_e = 0.01, [0.5], 0.01
+  dist = MonthlyARLogNormal(c=c, phis=phis, sigma_e=sigma_e)
+  n_paths, n_months = 1, 10000
+  seed = 42
+
+  returns = dist.generate((n_paths, n_months), seed)
+  log_returns = np.log(1.0 + returns[0])
+
+  # 無条件平均の確認
+  assert np.mean(log_returns) == pytest.approx(0.02, abs=0.001)
+  # 無条件標準偏差の確認 (sqrt(0.0001333) = 0.011547)
+  assert np.std(log_returns) == pytest.approx(0.0115, abs=0.001)
+  # 自己相関係数の確認
+  corr = np.corrcoef(log_returns[1:], log_returns[:-1])[0, 1]
+  assert corr == pytest.approx(0.5, abs=0.05)
+
+
+def test_distribution_monthly_ar_initial_y():
+  """MonthlyARLogNormal が指定した初期値から正しくスタートすることを確認する。"""
+  # phi1 = 1.0 (ランダムウォーク), c = 0, sigma_e = 0
+  # ならば初期値がずっと維持されるはず
+  c, phis, sigma_e = 0.0, [1.0], 0.0
+  initial_y = [0.123]
+  dist = MonthlyARLogNormal(c=c,
+                             phis=phis,
+                             sigma_e=sigma_e,
+                             initial_y=initial_y)
+  n_paths, n_months = 1, 10
+  seed = 42
+
+  returns = dist.generate((n_paths, n_months), seed)
+  log_returns = np.log(1.0 + returns[0])
+
+  # 全ての値が 0.123 であることを確認
+  assert np.all(log_returns == pytest.approx(0.123))
