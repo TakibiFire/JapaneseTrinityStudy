@@ -3,6 +3,7 @@ site_dir: dist
 use_directory_urls: false
 
 theme:
+  language: ja
   name: material
   favicon: imgs/favicon.png
   logo: imgs/takibi.png
@@ -14,7 +15,7 @@ theme:
     - media: "(prefers-color-scheme: light)"
       scheme: default
       primary: teal
-      accent: deep orange
+      accent: indigo
       toggle:
         icon: material/brightness-7
         name: ダークモードに切り替え
@@ -22,7 +23,7 @@ theme:
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
       primary: teal
-      accent: deep orange
+      accent: indigo
       toggle:
         icon: material/brightness-4
         name: ライトモードに切り替え

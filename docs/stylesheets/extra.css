@@ -82,3 +82,9 @@
   --md-default-bg-color: #1a1a1a;
   --md-default-fg-color: #e1e5e9;
 }
+
+/* スクロールバーのホバー時の色を調整 (オレンジ色になるのを防ぐ) */
+.md-sidebar__scrollwrap:focus-within,
+.md-sidebar__scrollwrap:hover {
+  scrollbar-color: var(--md-default-fg-color--lighter) #0000 !important;
+}
