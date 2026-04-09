@@ -108,3 +108,4 @@ nav:
   - 生存確率を上げる戦略:
     - 現金保有の効果: cash_ratio.md
     - 現金リバランスの効果: cash_rebalance.md
+    - 無リスク資産保有の効果: zero_risk.md
