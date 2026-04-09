@@ -105,3 +105,5 @@ nav:
     - 購買力平価とインフレの相関: ppp.md
     - ファットテール分布の影響: fat_tails.md
     - S&P500 vs. オルカン: sp500_vs_acwi.md
+  - 生存確率を上げる戦略:
+    - 現金保有の効果: cache_ratio.md
