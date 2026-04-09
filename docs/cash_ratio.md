@@ -68,10 +68,10 @@
 
 取り崩しが必要な際、まず手元の現金を使い切り、現金がなくなってからオルカンを売却する戦略です。これは運用初期の暴落時に株式を売却せずに済む効果を狙ったものです。
 
-{!data/cache_ratio/exp1_result.md!}
+{!data/cash_ratio/exp1_result.md!}
 
-![資産額の分布(実験1)](imgs/cache_ratio/exp1_distribution.svg)
-![生存確率の推移(実験1)](imgs/cache_ratio/exp1_survival.svg)
+![資産額の分布(実験1)](imgs/cash_ratio/exp1_distribution.svg)
+![生存確率の推移(実験1)](imgs/cash_ratio/exp1_survival.svg)
 
 グラフから、**現金比率を高めるほど23年目までの生存確率は向上するが、23年目以降は逆に生存確率が下がる**ことがわかります。
 
@@ -79,10 +79,10 @@
 
 取り崩しが必要な際、まずオルカンを売却し、オルカンが底をついてから初めて現金を使う戦略です。
 
-{!data/cache_ratio/exp2_result.md!}
+{!data/cash_ratio/exp2_result.md!}
 
-![資産額の分布(実験2)](imgs/cache_ratio/exp2_distribution.svg)
-![生存確率の推移(実験2)](imgs/cache_ratio/exp2_survival.svg)
+![資産額の分布(実験2)](imgs/cash_ratio/exp2_distribution.svg)
+![生存確率の推移(実験2)](imgs/cash_ratio/exp2_survival.svg)
 
 こちらの戦略でも、**現金比率を高めるほど19年目までの生存確率は上がるが、19年目以降は生存確率が下がる**という結果になりました。
 

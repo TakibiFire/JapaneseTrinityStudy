@@ -110,8 +110,8 @@ def main():
       results[strategy.name] = res
 
     # 3. 可視化と保存
-    img_dir = "docs/imgs/cache_ratio"
-    data_dir = "docs/data/cache_ratio"
+    img_dir = "docs/imgs/cash_ratio"
+    data_dir = "docs/data/cash_ratio"
     os.makedirs(img_dir, exist_ok=True)
     os.makedirs(data_dir, exist_ok=True)
 
