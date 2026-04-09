@@ -118,17 +118,26 @@ def create_survival_probability_chart(
 
   df_plot = pd.DataFrame(plot_data)
 
+  # y軸の下限を、最小値の10の倍数（切り捨て）に設定
+  min_val = df_plot['Survival Probability (%)'].min()
+  y_min = (min_val // 10) * 10
+  y_max = 100
+
+  display_survival_title = '経過年数と生存確率の推移'
+  if y_min > 0:
+    display_survival_title += f"（生存確率 {y_min:.0f}%以下は描画を省略）"
+
   chart = alt.Chart(df_plot).mark_line(point=True).encode(
       x=alt.X('Year:Q', title='経過年数 (年)'),
       y=alt.Y('Survival Probability (%):Q',
               title='生存確率 (%)',
-              scale=alt.Scale(domain=[0, 100])),
+              scale=alt.Scale(domain=[y_min, y_max])),
       color=alt.Color('Strategy:N', legend=alt.Legend(title="戦略",
                                                       orient='top')),
       tooltip=[
           'Year', 'Strategy',
           alt.Tooltip('Survival Probability (%):Q', format='.1f')
-      ]).properties(title='経過年数と生存確率の推移', width=600, height=height)
+      ]).properties(title=display_survival_title, width=600, height=height)
 
   return df_plot, chart
 
@@ -182,9 +191,33 @@ def visualize_and_save(results: Dict[str, SimulationResult],
 
   df_plot = pd.DataFrame(plot_data)
 
+  # x軸の下限を調整（全ての戦略で評価額が 1.0/10000.0 億円（対数スケールの底）以下の場合、その範囲をカット）
+  # 1.0 はコード内で0以下を1に変換しているため (1/10000 億円 = 1万円)
+  # y軸が対数スケールで、値が 0.0001 (1万円) に張り付いている場合は「破産」とみなす
+  threshold = 1.001 / 10000.0
+  
+  # 各 Quantile ごとに全戦略の最大値を計算
+  q_values = df_plot.pivot(index='Quantile (%)', columns='Strategy', values='Final Value (億円)')
+  q_max = q_values.max(axis=1)
+  
+  # 閾値を超える Quantile を見つける
+  above_threshold = q_max[q_max > threshold]
+  if not above_threshold.empty:
+    x_min_raw = above_threshold.index.min()
+    # 線がゼロから立ち上がる様子が見えるように、余裕を持たせて下限を設定（10%のバッファ）
+    x_min = max(0.0, (x_min_raw // 10) * 10 - 10)
+  else:
+    x_min = 0
+  
+  x_max = 100
+  
+  display_dist_title = distribution_title
+  if x_min > 0:
+    display_dist_title += f"（運の良さ {x_min:.0f}%以下はほぼ0）"
+
   # Altair チャート描画（線グラフ）
   line_chart = alt.Chart(df_plot).mark_line(point=False).encode(
-      x=alt.X('Quantile (%):Q', title='運の良さ (パーセンタイル %)'),
+      x=alt.X('Quantile (%):Q', title='運の良さ (パーセンタイル %)', scale=alt.Scale(domain=[x_min, x_max])),
       y=alt.Y('Final Value (億円):Q',
               title='最終評価額(億円), 対数スケール',
               scale=alt.Scale(type='log')),
@@ -195,7 +228,7 @@ def visualize_and_save(results: Dict[str, SimulationResult],
           alt.Tooltip('Final Value (億円):Q', format=',.1f')
       ])
 
-  final_chart = line_chart.properties(title=distribution_title,
+  final_chart = line_chart.properties(title=display_dist_title,
                                       width=600,
                                       height=distribution_height)
   # ズーム・パンのためのインタラクティブな設定を明示的にパラメータ名を指定して追加
