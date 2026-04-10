@@ -372,6 +372,22 @@ def main():
   chart_raw.save(chart_file_raw)
   print(f"✅ {chart_file_raw} に保存しました。")
 
+  # 1.5. 実測値のグラフ (4%のみ)
+  plot_df_004 = plot_df_raw[np.isclose(plot_df_raw["spend_ratio"], 0.04)].copy()
+  chart_004 = alt.Chart(plot_df_004).mark_line(color='#7f7f7f').encode(
+      x=alt.X("year:Q", title="目標寿命 (年)"),
+      y=alt.Y("optimal_ratio:Q",
+              title="最適オルカン比率",
+              scale=alt.Scale(domain=[0, 1])),
+      tooltip=[
+          alt.Tooltip("year:Q", title="目標寿命 (年)"),
+          alt.Tooltip("optimal_ratio:Q", title="最適比率", format=".2f")
+      ]).properties(title="最適オルカン比率の推移 (支出率4%, 実測)", width=600, height=400)
+
+  chart_file_004 = os.path.join(img_dir, "optimal_orukan_ratio_004.svg")
+  chart_004.save(chart_file_004)
+  print(f"✅ {chart_file_004} に保存しました。")
+
   # 2. 近似式のグラフ
   fitted_rows = []
   for S in spend_ratios:
