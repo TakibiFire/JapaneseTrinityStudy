@@ -40,18 +40,18 @@ function calculateOptimalStrategy(S, N, logCallback = console.log) {
   let ratio, prob;
   if (N <= n_ruin) {
     // Region 1: 資産寿命内
-    // g_ratio(S, n) = -0.8634 -0.7437 * log(n*S) +0.2169 * n^2 +0.0505 * 1/n -2.1119 * exp(S)
-    ratio = -0.8634 - 0.7437 * safeLog(n * S) + 0.2169 * (n * n) + 0.0505 * (1 / Math.max(n, 0.001)) - 2.1119 * Math.exp(S);
+    // g_ratio(S, n) = -3.7097 -1.4260 * log(n*S) +0.0454 * n^2 -0.0186 * 1/S -2.3855 * exp(-n) +0.0161 * 1/n
+    ratio = -3.7097 - 1.4260 * safeLog(n * S) + 0.0454 * (n * n) - 0.0186 * (1.0 / S) - 2.3855 * Math.exp(-n) + 0.0161 * (1.0 / Math.max(n, 0.001));
     
-    // g_prob(S, n)  = -0.0004 +0.0178 * 1/(n*S) -0.0006 * log(S) +0.0017 * exp(n) +0.0089 * n/S
-    prob = -0.0004 + 0.0178 * (1 / Math.max(n * S, 0.0001)) - 0.0006 * safeLog(S) + 0.0017 * Math.exp(n) + 0.0089 * (n / S);
+    // g_prob(S, n)  = +0.0006 +0.0166 * 1/(n*S) +0.0062 * 1/S -0.0002 * S/n +0.0009 * 1/n +0.0032 * n/S
+    prob = 0.0006 + 0.0166 * (1.0 / Math.max(n * S, 0.0001)) + 0.0062 * (1.0 / S) - 0.0002 * (S / Math.max(n, 0.001)) + 0.0009 * (1.0 / Math.max(n, 0.001)) + 0.0032 * (n / S);
   } else {
     // Region 2: 資産寿命超
-    // h_ratio(S, m) = -0.1543 +0.1227 * log(m) +0.6476 * log(S) -0.0538 * 1/(n*S) -1.4565 * log(n*S)
-    ratio = -0.1543 + 0.1227 * safeLog(m) + 0.6476 * safeLog(S) - 0.0538 * (1 / Math.max(n * S, 0.0001)) - 1.4565 * safeLog(n * S);
+    // h_ratio(S, m) = +0.4566 +0.0896 * log(m) -0.6490 * log(S) -0.0570 * 1/(n*S) -1.3640 * log(n) -0.0059 * S/m
+    ratio = 0.4566 + 0.0896 * safeLog(m) - 0.6490 * safeLog(S) - 0.0570 * (1.0 / Math.max(n * S, 0.0001)) - 1.3640 * safeLog(n) - 0.0059 * (S / Math.max(m, 0.001));
     
-    // h_prob(S, m)  = -0.8682 -0.2673 * sqrt(m) -0.3769 * log(S) +0.0003 * 1/m +0.0074 * 1/(n*S)
-    prob = -0.8682 - 0.2673 * Math.sqrt(Math.max(m, 0)) - 0.3769 * safeLog(S) + 0.0003 * (1 / Math.max(m, 0.001)) + 0.0074 * (1 / Math.max(n * S, 0.0001));
+    // h_prob(S, m)  = -0.6976 +0.0095 * 1/S -0.0186 * log(m) -0.1570 * log(S) +0.0115 * 1/(n*S) +0.0002 * 1/m
+    prob = -0.6976 + 0.0095 * (1.0 / S) - 0.0186 * safeLog(m) - 0.1570 * safeLog(S) + 0.0115 * (1.0 / Math.max(n * S, 0.0001)) + 0.0002 * (1.0 / Math.max(m, 0.001));
   }
 
   const clampedRatio = Math.max(0, Math.min(1, ratio));

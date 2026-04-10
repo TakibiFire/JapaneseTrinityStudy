@@ -14,7 +14,7 @@ from src.lib.dynamic_rebalance import calculate_optimal_strategy
 def test_calculate_optimal_strategy_region1():
   """
   資産寿命内 (Region 1) の計算テスト。
-  S=0.02 (2%), N=20 の場合、実測値は 0.85 なので 0.8 以上を期待。
+  S=0.02 (2%), N=20 の場合、実測値は 0.85 なので 0.05 以内の誤差を期待。
   """
   s_rate = np.array([0.02])
   remaining_years = 20.0
@@ -23,8 +23,8 @@ def test_calculate_optimal_strategy_region1():
   assert isinstance(ratio, np.ndarray)
   assert ratio.shape == (1,)
   assert 0.0 <= ratio[0] <= 1.0
-  # 実測値 0.85 に対して 0.15 以内の誤差を許容
-  assert abs(ratio[0] - 0.85) < 0.15
+  # 実測値 0.85 に対して 0.05 以内の誤差を許容
+  assert abs(ratio[0] - 0.85) < 0.05
 
 
 def test_calculate_optimal_strategy_region2():
@@ -94,7 +94,7 @@ def test_calculate_optimal_strategy_cpi_177():
 def test_calculate_optimal_strategy_accuracy():
   """
   data/optimal_orukan_ratio.csv の実測データとの一致度を確認する。
-  予測値と実測値の差が 0.10 以内のデータが 90% 以上であることを期待する。
+  予測値と実測値の差が 0.05 以内のデータが 90% 以上であることを期待する。
   (近似式なのである程度の誤差は許容する)
   """
   csv_path = "data/optimal_orukan_ratio.csv"

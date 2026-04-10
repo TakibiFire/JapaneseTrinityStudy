@@ -59,13 +59,14 @@ def calculate_optimal_strategy(
   if np.any(mask1):
     s1 = s_clipped[mask1]
     n_safe = np.maximum(n, 0.001)
-    # g_ratio(S, n) = -0.8634 -0.7437 * log(n*S) +0.2169 * n^2 +0.0505 * 1/n -2.1119 * exp(S)
+    # g_ratio(S, n) = -3.7097 -1.4260 * log(n*S) +0.0454 * n^2 -0.0186 * 1/S -2.3855 * exp(-n) +0.0161 * 1/n
     ratio[mask1] = (
-        -0.8634
-        - 0.7437 * safe_log(n_safe * s1)
-        + 0.2169 * (n_safe**2)
-        + 0.0505 * (1.0 / n_safe)
-        - 2.1119 * np.exp(s1)
+        -3.7097
+        - 1.4260 * safe_log(n_safe * s1)
+        + 0.0454 * (n_safe**2)
+        - 0.0186 * (1.0 / s1)
+        - 2.3855 * np.exp(-n_safe)
+        + 0.0161 * (1.0 / n_safe)
     )
 
   # Region 2: N > n_ruin (資産寿命超)
@@ -74,13 +75,14 @@ def calculate_optimal_strategy(
     s2 = s_clipped[mask2]
     m2 = np.maximum(m[mask2], 1e-10)
     n_safe = np.maximum(n, 0.001)
-    # h_ratio(S, m) = -0.1543 +0.1227 * log(m) +0.6476 * log(S) -0.0538 * 1/(n*S) -1.4565 * log(n*S)
+    # h_ratio(S, m) = +0.4566 +0.0896 * log(m) -0.6490 * log(S) -0.0570 * 1/(n*S) -1.3640 * log(n) -0.0059 * S/m
     ratio[mask2] = (
-        -0.1543
-        + 0.1227 * safe_log(m2)
-        + 0.6476 * safe_log(s2)
-        - 0.0538 * (1.0 / (n_safe * s2))
-        - 1.4565 * safe_log(n_safe * s2)
+        +0.4566
+        + 0.0896 * safe_log(m2)
+        - 0.6490 * safe_log(s2)
+        - 0.0570 * (1.0 / (n_safe * s2))
+        - 1.3640 * safe_log(n_safe)
+        - 0.0059 * (s2 / m2)
     )
 
   return np.clip(ratio, 0.0, 1.0)
