@@ -4,14 +4,18 @@
  * 使い方:
  * 1. ブラウザのコンソール (F12) を開く
  * 2. 下記のコードを貼り付けて Enter
- * 3. calculateOptimalRatio(支出率, 年数) を呼び出す
- *    例: calculateOptimalRatio(0.04, 30) // 支出4%, 30年
+ * 3. calculateOptimalStrategy(支出率, 年数) を呼び出す
+ *    例: calculateOptimalStrategy(0.04, 30) // 支出4%, 30年
+ * 
+ * アップデート内容:
+ * - インフレ率 1.77% への対応
+ * - 60年シミュレーションデータに基づく近似式の刷新
  */
 
 function calculateOptimalStrategy(S, N, logCallback = console.log) {
   const r_base = 0.04;
   const tax = 0.20315;
-  const inflation = 0.02;
+  const inflation = 0.0177;
 
   // 実質利回り (税引後利回り - インフレ率)
   const r_eff = r_base * (1.0 - tax);
@@ -26,18 +30,25 @@ function calculateOptimalStrategy(S, N, logCallback = console.log) {
     n_ruin = Math.log(1.0 - delta / S) / (-delta);
   }
 
-  const n = N / 50.0;
-  const m = (N - n_ruin) / 50.0;
+  const n = N / 60.0;
+  const m = (N - n_ruin) / 60.0;
+
+  // ガード付きの対数関数
+  const safeLog = (val, epsilon = 0.0001) => Math.log(Math.max(val, epsilon));
 
   let ratio, prob;
   if (N <= n_ruin) {
     // Region 1: 資産寿命内
-    ratio = -0.8088 - 0.3832 * Math.log(n * S) + 0.1134 * (1 / n) - 0.2017 * Math.log(S) - 1.4146 * Math.exp(S);
+    // g_ratio(S, n) = -2.5020 +0.0022 * 1/(n*S) -0.5956 * log(n*S) +0.1921 * n^2 +0.0244 * 1/n
+    ratio = -2.5020 + 0.0022 * (1 / Math.max(n * S, 0.0001)) - 0.5956 * safeLog(n * S) + 0.1921 * (n * n) + 0.0244 * (1 / Math.max(n, 0.001));
     prob = 1.0;
   } else {
     // Region 2: 資産寿命超
-    ratio = +0.6431 + 0.1640 * Math.log(Math.max(m, 0.0001)) - 0.0194 * (1 / S) + 0.8301 * Math.exp(S) + 0.2235 * Math.sqrt(m);
-    prob = -0.2858 + 0.0218 * (1 / (n * S)) + 0.2369 * Math.log(n) - 0.0325 * Math.log(Math.max(m, 0.0001)) + 0.0035 * (n / S);
+    // h_ratio(S, m) = +0.7469 +0.2037 * log(m) -0.0205 * 1/S +0.8870 * exp(S) +0.4330 * S/n
+    ratio = +0.7469 + 0.2037 * safeLog(m) - 0.0205 * (1 / S) + 0.8870 * Math.exp(S) + 0.4330 * (S / Math.max(n, 0.001));
+    
+    // h_prob(S, m)  = +0.2839 +0.2765 * log(n*S) +0.0173 * 1/S +0.0199 * 1/(n*S) -0.0223 * log(m)
+    prob = +0.2839 + 0.2765 * safeLog(n * S) + 0.0173 * (1 / S) + 0.0199 * (1 / Math.max(n * S, 0.0001)) - 0.0223 * safeLog(m);
   }
 
   const clampedRatio = Math.max(0, Math.min(1, ratio));
@@ -45,7 +56,7 @@ function calculateOptimalStrategy(S, N, logCallback = console.log) {
 
   logCallback(`--- 最適戦略の計算結果 ---`);
   logCallback(`支出率: ${(S * 100).toFixed(2)}%`);
-  logCallback(`目標年数: ${N}年`);
+  logCallback(`目標寿命: ${N}年`);
   logCallback(`資産寿命 (無リスクのみ): ${n_ruin.toFixed(1)}年`);
   logCallback(`推奨オルカン比率: ${(clampedRatio * 100).toFixed(1)}%`);
   logCallback(`期待生存確率: ${(clampedProb * 100).toFixed(1)}%`);

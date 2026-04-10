@@ -18,14 +18,14 @@
 </head>
 <body>
     <h1>最適オルカン比率シミュレーター</h1>
-    <p>支出率と目標年数から、生存確率を最大化する「オルカン」と「無リスク資産（4%利回り）」の最適な配分比率を計算します。</p>
+    <p>支出率と目標寿命から、生存確率を最大化する「オルカン」と「無リスク資産（4%利回り）」の最適な配分比率を計算します。</p>
 
     <div class="input-group">
         <label for="spend_rate">年間支出率 (例: 0.04 = 4%)</label>
         <input type="number" id="spend_rate" step="0.001" value="0.04">
     </div>
     <div class="input-group">
-        <label for="years">目標経過年数 (例: 30)</label>
+        <label for="years">目標寿命 (例: 30)</label>
         <input type="number" id="years" step="1" value="30">
     </div>
     <button onclick="runSimulation()">計算する</button>
