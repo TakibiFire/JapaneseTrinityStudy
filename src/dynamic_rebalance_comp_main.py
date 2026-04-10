@@ -182,11 +182,18 @@ def main():
             dynamic_rebalance_fn=dynamic_fn
         )
 
+        # target_n 年分だけスライスして渡す
+        # 注意: monthly_asset_prices をそのまま渡すと、simulate_strategy 内で
+        # total_months が 50 年 (600ヶ月) と解釈されてしまい、
+        # ダイナミックリバランスの残り年数計算 (rem_years = (total_months - m) / 12) が
+        # 狂ってしまう (30年目標なのに 50年残っていると判定されて過剰にリスクを取る)。
+        # これを防ぐため、シミュレーション対象の target_n 年分だけをスライスして渡す。
+        sliced_prices = {k: v[:, :target_n * 12 + 1] for k, v in monthly_asset_prices.items()}
+
         # シミュレーション実行
-        res = simulate_strategy(strategy, monthly_asset_prices)
+        res = simulate_strategy(strategy, sliced_prices)
         
         # target_n 年時点での生存確率を計算
-        # 破産月が target_n * 12 未満であれば、そのパスは破産したとみなす
         bankrupt_count = (res.sustained_months < target_n * 12).sum()
         survival_rate = 1.0 - (bankrupt_count / n_sim)
 
