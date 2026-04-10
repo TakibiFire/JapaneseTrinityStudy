@@ -2,11 +2,13 @@
 このスクリプトは、data/withdrawal_rate_grid_comp.csv を読み込み、
 各支出率と各経過年数において生存確率を最大化するオルカン比率を特定し、
 表形式およびグラフ（SVG）で出力します。
+また、得られた近似式（Piecewise モデル）に基づく最適な比率の推移も可視化します。
 
 出力ファイル:
 - data/optimal_orukan_ratio.csv: 各条件での最適オルカン比率
 - data/max_survival_probability.csv: 各条件での最大生存確率
-- docs/imgs/dynamic_rebalance/optimal_orukan_ratio.svg: 最適比率の推移グラフ
+- docs/imgs/dynamic_rebalance/optimal_orukan_ratio.svg: 最適比率の推移グラフ (実測)
+- docs/imgs/dynamic_rebalance/fitted_optimal_orukan_ratio.svg: 最適比率の推移グラフ (近似式)
 
 近似式の計算手法:
 1. 資産寿命 N_ruin (無リスク資産のみの場合) を境界としてデータを2つのリージョンに分割。
@@ -111,38 +113,6 @@ def main():
   output_prob_csv = "data/max_survival_probability.csv"
   prob_df.to_csv(output_prob_csv)
   print(f"✅ {output_ratio_csv} および {output_prob_csv} に保存しました。")
-
-  # 可視化
-  plot_df = summary_df.reset_index().melt(id_vars="spend_ratio / year",
-                                          var_name="year",
-                                          value_name="optimal_ratio")
-  plot_df.columns = ["spend_ratio", "year", "optimal_ratio"]  # type: ignore
-  plot_df["year"] = plot_df["year"].astype(int)
-  # 支出率をパーセント表記の文字列に変換（凡例用）
-  plot_df["支出率"] = (plot_df["spend_ratio"] * 100).map(lambda x: f"{x:.2f}%")
-
-  chart = alt.Chart(plot_df).mark_line().encode(
-      x=alt.X("year:Q", title="目標寿命 (年)"),
-      y=alt.Y("optimal_ratio:Q",
-              title="最適オルカン比率",
-              scale=alt.Scale(domain=[0, 1])),
-      color=alt.Color("支出率:N",
-                      sort=alt.SortField("spend_ratio", order="ascending"),
-                      scale=alt.Scale(scheme='category10')),
-      tooltip=[
-          alt.Tooltip("支出率:N"),
-          alt.Tooltip("year:Q", title="目標寿命 (年)"),
-          alt.Tooltip("optimal_ratio:Q", title="最適比率", format=".2f")
-      ]).properties(title="支出率別の最適オルカン比率の推移 (60年)",
-                    width=600,
-                    height=400)
-
-  img_dir = "docs/imgs/dynamic_rebalance"
-  os.makedirs(img_dir, exist_ok=True)
-  chart_file = os.path.join(img_dir, "optimal_orukan_ratio.svg")
-  chart.save(chart_file)
-  print(f"✅ {chart_file} に保存しました。")
-  print("\n")
 
   # --- 資産寿命（無リスク資産のみ）の計算 ---
   def get_ruin_year(S: float) -> float:
@@ -342,7 +312,73 @@ def main():
   print(f"g_prob(S, n)  = {format_formula(feat_prob_before, w_prob_before)}")
   print(f"h_prob(S, m)  = {format_formula(feat_prob_after, w_prob_after)}")
 
-  # サンプル比較
+  # --- 可視化 (実測値 vs 近似式) ---
+  img_dir = "docs/imgs/dynamic_rebalance"
+  os.makedirs(img_dir, exist_ok=True)
+
+  # 1. 実測値のグラフ
+  plot_df_raw = summary_df.reset_index().melt(id_vars="spend_ratio / year",
+                                              var_name="year",
+                                              value_name="optimal_ratio")
+  plot_df_raw.columns = ["spend_ratio", "year", "optimal_ratio"]  # type: ignore
+  plot_df_raw["year"] = plot_df_raw["year"].astype(int)
+  plot_df_raw["支出率"] = (plot_df_raw["spend_ratio"] * 100).map(
+      lambda x: f"{x:.2f}%")
+
+  chart_raw = alt.Chart(plot_df_raw).mark_line().encode(
+      x=alt.X("year:Q", title="目標寿命 (年)"),
+      y=alt.Y("optimal_ratio:Q",
+              title="最適オルカン比率",
+              scale=alt.Scale(domain=[0, 1])),
+      color=alt.Color("支出率:N",
+                      sort=alt.SortField("spend_ratio", order="ascending"),
+                      scale=alt.Scale(scheme='category10')),
+      tooltip=[
+          alt.Tooltip("支出率:N"),
+          alt.Tooltip("year:Q", title="目標寿命 (年)"),
+          alt.Tooltip("optimal_ratio:Q", title="最適比率", format=".2f")
+      ]).properties(title="支出率別の最適オルカン比率の推移 (実測)",
+                    width=600,
+                    height=400)
+
+  chart_file_raw = os.path.join(img_dir, "optimal_orukan_ratio.svg")
+  chart_raw.save(chart_file_raw)
+  print(f"✅ {chart_file_raw} に保存しました。")
+
+  # 2. 近似式のグラフ
+  fitted_rows = []
+  for S in spend_ratios:
+    for y in range(1, 61):
+      fitted_rows.append({
+          "spend_ratio": S,
+          "year": y,
+          "optimal_ratio": predict_ratio(S, float(y))
+      })
+  plot_df_fitted = pd.DataFrame(fitted_rows)
+  plot_df_fitted["支出率"] = (plot_df_fitted["spend_ratio"] * 100).map(
+      lambda x: f"{x:.2f}%")
+
+  chart_fitted = alt.Chart(plot_df_fitted).mark_line().encode(
+      x=alt.X("year:Q", title="目標寿命 (年)"),
+      y=alt.Y("optimal_ratio:Q",
+              title="最適オルカン比率 (近似式)",
+              scale=alt.Scale(domain=[0, 1])),
+      color=alt.Color("支出率:N",
+                      sort=alt.SortField("spend_ratio", order="ascending"),
+                      scale=alt.Scale(scheme='category10')),
+      tooltip=[
+          alt.Tooltip("支出率:N"),
+          alt.Tooltip("year:Q", title="目標寿命 (年)"),
+          alt.Tooltip("optimal_ratio:Q", title="最適比率 (近似)", format=".2f")
+      ]).properties(title="近似式による最適オルカン比率の推移 (60年)",
+                    width=600,
+                    height=400)
+
+  chart_file_fitted = os.path.join(img_dir, "fitted_optimal_orukan_ratio.svg")
+  chart_fitted.save(chart_file_fitted)
+  print(f"✅ {chart_file_fitted} に保存しました。")
+
+  # サンプル比較 (STDOUT)
   print("\n--- サンプル比較 (実測値 vs 予測値) ---")
   sample_points = [(0.02, 50), (0.03, 30), (0.04, 15), (0.05, 30),
                    (0.066667, 20)]
@@ -353,7 +389,6 @@ def main():
   for S_val, N_val in sample_points:
     if S_val not in summary_df.index:
       continue
-    # Use .at for performance and precision
     r_act = summary_df.at[S_val, str(N_val)]
     r_pre = predict_ratio(S_val, float(N_val))
     p_act = prob_df.at[S_val, str(N_val)]
