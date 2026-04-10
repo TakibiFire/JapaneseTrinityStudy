@@ -177,7 +177,7 @@ def main():
   def solve_piece(
       points: List[Tuple[float, float, float]],
       name: str,
-      num_terms: int = 4,
+      num_terms: int = 5,
       weights: Optional[np.ndarray] = None) -> Tuple[List[str], np.ndarray]:
     if not points:
       return [], np.zeros(0)

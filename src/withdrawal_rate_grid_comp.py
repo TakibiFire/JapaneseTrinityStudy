@@ -71,6 +71,11 @@ def main():
   zero_risk_asset = ZeroRiskAsset(name=zero_risk_asset_name, yield_rate=zero_risk_yield)
 
   spending_rates = [
+      (0.3333333, "33.3% (x3)"),
+      (0.25, "25% (x4)"),
+      (0.20, "20% (x5)"),
+      (0.15, "15% (x6.7)"),
+      (0.10, "10% (x10)"),
       (0.0666666, "6.67% (x15)"),
       (0.05, "5% (x20)"),
       (0.04, "4% (x25)"),
