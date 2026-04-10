@@ -1193,3 +1193,58 @@ $ python3 analyze_dynamic_rebalance_main.py
 このように、状況に応じてリスク資産の比率を適切に増減させることができるため、固定比率では枯渇してしまうような過酷な長期戦において、ダイナミックリバランスは強力な生存戦略となるのです。
 
 ## まとめ
+
+
+カバーするか迷うテーマ。 <details><summary> に入れる？
+
+We enountered an interesting case where the dynamic rebalance loses against the fixed strategy as follows:
+
+Based on the debug logs for path 132:
+The dynamic strategy is correctly responding to the net worth fluctuations.
+For example, at month 300 (5 years remaining), the net worth drops to 2566, and the spending rate (
+S
+S) rises to 21.5%. The dynamic logic detects this is no longer sustainable with low risk and flips to 100% equity (target_ratio=1.0000) to maximize the "prayer" survival probability.
+In this specific path, the stock market doesn't recover enough to save it, leading to bankruptcy at month 348.
+Conversely, the fixed strategy stays at ~9.7% equity regardless of the drop. In this specific path, that very conservative allocation happened to preserve just enough cash to survive until month 360, while the dynamic strategy's bet on equity wiped it out.
+
+Essentially, the dynamic strategy is working as intended—it's shifting to "aggressive recovery mode" when survival with conservative assets becomes impossible. While it might lose to a fixed strategy on specific paths where stocks underperform, across the majority of paths it should be superior.
+
+---
+
+The reason fixed survived while dynamic failed is exactly because of the equity portion in dynamic going to 100%.
+When the remaining balance is just enough to cover the expenses for the last 5 years with the 4% yield from cash, putting it all in the stock market exposes it to volatility. In this specific path, the market likely dropped significantly in the final years, wiping out the balance before the 360 months were up. The fixed strategy stayed 90% in cash, which provided a stable 4% yield, allowing it to slowly drain the balance at a predictable rate, exactly squeaking past month 360.
+The dynamic strategy, seeing S=21.5%, uses its piecewise approximation model. Since the model is fitted across all paths, it predicts that a 100% equity allocation gives a mathematically higher average chance of survival in this dire scenario, even if it fails in this specific path.
+
+-->
+
+<!--
+We generated docs/data/dynamic_rebalance/summary.md by src/analyze_dynamic_rebalance_main.py.
+
+We can *link* to docs/data/dynamic_rebalance/summary.md to say if you want to see the full result, click this. We do not import them into this page because the table is huge.
+
+However, we will summarize the findings here.
+
+--- The old summary is as follows:
+
+例えば 3.33%ルール (= 資産が出費の30倍)の人が50年後の生存確率を上げたい時、ずっとオルカンの比率を固定 (この場合最適比率は80%:20%になります) にした時の生存確率は52.5%ですが、ダイナミックリバランスをした時は65.8%まで上がります。
+
+表の緑色のセルは、最適だったリバランス戦略です。
+
+全部を見たい方は [Spreadsheet](https://docs.google.com/spreadsheets/d/1L-OzwAyeaFS1uQ-pt-KMLiLmFjXj4R4gzbapUjDI_1g/edit?gid=393011977#gid=393011977) にあります。
+
+このシミュレーション結果からわかることとしては
+
+* (110-年齢)の法則は「初年度の最適の割合をキープし続ける」よりも悪い結果
+* 「初年度の最適の割合をキープし続ける」は、そもそもそれで100%生存できる時は強い
+* 「初年度の最適の割合をキープし続ける」が100%生存できないような長期の生存確率を目標とする時は「ダイナミックリバランス」が強い
+
+この「長期の生存確率を目標とする時はダイナミックリバランスが強い」という結果は、先ほど解説した **「資産寿命（無リスク資産のみを取り崩した場合に資産が底をつく年数）」** の概念と深く結びついています。
+
+目標年数が資産寿命より短い場合（例えば、支出率4%のときの約30年以内）、無リスク資産を中心に手堅く守り、運用初期の暴落さえ回避できれば高確率で逃げ切れます。そのため、初年度に決めた「安全重視の固定比率」をそのままキープし続ける戦略が非常に安定します。
+
+しかし、目標年数が資産寿命を大きく超える超長期（例えば40年、50年）になると状況は一変します。無リスク資産だけではいずれ確実に資産が枯渇してしまうため、生き残るには株式（オルカン）の高い成長力に頼ってリターンを稼ぐしかありません。
+もし「固定比率」のまま運用していると、資産が減って危機的な状況になっても、一定割合の無リスク資産（＝成長しない資産）を維持し続けてしまい、そのまま緩やかに枯渇へ向かってしまいます。
+
+一方、「ダイナミックリバランス」は毎年の残り年数と資産状況（現在の支出割合）を再評価します。資産が目減りして残りの期間を生き抜くのが厳しくなった（＝残りの目標年数が資産寿命を超えそうになった）と判断すれば、株式の比率を上げてリターンを取りに行く戦略へと自動的に変更します。逆に、資産が十分に増えて逃げ切れる見込みが立てば、無リスク資産の比率を上げてリスクを抑えます。
+
+このように、状況に応じてリスク資産の比率を適切に増減させることができるため、固定比率では枯渇してしまうような過酷な長期戦において、ダイナミックリバランスは強力な生存戦略となるのです。
