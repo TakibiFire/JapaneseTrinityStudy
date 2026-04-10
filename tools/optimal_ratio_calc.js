@@ -10,6 +10,7 @@
  * アップデート内容:
  * - インフレ率 1.77% への対応
  * - 60年シミュレーションデータに基づく近似式の刷新
+ * - N_ruin 付近の精度を向上させるための重み付きフィッティングを採用
  */
 
 function calculateOptimalStrategy(S, N, logCallback = console.log) {
@@ -39,16 +40,18 @@ function calculateOptimalStrategy(S, N, logCallback = console.log) {
   let ratio, prob;
   if (N <= n_ruin) {
     // Region 1: 資産寿命内
-    // g_ratio(S, n) = -2.5020 +0.0022 * 1/(n*S) -0.5956 * log(n*S) +0.1921 * n^2 +0.0244 * 1/n
-    ratio = -2.5020 + 0.0022 * (1 / Math.max(n * S, 0.0001)) - 0.5956 * safeLog(n * S) + 0.1921 * (n * n) + 0.0244 * (1 / Math.max(n, 0.001));
-    prob = 1.0;
+    // g_ratio(S, n) = -0.8634 -0.7437 * log(n*S) +0.2169 * n^2 +0.0505 * 1/n -2.1119 * exp(S)
+    ratio = -0.8634 - 0.7437 * safeLog(n * S) + 0.2169 * (n * n) + 0.0505 * (1 / Math.max(n, 0.001)) - 2.1119 * Math.exp(S);
+    
+    // g_prob(S, n)  = -0.0004 +0.0178 * 1/(n*S) -0.0006 * log(S) +0.0017 * exp(n) +0.0089 * n/S
+    prob = -0.0004 + 0.0178 * (1 / Math.max(n * S, 0.0001)) - 0.0006 * safeLog(S) + 0.0017 * Math.exp(n) + 0.0089 * (n / S);
   } else {
     // Region 2: 資産寿命超
-    // h_ratio(S, m) = +0.7469 +0.2037 * log(m) -0.0205 * 1/S +0.8870 * exp(S) +0.4330 * S/n
-    ratio = +0.7469 + 0.2037 * safeLog(m) - 0.0205 * (1 / S) + 0.8870 * Math.exp(S) + 0.4330 * (S / Math.max(n, 0.001));
+    // h_ratio(S, m) = -0.1543 +0.1227 * log(m) +0.6476 * log(S) -0.0538 * 1/(n*S) -1.4565 * log(n*S)
+    ratio = -0.1543 + 0.1227 * safeLog(m) + 0.6476 * safeLog(S) - 0.0538 * (1 / Math.max(n * S, 0.0001)) - 1.4565 * safeLog(n * S);
     
-    // h_prob(S, m)  = +0.2839 +0.2765 * log(n*S) +0.0173 * 1/S +0.0199 * 1/(n*S) -0.0223 * log(m)
-    prob = +0.2839 + 0.2765 * safeLog(n * S) + 0.0173 * (1 / S) + 0.0199 * (1 / Math.max(n * S, 0.0001)) - 0.0223 * safeLog(m);
+    // h_prob(S, m)  = -0.8682 -0.2673 * sqrt(m) -0.3769 * log(S) +0.0003 * 1/m +0.0074 * 1/(n*S)
+    prob = -0.8682 - 0.2673 * Math.sqrt(Math.max(m, 0)) - 0.3769 * safeLog(S) + 0.0003 * (1 / Math.max(m, 0.001)) + 0.0074 * (1 / Math.max(n * S, 0.0001));
   }
 
   const clampedRatio = Math.max(0, Math.min(1, ratio));
