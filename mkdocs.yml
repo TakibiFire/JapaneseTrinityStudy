@@ -112,3 +112,4 @@ nav:
     - 無リスク資産保有の効果: zero_risk.md
     - 無リスク資産リバランスの効果: zero_risk_rebalance.md
     - ダイナミックリバランス戦略: dynamic_rebalance.md
+    - ダイナミック・スペンディング（動的支出）: dynamic_spending.md
