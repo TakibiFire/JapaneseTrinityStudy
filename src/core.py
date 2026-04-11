@@ -55,8 +55,12 @@ class Strategy:
   tax_rate: float = 0.20315
   rebalance_interval: int = 0
   dynamic_rebalance_fn: Optional[DynamicRebalanceFn] = None
+  record_annual_spend: bool = False
 
   def __post_init__(self):
+    if isinstance(self.annual_cost, DynamicSpending) and self.inflation_rate and self.inflation_rate != 0.0:
+      raise ValueError("inflation_rate must be 0.0 or None when using DynamicSpending, as it handles limits nominally.")
+
     valid_names = set()
     for key in self.initial_asset_ratio.keys():
       if isinstance(key, ZeroRiskAsset):
@@ -82,6 +86,7 @@ class SimulationResult:
   """
   net_values: np.ndarray  # shape: (n_sim,)
   sustained_months: np.ndarray  # shape: (n_sim,)
+  annual_spends: Optional[np.ndarray] = None  # shape: (n_sim, n_years)
 
 
 # ---------------------------------------------------------------------------
@@ -162,6 +167,12 @@ def simulate_strategy(
     annual_spending.fill(total_capital * strategy.annual_cost.target_ratio)
   prev_annual_spending = np.zeros(n_sim, dtype=np.float64)
 
+  # 年次支出の記録用
+  annual_spends_record: Optional[np.ndarray] = None
+  if strategy.record_annual_spend:
+    n_years = (total_months + 11) // 12
+    annual_spends_record = np.zeros((n_sim, n_years), dtype=np.float64)
+
   # 月次ループ
   for m in range(total_months):
     active_paths = ~bankrupt
@@ -203,10 +214,21 @@ def simulate_strategy(
                                                 ceiling[active_paths])
 
       cost_m = annual_spending / 12.0
+      if m % 12 == 0 and annual_spends_record is not None:
+        annual_spends_record[:, m // 12] = annual_spending
+        annual_spends_record[bankrupt, m // 12] = 0.0
     elif isinstance(strategy.annual_cost, list):
-      cost_m = np.full(n_sim, (strategy.annual_cost[m // 12] / 12.0) * cpi_multiplier, dtype=np.float64)
+      full_cost = (strategy.annual_cost[m // 12]) * cpi_multiplier
+      cost_m = np.full(n_sim, full_cost / 12.0, dtype=np.float64)
+      if m % 12 == 0 and annual_spends_record is not None:
+        annual_spends_record[:, m // 12] = full_cost
+        annual_spends_record[bankrupt, m // 12] = 0.0
     else:
-      cost_m = np.full(n_sim, (strategy.annual_cost / 12.0) * cpi_multiplier, dtype=np.float64)
+      full_cost = strategy.annual_cost * cpi_multiplier
+      cost_m = np.full(n_sim, full_cost / 12.0, dtype=np.float64)
+      if m % 12 == 0 and annual_spends_record is not None:
+        annual_spends_record[:, m // 12] = full_cost
+        annual_spends_record[bankrupt, m // 12] = 0.0
 
     # 3. 現金需要 (支出 + 利息 + 前年分の税金)
     interest = strategy.initial_loan * (strategy.yearly_loan_interest / 12.0)
@@ -332,4 +354,5 @@ def simulate_strategy(
       net_values[survivors] = total_val[survivors] - strategy.initial_loan
 
   return SimulationResult(net_values=net_values,
-                          sustained_months=sustained_months)
+                          sustained_months=sustained_months,
+                          annual_spends=annual_spends_record)
