@@ -56,8 +56,12 @@ class Strategy:
   rebalance_interval: int = 0
   dynamic_rebalance_fn: Optional[DynamicRebalanceFn] = None
   record_annual_spend: bool = False
+  extra_cashflow_sources: List[str] = dataclasses.field(default_factory=list)
 
   def __post_init__(self):
+    if len(self.extra_cashflow_sources) != len(set(self.extra_cashflow_sources)):
+      raise ValueError("extra_cashflow_sources contains duplicated names.")
+
     if isinstance(self.annual_cost, DynamicSpending) and self.inflation_rate and self.inflation_rate != 0.0:
       raise ValueError("inflation_rate must be 0.0 or None when using DynamicSpending, as it handles limits nominally.")
 
@@ -97,6 +101,7 @@ class SimulationResult:
 def simulate_strategy(
     strategy: Strategy,
     monthly_asset_prices: Dict[str, np.ndarray],
+    monthly_cashflows: Optional[Dict[str, np.ndarray]] = None,
     fallback_n_sim: int = 1000,
     fallback_total_months: int = 600) -> SimulationResult:
   """
@@ -105,6 +110,7 @@ def simulate_strategy(
   Args:
     strategy: 戦略設定
     monthly_asset_prices: アセット生成エンジンが作成した月次価格の辞書
+    monthly_cashflows: cashflow_generatorが生成した追加の月次キャッシュフローの辞書
     fallback_n_sim: 価格推移辞書が空だった場合に使用するパス数
     fallback_total_months: 価格推移辞書が空だった場合に使用する月数
   """
@@ -173,6 +179,24 @@ def simulate_strategy(
     n_years = (total_months + 11) // 12
     annual_spends_record = np.zeros((n_sim, n_years), dtype=np.float64)
 
+  # === 追加キャッシュフローの事前計算 ===
+  total_extra_cf: Optional[np.ndarray] = None
+  if strategy.extra_cashflow_sources and monthly_cashflows:
+    for source in strategy.extra_cashflow_sources:
+      if source not in monthly_cashflows:
+        raise ValueError(f"Cashflow source '{source}' not found in monthly_cashflows.")
+      cf = monthly_cashflows[source]
+      if cf.shape != (total_months,) and cf.shape != (n_sim, total_months):
+        raise ValueError(f"Cashflow source '{source}' has invalid shape {cf.shape}. Expected ({total_months},) or ({n_sim}, {total_months}).")
+
+      if total_extra_cf is None:
+        if cf.ndim == 1:
+          total_extra_cf = np.broadcast_to(cf, (n_sim, total_months)).copy()
+        else:
+          total_extra_cf = cf.copy()
+      else:
+        total_extra_cf += cf
+
   # 月次ループ
   for m in range(total_months):
     active_paths = ~bankrupt
@@ -236,9 +260,15 @@ def simulate_strategy(
     required_cash[active_paths] = cost_m[active_paths]
     required_cash[active_paths] += interest
 
+    # 前年分の税金の支払い
     if m > 0 and m % 12 == 0:
       required_cash[active_paths] += tax_to_pay[active_paths]
       tax_to_pay.fill(0.0)
+
+    # 追加のキャッシュフロー（年金、死亡時収入など）を反映
+    # 正の値は収入（現金需要を減らす）、負の値は支出（現金需要を増やす）
+    if total_extra_cf is not None:
+      required_cash[active_paths] -= total_extra_cf[active_paths, m]
 
     cash[active_paths] -= required_cash[active_paths]
 

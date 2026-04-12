@@ -595,3 +595,156 @@ def test_simulate_strategy_missing_cpi():
       ValueError,
       match="CPI path 'MissingCPI' not found in monthly_asset_prices."):
     simulate_strategy(strategy, {"Stock": np.ones((1, 2))})
+
+
+def test_simulate_strategy_extra_cashflow():
+  """
+  追加のキャッシュフロー（年金収入、一時的支出）が正しく反映されるかを検証する。
+  """
+  n_sim = 1
+  total_months = 12
+
+  prices = {"AssetA": np.ones((n_sim, total_months + 1))}
+
+  # 毎月10.0の支出
+  # 追加キャッシュフロー:
+  # month=0: +20.0 (収入) -> 余った10.0が現金プールに追加される
+  # month=1: -50.0 (支出) -> 10(定常支出) + 50(一時支出) = 60必要。前月の余り10を使っても50足りないので、50口売却される
+
+  extra_cf = np.zeros(total_months)
+  extra_cf[0] = 20.0
+  extra_cf[1] = -50.0
+
+  monthly_cashflows = {"MyCashflow": extra_cf}
+
+  strategy = Strategy(
+      name="ExtraCashflowTest",
+      initial_money=100.0,
+      initial_loan=0.0,
+      yearly_loan_interest=0.0,
+      initial_asset_ratio={"AssetA": 1.0},
+      annual_cost=120.0,  # 月10.0
+      inflation_rate=None,
+      selling_priority=["AssetA"],
+      extra_cashflow_sources=["MyCashflow"])
+
+  res = simulate_strategy(strategy, prices, monthly_cashflows=monthly_cashflows)
+
+  # 初期状態:
+  # AssetA: 100口 (評価額100)
+  # Cash: 0
+
+  # Month 0:
+  # 定常支出 = 10
+  # 追加CF = +20
+  # 必要な現金 = 10 - 20 = -10 (10の余裕ができる)
+  # Cash = 0 - (-10) = +10
+  # 売却なし。AssetA = 100口
+
+  # Month 1:
+  # 定常支出 = 10
+  # 追加CF = -50
+  # 必要な現金 = 10 - (-50) = 60
+  # Cash = 10 - 60 = -50 (50足りない)
+  # 売却 = 50口 (価格1.0)
+  # Cash = 0
+  # AssetA = 50口
+
+  # Month 2~11 (残り10ヶ月):
+  # 毎月10の取り崩し -> 合計100口売却必要だが、AssetAは50口しかないので途中で破産する。
+
+  # 確認: どこで破産するか？
+  # Month 2: 40口残る
+  # Month 3: 30口残る
+  # Month 4: 20口残る
+  # Month 5: 10口残る
+  # Month 6: 0口残る
+  # Month 7: 資産がマイナスになり破産
+
+  assert res.sustained_months[0] == 7
+
+
+def test_extra_cashflow_validation():
+  """追加キャッシュフロー関連の入力チェック"""
+  
+  # 重複エラー
+  with pytest.raises(ValueError, match="extra_cashflow_sources contains duplicated names."):
+    Strategy(name="DupTest",
+             initial_money=100.0,
+             initial_loan=0.0,
+             yearly_loan_interest=0.0,
+             initial_asset_ratio={"A": 1.0},
+             annual_cost=0.0,
+             inflation_rate=None,
+             selling_priority=["A"],
+             extra_cashflow_sources=["CF1", "CF1"])
+
+  strategy = Strategy(name="ShapeTest",
+                      initial_money=100.0,
+                      initial_loan=0.0,
+                      yearly_loan_interest=0.0,
+                      initial_asset_ratio={"A": 1.0},
+                      annual_cost=0.0,
+                      inflation_rate=None,
+                      selling_priority=["A"],
+                      extra_cashflow_sources=["CF1"])
+                      
+  prices = {"A": np.ones((2, 13))}  # n_sim=2, total_months=12
+  
+  # 存在しないキャッシュフロー名
+  with pytest.raises(ValueError, match="Cashflow source 'CF1' not found in monthly_cashflows."):
+    simulate_strategy(strategy, prices, monthly_cashflows={"CF2": np.zeros(12)})
+    
+  # shapeが異なる(長さが合わない)
+  with pytest.raises(ValueError, match="Cashflow source 'CF1' has invalid shape"):
+    simulate_strategy(strategy, prices, monthly_cashflows={"CF1": np.zeros(10)})
+    
+  # shapeが異なる(n_simが合わない)
+  with pytest.raises(ValueError, match="Cashflow source 'CF1' has invalid shape"):
+    simulate_strategy(strategy, prices, monthly_cashflows={"CF1": np.zeros((3, 12))})
+
+
+def test_simulate_strategy_large_income_and_spend():
+  """大きな収入でキャッシュプールが増え、大きな支出で正しく資産が売却されることを検証"""
+  n_sim = 1
+  total_months = 12
+
+  prices = {"AssetA": np.ones((n_sim, total_months + 1))}
+  prices["AssetA"][:, :] = 1.0  # 価格は1.0固定
+  
+  extra_cf = np.zeros(total_months)
+  extra_cf[0] = 1000.0   # 月0: 1000の巨大収入
+  extra_cf[2] = -500.0   # 月2: 500の巨大支出
+  
+  monthly_cashflows = {"BigCF": extra_cf}
+
+  strategy = Strategy(name="LargeCFTest",
+                      initial_money=100.0,
+                      initial_loan=0.0,
+                      yearly_loan_interest=0.0,
+                      initial_asset_ratio={"AssetA": 1.0},
+                      annual_cost=12.0,  # 月1.0の取り崩し
+                      inflation_rate=None,
+                      selling_priority=["AssetA"],
+                      extra_cashflow_sources=["BigCF"])
+
+  res = simulate_strategy(strategy, prices, monthly_cashflows=monthly_cashflows)
+  
+  # 初期状態: AssetA=100口, Cash=0
+  
+  # 月0: 支出1.0, 収入1000.0 -> Cash = 0 - 1.0 + 1000.0 = +999.0
+  # AssetA売却なし = 100口
+  
+  # 月1: 支出1.0 -> Cash = 999.0 - 1.0 = +998.0
+  # AssetA売却なし = 100口
+  
+  # 月2: 支出1.0, 支出500.0 -> Cash = 998.0 - 1.0 - 500.0 = +497.0
+  # AssetA売却なし = 100口
+  
+  # その後、月3〜11(残り9ヶ月)は毎月1.0の支出
+  # 最終的なCash = 497.0 - 9.0 = 488.0
+  # 最終的なAssetA = 100.0
+  # 最終的な純資産 = 488.0 + 100.0 = 588.0
+  
+  assert np.allclose(res.net_values, 588.0)
+  assert np.all(res.sustained_months == 12)  # 破産していない
