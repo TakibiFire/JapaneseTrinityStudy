@@ -45,7 +45,7 @@ def create_heatmap(df: pd.DataFrame, initial_age: int, target_age: int, output_p
     
     mapping = {
         "A": "A:制度なし",
-        "B": "B:Sanity",
+        "B": "B:受給しない",
         "C": "C:60歳受給",
         "D": "D:65歳受給",
         "E": "E:免除-60",
