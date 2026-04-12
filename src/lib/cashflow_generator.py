@@ -40,24 +40,30 @@ class PensionConfig(CashflowConfig):
                name: str,
                amount: float,
                start_month: int,
+               end_month: Optional[int] = None,
                cpi_name: Optional[str] = None):
     """
     Args:
       name: このキャッシュフローの名前（後で Strategy で指定するキーとなる）
       amount: 毎月発生する一定の金額（万円など、全体の単位に合わせる）。正の値は収入、負の値は支出。
       start_month: 金額が発生し始める月（0始まり）。例えば 240 を指定すると、20年目から発生する。
+      end_month: (オプション) 金額が発生しなくなる月（0始まり）。指定した月以降は発生しない。
       cpi_name: (オプション) 物価連動させるための CPI パスの名前。
     """
     super().__init__(name)
     self.amount = amount
     self.start_month = start_month
+    self.end_month = end_month
     self.cpi_name = cpi_name
 
   def generate(self, n_sim: int, n_months: int,
                monthly_prices: Dict[str, np.ndarray]) -> np.ndarray:
     cf = np.zeros(n_months, dtype=np.float64)
-    if self.start_month < n_months:
-      cf[self.start_month:] = self.amount
+    start = max(0, self.start_month)
+    end = min(n_months, self.end_month) if self.end_month is not None else n_months
+    
+    if start < end:
+      cf[start:end] = self.amount
 
     if self.cpi_name:
       if self.cpi_name not in monthly_prices:

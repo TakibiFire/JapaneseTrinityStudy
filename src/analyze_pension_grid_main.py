@@ -39,43 +39,54 @@ def create_heatmap(df: pd.DataFrame, initial_age: int, target_age: int, output_p
   plot_df = df[df["initial_age"] == initial_age].copy()
 
   def get_x_label(row):
-    p = row['initial_pension_nominal']
-    s = row['pension_start_age']
-    if p == 0:
-      return "年金なし"
-    label = f"{p}万"
-    if s == 60:
-      label += "繰り上げ"
+    scenario = row['scenario']
+    amount_monthly = row['initial_pension_nominal_annual'] / 12.0
+    amount_str = f" ({amount_monthly:.1f}万/月)"
+    
+    mapping = {
+        "A": "A:制度なし",
+        "B": "B:Sanity",
+        "C": "C:60歳受給",
+        "D": "D:65歳受給",
+        "E": "E:免除-60",
+        "F": "F:免除-65",
+        "G": "G:未納-65"
+    }
+    label = mapping.get(scenario, scenario)
+    if scenario not in ["A", "B"]:
+      label += amount_str
     return label
 
   def get_y_label(row):
     return f"({int(row['initial_money'])}, {int(row['initial_annual_cost'])})"
 
-  plot_df["pension_type"] = plot_df.apply(get_x_label, axis=1)
+  plot_df["scenario_label"] = plot_df.apply(get_x_label, axis=1)
   plot_df["asset_cost"] = plot_df.apply(get_y_label, axis=1)
   plot_df["survival_rate"] = plot_df[str(target_year)]
   plot_df["survival_rate_pct"] = plot_df["survival_rate"] * 100
 
-  # 重複の削除 (年金なしの場合は pension_start_age によらず同じ値になるため)
-  plot_df = plot_df.drop_duplicates(subset=["asset_cost", "pension_type"])
-
-  # X軸の順序定義
-  x_order = ["年金なし", "5.6万繰り上げ", "5.6万", "14.4万繰り上げ", "14.4万"]
+  # X軸の順序定義 (ラベルが動的なので、scenario でソートした後のラベルのリストを取得する)
+  scenario_order = ["A", "B", "C", "D", "E", "F", "G"]
+  x_order = []
+  for s in scenario_order:
+    matched = plot_df[plot_df["scenario"] == s]["scenario_label"].unique()
+    if len(matched) > 0:
+      x_order.append(matched[0])
   # Y軸の順序定義 (降順)
   y_order = ["(20000, 800)", "(10000, 400)", "(5000, 200)"]
 
   base = alt.Chart(plot_df).encode(
-      x=alt.X('pension_type:O',
-              title='年金設定',
+      x=alt.X('scenario_label:O',
+              title='シナリオ',
               sort=x_order,
-              axis=alt.Axis(labelAngle=-90)),
+              axis=alt.Axis(labelAngle=-45)),
       y=alt.Y('asset_cost:O',
               title='(初期資産, 年間支出)',
               sort=y_order),
   )
 
   # ヒートマップ部分
-  heatmap = base.mark_rect().encode(
+  heatmap = base.mark_rect(lineBreak=r'\n').encode(
       color=alt.Color('survival_rate:Q',
                       title='生存確率',
                       scale=alt.Scale(scheme='redyellowgreen', domain=[0, 1]))
@@ -99,7 +110,7 @@ def create_heatmap(df: pd.DataFrame, initial_age: int, target_age: int, output_p
 
   # STDOUTにヒートマップの値を出力
   print(f"\n--- {initial_age}歳開始 - {target_age}歳時点の生存確率 (%) ---")
-  pivot_df = plot_df.pivot(index="asset_cost", columns="pension_type", values="survival_rate_pct")
+  pivot_df = plot_df.pivot(index="asset_cost", columns="scenario_label", values="survival_rate_pct")
   pivot_df = pivot_df.reindex(index=y_order, columns=x_order)
   print(pivot_df.to_string())
 

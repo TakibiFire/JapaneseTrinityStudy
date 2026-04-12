@@ -345,6 +345,7 @@ class SlideAdjustedCpiAsset:
   name: str
   base_cpi: str
   slide_rate: float  # 年率の調整率（例: 0.005）
+  slide_end_month: Optional[int] = None  # スライド調整が終了する月（0始まり、Noneなら永続）
 
 
 AssetConfigType = Union[Asset, DerivedAsset, ForexAsset, CpiAsset,
@@ -465,8 +466,16 @@ def generate_monthly_asset_prices(configs: Sequence[AssetConfigType],
     elif isinstance(config, SlideAdjustedCpiAsset):
       base_ret = returns[config.base_cpi]
       monthly_slide = config.slide_rate / 12.0
+      
       # マクロ経済スライドの適用: max(0, base_ret - monthly_slide)
-      returns[config.name] = np.maximum(0.0, base_ret - monthly_slide)
+      if config.slide_end_month is not None:
+        # スライド終了月以降は調整なし (0.0)
+        slide_mask = np.zeros(n_months)
+        end_idx = min(config.slide_end_month, n_months)
+        slide_mask[:end_idx] = monthly_slide
+        returns[config.name] = np.maximum(0.0, base_ret - slide_mask)
+      else:
+        returns[config.name] = np.maximum(0.0, base_ret - monthly_slide)
 
     # 2. 月次価格推移の計算 (コスト控除、レバレッジ、為替の適用)
     if isinstance(config, (ForexAsset, CpiAsset, SlideAdjustedCpiAsset)):
