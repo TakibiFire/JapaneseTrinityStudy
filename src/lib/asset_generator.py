@@ -122,7 +122,7 @@ class YearlySimpleNormal(Distribution):
   def generate(self, shape: Tuple[int, int], seed: int) -> np.ndarray:
     rng = np.random.default_rng(seed)
     # 月次への変換: 12ヶ月複利で (1 + mu) になるように逆算
-    monthly_mu = (1.0 + self.mu) ** (1.0 / 12.0) - 1.0
+    monthly_mu = (1.0 + self.mu)**(1.0 / 12.0) - 1.0
     monthly_sigma = self.sigma / np.sqrt(12.0)
     return rng.normal(monthly_mu, monthly_sigma, size=shape)
 
@@ -329,9 +329,29 @@ class CpiAsset:
   dist: Distribution
 
 
-def generate_monthly_asset_prices(configs: Sequence[Union[AssetConfig,
-                                                          ForexAsset,
-                                                          CpiAsset]],
+@dataclasses.dataclass
+class SlideAdjustedCpiAsset:
+  """
+  マクロ経済スライドによる調整をシミュレーションするためのCPI資産。
+  ベースとなるCPIに対して、増加分を一定率(slide_rate)抑制しつつ、
+  名目額が前月を下回らない（名目下限措置）ように調整される。
+
+  計算式:
+  月次調整リターン = max(0, ベースCPIの月次リターン - (年率調整率 / 12))
+  
+  これにより、インフレ時には年金の上昇が抑制され（実質価値の目減り）、
+  デフレ時でも名目額が維持される挙動を再現します。
+  """
+  name: str
+  base_cpi: str
+  slide_rate: float  # 年率の調整率（例: 0.005）
+
+
+AssetConfigType = Union[Asset, DerivedAsset, ForexAsset, CpiAsset,
+                        SlideAdjustedCpiAsset]
+
+
+def generate_monthly_asset_prices(configs: Sequence[AssetConfigType],
                                   n_paths: int, n_months: int,
                                   seed: int) -> Dict[str, np.ndarray]:
   """
@@ -369,6 +389,14 @@ def generate_monthly_asset_prices(configs: Sequence[Union[AssetConfig,
             f"Base asset '{config.base}' for derived asset '{config.name}' not found."
         )
       deps.append(config.base)
+
+    # SlideAdjustedCpiAsset は base_cpi に依存
+    if isinstance(config, SlideAdjustedCpiAsset):
+      if config.base_cpi not in config_map:
+        raise ValueError(
+            f"Base CPI '{config.base_cpi}' for slide adjusted CPI '{config.name}' not found."
+        )
+      deps.append(config.base_cpi)
 
     # forex を指定している場合はそれに依存
     if isinstance(config, AssetConfig) and config.forex:
@@ -413,7 +441,9 @@ def generate_monthly_asset_prices(configs: Sequence[Union[AssetConfig,
 
       if config.noise_dist:
         noise_hash_str = config.name + "noise" + str(seed)
-        noise_seed = int(hashlib.md5(noise_hash_str.encode('utf-8')).hexdigest(), 16) % (2**32)
+        noise_seed = int(
+            hashlib.md5(noise_hash_str.encode('utf-8')).hexdigest(), 16) % (2**
+                                                                            32)
         # noise_dist.generate は、log_correlation=True時は対数リターン上の残差を直接返す（MonthlyDist等を使う想定）
         # log_correlation=False時は単利上のノイズを返す想定
         noise = config.noise_dist.generate((n_paths, n_months), noise_seed)
@@ -432,8 +462,14 @@ def generate_monthly_asset_prices(configs: Sequence[Union[AssetConfig,
         # 単純な単利上での合成
         returns[config.name] = base_ret * config.multiplier + noise
 
+    elif isinstance(config, SlideAdjustedCpiAsset):
+      base_ret = returns[config.base_cpi]
+      monthly_slide = config.slide_rate / 12.0
+      # マクロ経済スライドの適用: max(0, base_ret - monthly_slide)
+      returns[config.name] = np.maximum(0.0, base_ret - monthly_slide)
+
     # 2. 月次価格推移の計算 (コスト控除、レバレッジ、為替の適用)
-    if isinstance(config, (ForexAsset, CpiAsset)):
+    if isinstance(config, (ForexAsset, CpiAsset, SlideAdjustedCpiAsset)):
       # 為替やCPI自体はコスト等を持たない単純な累積積
       fx_multiplier = np.maximum(1.0 + returns[config.name], 0.0)
       prices = np.ones((n_paths, n_months + 1), dtype=np.float64)
