@@ -39,7 +39,9 @@ DynamicRebalanceFn = Callable[[np.ndarray, np.ndarray, float],
                               Dict[str, Union[float, np.ndarray]]]
 
 # 追加キャッシュフローの倍率（条件付き労働など）を決めるコールバック関数
-ExtraCashflowMultiplierFn = Callable[[int, np.ndarray], np.ndarray]
+# (month, current_net_worth, previous_annual_spending) -> multiplier
+# NOW: Also clarify the shapes for np.ndarray.
+ExtraCashflowMultiplierFn = Callable[[int, np.ndarray, np.ndarray], np.ndarray]
 
 
 @dataclasses.dataclass
@@ -169,13 +171,24 @@ def simulate_strategy(
   bankrupt = np.zeros(n_sim, dtype=bool)
   sustained_months = np.full(n_sim, total_months, dtype=np.int32)
   net_values = np.zeros(n_sim, dtype=np.float64)
+  cost_m = np.zeros(n_sim, dtype=np.float64)
 
   # DynamicSpending
   annual_spending = np.zeros(n_sim, dtype=np.float64)
-  if isinstance(strategy.annual_cost, DynamicSpending):
-    annual_spending.fill(total_capital * strategy.annual_cost.target_ratio)
   prev_annual_spending = np.zeros(n_sim, dtype=np.float64)
-
+  if isinstance(strategy.annual_cost, DynamicSpending):
+    init_val = total_capital * strategy.annual_cost.target_ratio
+    annual_spending.fill(init_val)
+    prev_annual_spending.fill(init_val)
+  elif isinstance(strategy.annual_cost, list):
+    init_val = strategy.annual_cost[0]
+    annual_spending.fill(init_val)
+    prev_annual_spending.fill(init_val)
+  else:
+    init_val = cast(float, strategy.annual_cost)
+    annual_spending.fill(init_val)
+    prev_annual_spending.fill(init_val)
+  
   # 追加キャッシュフローの倍率（ソース名ごとに保持）
   extra_cf_multipliers: Dict[str, np.ndarray] = {
       name: np.ones(n_sim, dtype=np.float64)
@@ -243,7 +256,7 @@ def simulate_strategy(
           current_net_worth[active_paths] += u[active_paths] * local_monthly_asset_prices[name][active_paths, m]
         current_net_worth[active_paths] -= strategy.initial_loan
 
-        # 動的支出の更新 (m > 0 の時のみ前年比を考慮)
+        # 年間支出と基準支出 (prev_annual_spending) の更新
         if isinstance(strategy.annual_cost, DynamicSpending):
           if m > 0:
             prev_annual_spending[active_paths] = annual_spending[active_paths]
@@ -254,11 +267,20 @@ def simulate_strategy(
           else:
             # m=0 の時は初期値
             annual_spending.fill(total_capital * strategy.annual_cost.target_ratio)
+            prev_annual_spending.fill(total_capital * strategy.annual_cost.target_ratio)
+        else:
+          # 固定またはリスト形式の場合
+          if m > 0:
+            # 前月時点の額面支出を基準とする
+            # cost_mはループ内で計算されるため、ここでは前回ループの最終値が残っている
+            prev_annual_spending[active_paths] = cost_m[active_paths] * 12.0
 
         # 追加キャッシュフロー倍率の更新
         for source, fn in strategy.extra_cashflow_sources.items():
           if fn is not None:
-            extra_cf_multipliers[source][active_paths] = fn(m, current_net_worth[active_paths])
+            extra_cf_multipliers[source][active_paths] = fn(
+                m, current_net_worth[active_paths],
+                prev_annual_spending[active_paths])
 
     cpi_multiplier: Union[float, np.ndarray] = 1.0
     if strategy.inflation_rate is None:

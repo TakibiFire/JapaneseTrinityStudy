@@ -750,7 +750,7 @@ def test_extra_cashflow_multiplier():
 
   # 資産が 1050 未満なら 働く (1.0), 1050 以上なら 働かない (0.0)
   # 倍率関数は m % 12 == 0 でのみ評価される
-  def multiplier_fn(m, net_worth):
+  def multiplier_fn(m, net_worth, prev_spending):
     return (net_worth < 1050.0).astype(float)
 
   strategy = Strategy(
@@ -793,7 +793,7 @@ def test_extra_cashflow_mixed():
       selling_priority=["オルカン"],
       extra_cashflow_sources={
           "Pension": None,
-          "Job": lambda m, nw: np.array([0.5])
+          "Job": lambda m, nw, ps: np.array([0.5])
       })
 
   res = simulate_strategy(strategy, monthly_asset_prices, monthly_cashflows)
@@ -815,7 +815,7 @@ def test_extra_cashflow_detailed_timing():
   # NW に応じて倍率を変える
   # 1年目 (m=0): NW=1000 -> mult=1.0
   # 2年目 (m=12): NW は 1000 + 10*12 = 1120 になっているはず -> mult=2.0
-  def multiplier_fn(m, net_worth):
+  def multiplier_fn(m, net_worth, prev_spending):
     if m == 0:
       return np.array([1.0])
     elif m == 12:
@@ -858,7 +858,7 @@ def test_extra_cashflow_bankrupt_mask():
   # 収入を月 1.0 にする.
   monthly_cashflows = {"Job": np.full((n_sim, total_months), 1.0)}
 
-  def multiplier_fn(m, net_worth):
+  def multiplier_fn(m, net_worth, prev_spending):
     # net_worth のサイズは active_paths の数になっているはず
     return np.ones_like(net_worth)
 
@@ -890,7 +890,7 @@ def test_extra_cashflow_no_side_effect_on_ds():
   monthly_asset_prices = {"A": np.ones((n_sim, total_months + 1))}
   monthly_cashflows = {"Job": np.full((n_sim, total_months), 10.0)}
 
-  def mult_fn(m, nw):
+  def mult_fn(m, nw, ps):
     return (nw > 1100.0).astype(float) + 1.0
 
   ds = DynamicSpending(target_ratio=0.1, upper_limit=1.0, lower_limit=-1.0)
@@ -912,6 +912,80 @@ def test_extra_cashflow_no_side_effect_on_ds():
   # Year 1 end NW = 1000 - 100 + 120 = 1020.
   # Year 2 (m=12): NW=1020. spend=102. mult=1.0. Job=120.
   # Year 2 end NW = 1020 - 102 + 120 = 1038.
+  assert res.annual_spends is not None
   assert res.annual_spends[0, 0] == 100.0
   assert res.annual_spends[0, 1] == 102.0
   assert np.allclose(res.net_values[0], 1038.0)
+
+
+def test_conditional_work_multiplier_receives_prev_spending():
+  """
+  ExtraCashflowMultiplierFn が前年の年間支出額を正しく受け取れることを検証する。
+  """
+  n_sim = 1
+  years = 2
+  initial_money = 1000.0
+  annual_cost = 100.0
+
+  # 価格変動なし
+  prices = {"Cash": np.ones((n_sim, years * 12 + 1))}
+
+  received_spendings = []
+
+  def mock_multiplier(m, net_worth, prev_spending):
+    received_spendings.append(prev_spending.copy())
+    return np.ones_like(net_worth)
+
+  strategy = Strategy(name="Test",
+                      initial_money=initial_money,
+                      initial_loan=0.0,
+                      yearly_loan_interest=0.0,
+                      initial_asset_ratio={"Cash": 1.0},
+                      annual_cost=annual_cost,
+                      inflation_rate=None,
+                      selling_priority=["Cash"],
+                      extra_cashflow_sources={"Work": mock_multiplier})
+
+  simulate_strategy(strategy, prices, monthly_cashflows={"Work": np.zeros((n_sim, years * 12))})
+
+  # m=0: 初期支出 100.0
+  assert np.all(received_spendings[0] == 100.0)
+  # m=12: 前年の支出 100.0
+  assert np.all(received_spendings[1] == 100.0)
+
+
+def test_conditional_work_logic():
+  """
+  資産残高に応じた条件付き労働が正しく資産推移に反映されることを検証する。
+  """
+  n_sim = 1
+  years = 2
+  initial_money = 1000.0
+  annual_cost = 100.0  # 年間100
+
+  prices = {"Cash": np.ones((n_sim, years * 12 + 1))}
+
+  def work_if_low(m, net_worth, prev_spending):
+    # NW < 950 の時のみ働く
+    # Year 0: NW=1000 -> 働かない
+    # Year 1: 1年間の支出100後、NW=900 -> 働く
+    return (net_worth < 950).astype(np.float64)
+
+  strategy = Strategy(name="Test",
+                      initial_money=initial_money,
+                      initial_loan=0.0,
+                      yearly_loan_interest=0.0,
+                      initial_asset_ratio={"Cash": 1.0},
+                      annual_cost=annual_cost,
+                      inflation_rate=None,
+                      selling_priority=["Cash"],
+                      extra_cashflow_sources={"Work": work_if_low})
+
+  # 労働収入: 月50 (年600)
+  work_cf = np.full((n_sim, years * 12), 50.0)
+  res = simulate_strategy(strategy, prices, monthly_cashflows={"Work": work_cf})
+
+  # Year 0: 収入なし。1年目末の資産 = 1000 - 100 = 900.
+  # Year 1: 収入あり(600)。2年目末の資産 = 900 - 100 + 600 = 1400.
+  assert res.net_values[0] == pytest.approx(1400.0)
+
