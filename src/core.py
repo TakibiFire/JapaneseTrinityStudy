@@ -91,6 +91,7 @@ class SimulationResult:
   net_values: np.ndarray  # shape: (n_sim,)
   sustained_months: np.ndarray  # shape: (n_sim,)
   annual_spends: Optional[np.ndarray] = None  # shape: (n_sim, n_years)
+  debug_results: Optional[Dict[int, List[str]]] = None
 
 
 # ---------------------------------------------------------------------------
@@ -103,7 +104,8 @@ def simulate_strategy(
     monthly_asset_prices: Dict[str, np.ndarray],
     monthly_cashflows: Optional[Dict[str, np.ndarray]] = None,
     fallback_n_sim: int = 1000,
-    fallback_total_months: int = 600) -> SimulationResult:
+    fallback_total_months: int = 600,
+    debug_indices: Optional[List[int]] = None) -> SimulationResult:
   """
   指定された戦略に従い、資産推移をシミュレーションする。
   
@@ -113,6 +115,7 @@ def simulate_strategy(
     monthly_cashflows: cashflow_generatorが生成した追加の月次キャッシュフローの辞書
     fallback_n_sim: 価格推移辞書が空だった場合に使用するパス数
     fallback_total_months: 価格推移辞書が空だった場合に使用する月数
+    debug_indices: デバッグ対象のパスのインデックスリスト
   """
   local_monthly_asset_prices = dict(monthly_asset_prices)
 
@@ -192,6 +195,10 @@ def simulate_strategy(
   total_static_cf: Optional[np.ndarray] = None
   # 動的なキャッシュフロー（倍率関数があるもの）は個別で保持
   dynamic_cfs: Dict[str, np.ndarray] = {}
+
+  debug_results: Optional[Dict[int, List[str]]] = None
+  if debug_indices is not None:
+    debug_results = {idx: [] for idx in debug_indices}
 
   if strategy.extra_cashflow_sources and monthly_cashflows:
     for source, fn in strategy.extra_cashflow_sources.items():
@@ -302,6 +309,12 @@ def simulate_strategy(
     # 4. 資産売却 (現金不足時)
     shortage_paths = active_paths & (cash < 0)
     if np.any(shortage_paths):
+      # --- DEBUG ---
+      if debug_indices is not None and debug_results is not None:
+        for idx in debug_indices:
+          if idx < len(cash) and active_paths[idx] and shortage_paths[idx]:
+            debug_results[idx].append(f"[Debug Path {idx}] Month {m}: Cash shortage before sell-off: {cash[idx]:.4f}")
+      # -------------
       for asset_name in strategy.selling_priority:
         still_short = shortage_paths & (cash < 0)
         if not np.any(still_short):
@@ -341,11 +354,27 @@ def simulate_strategy(
 
         # 目標割合
         if strategy.dynamic_rebalance_fn:
-          rem_years = (total_months - (m + 1)) / 12.0
+          # ---
+          # 寿命ギリギリで100%無リスク資産に移行したパスが、正確に最終月（Month 599）で
+          # 枯渇する（Bankruptクラスターが発生する）現象を防ぐためのバッファ。
+          # rebalance_interval=12 の場合、rem_years は常に整数（49.0, ..., 1.0, 0.0）となる。
+          # これが「無リスク資産のみでちょうど N 年生きられる」という境界条件（n_ruin == N）
+          # と完全に一致してしまい、多数のパスが同時に100%無リスクにロックされてしまう。
+          # そこで、シミュレーション期間よりも少し長生きする必要がある（+0.25年 = 3ヶ月）
+          # と見せかけることで、この人為的な境界条件の完全一致を回避する。
+          # ---
+          rem_years = (total_months - (m + 1)) / 12.0 + 0.25
           cur_ann_spend = cost_m[reb_paths] * 12.0
           target_ratios = strategy.dynamic_rebalance_fn(total_net,
                                                         cur_ann_spend,
                                                         rem_years)
+          # --- DEBUG ---
+          if debug_indices is not None and debug_results is not None:
+            for idx in debug_indices:
+              if idx < len(reb_paths) and reb_paths[idx]:
+                mask_idx = np.sum(reb_paths[:idx])
+                debug_results[idx].append(f"[Debug Path {idx}] Month {m} Rebalance: rem_years={rem_years:.4f}, total_net={total_net[mask_idx]:.2f}, target_ratios={ {k: (v if isinstance(v, float) else v[mask_idx]) for k, v in target_ratios.items()} }")
+          # -------------
         else:
           target_ratios = {
               k: np.full(np.sum(reb_paths), v)
@@ -399,6 +428,12 @@ def simulate_strategy(
           name][active_paths, m + 1]
 
     new_bankrupt = active_paths & (total_val < strategy.initial_loan)
+    # --- DEBUG ---
+    if debug_indices is not None and debug_results is not None:
+      for idx in debug_indices:
+        if idx < len(active_paths) and active_paths[idx]:
+          debug_results[idx].append(f"[Debug Path {idx}] Month {m} Step 6: cash={cash[idx]:.2f}, total_val={total_val[idx]:.2f}, new_bankrupt={new_bankrupt[idx]}")
+    # -------------
     bankrupt[new_bankrupt] = True
     sustained_months[new_bankrupt] = m
 
@@ -412,4 +447,5 @@ def simulate_strategy(
 
   return SimulationResult(net_values=net_values,
                           sustained_months=sustained_months,
-                          annual_spends=annual_spends_record)
+                          annual_spends=annual_spends_record,
+                          debug_results=debug_results)
