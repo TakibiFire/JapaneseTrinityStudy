@@ -81,7 +81,7 @@ def main():
                annual_cost=ANNUAL_COST,
                inflation_rate=CPI_NAME,
                selling_priority=["オルカン"],
-               extra_cashflow_sources=["Work_Income", "Work_Stop"]),
+               extra_cashflow_sources={"Work_Income": None, "Work_Stop": None}),
   ]
 
   # 4. シミュレーション実行

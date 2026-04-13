@@ -208,7 +208,7 @@ def main():
         annual_cost=current_annual_cost,
         inflation_rate=CPI_NAME,
         selling_priority=["オルカン"],
-        extra_cashflow_sources=extra_cf_names
+        extra_cashflow_sources={name: None for name in extra_cf_names}
     )
 
     # シミュレーション

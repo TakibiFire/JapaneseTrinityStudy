@@ -626,7 +626,7 @@ def test_simulate_strategy_extra_cashflow():
       annual_cost=120.0,  # 月10.0
       inflation_rate=None,
       selling_priority=["AssetA"],
-      extra_cashflow_sources=["MyCashflow"])
+      extra_cashflow_sources={"MyCashflow": None})
 
   res = simulate_strategy(strategy, prices, monthly_cashflows=monthly_cashflows)
 
@@ -667,18 +667,6 @@ def test_simulate_strategy_extra_cashflow():
 def test_extra_cashflow_validation():
   """追加キャッシュフロー関連の入力チェック"""
   
-  # 重複エラー
-  with pytest.raises(ValueError, match="extra_cashflow_sources contains duplicated names."):
-    Strategy(name="DupTest",
-             initial_money=100.0,
-             initial_loan=0.0,
-             yearly_loan_interest=0.0,
-             initial_asset_ratio={"A": 1.0},
-             annual_cost=0.0,
-             inflation_rate=None,
-             selling_priority=["A"],
-             extra_cashflow_sources=["CF1", "CF1"])
-
   strategy = Strategy(name="ShapeTest",
                       initial_money=100.0,
                       initial_loan=0.0,
@@ -687,7 +675,7 @@ def test_extra_cashflow_validation():
                       annual_cost=0.0,
                       inflation_rate=None,
                       selling_priority=["A"],
-                      extra_cashflow_sources=["CF1"])
+                      extra_cashflow_sources={"CF1": None})
                       
   prices = {"A": np.ones((2, 13))}  # n_sim=2, total_months=12
   
@@ -726,7 +714,7 @@ def test_simulate_strategy_large_income_and_spend():
                       annual_cost=12.0,  # 月1.0の取り崩し
                       inflation_rate=None,
                       selling_priority=["AssetA"],
-                      extra_cashflow_sources=["BigCF"])
+                      extra_cashflow_sources={"BigCF": None})
 
   res = simulate_strategy(strategy, prices, monthly_cashflows=monthly_cashflows)
   
@@ -748,3 +736,182 @@ def test_simulate_strategy_large_income_and_spend():
   
   assert np.allclose(res.net_values, 588.0)
   assert np.all(res.sustained_months == 12)  # 破産していない
+
+
+def test_extra_cashflow_multiplier():
+  """
+  倍率関数が正しく適用されることを確認する。
+  """
+  n_sim = 1
+  total_months = 12
+
+  monthly_asset_prices = {"オルカン": np.ones((n_sim, total_months + 1))}
+  monthly_cashflows = {"Job": np.full((n_sim, total_months), 10.0)}
+
+  # 資産が 1050 未満なら 働く (1.0), 1050 以上なら 働かない (0.0)
+  # 倍率関数は m % 12 == 0 でのみ評価される
+  def multiplier_fn(m, net_worth):
+    return (net_worth < 1050.0).astype(float)
+
+  strategy = Strategy(
+      name="Conditional CF",
+      initial_money=1000.0,
+      initial_loan=0.0,
+      yearly_loan_interest=0.0,
+      initial_asset_ratio={"オルカン": 1.0},
+      annual_cost=0.0,
+      inflation_rate=None,
+      selling_priority=["オルカン"],
+      extra_cashflow_sources={"Job": multiplier_fn})
+
+  # m=0: NW=1000 -> Mult=1.0 for the year.
+  res = simulate_strategy(strategy, monthly_asset_prices, monthly_cashflows)
+  assert res.net_values[0] == 1120.0
+
+
+def test_extra_cashflow_mixed():
+  """
+  静的と動的なキャッシュフローが混在しても正しく計算されることを確認する。
+  """
+  n_sim = 1
+  total_months = 12
+
+  monthly_asset_prices = {"オルカン": np.ones((n_sim, total_months + 1))}
+  monthly_cashflows = {
+      "Pension": np.full((n_sim, total_months), 5.0),
+      "Job": np.full((n_sim, total_months), 10.0)
+  }
+
+  strategy = Strategy(
+      name="Mixed CF",
+      initial_money=1000.0,
+      initial_loan=0.0,
+      yearly_loan_interest=0.0,
+      initial_asset_ratio={"オルカン": 1.0},
+      annual_cost=0.0,
+      inflation_rate=None,
+      selling_priority=["オルカン"],
+      extra_cashflow_sources={
+          "Pension": None,
+          "Job": lambda m, nw: np.array([0.5])
+      })
+
+  res = simulate_strategy(strategy, monthly_asset_prices, monthly_cashflows)
+  # 1000 + (5 * 12) + (10 * 0.5 * 12) = 1120
+  assert res.net_values[0] == 1120.0
+
+
+def test_extra_cashflow_detailed_timing():
+  """
+  倍率関数が年1回（m=0, 12, ...）更新され、その年の各月に適用されることを検証する。
+  """
+  n_sim = 1
+  total_months = 24
+
+  monthly_asset_prices = {"A": np.ones((n_sim, total_months + 1))}
+  # 毎月 10.0 の収入
+  monthly_cashflows = {"Job": np.full((n_sim, total_months), 10.0)}
+
+  # NW に応じて倍率を変える
+  # 1年目 (m=0): NW=1000 -> mult=1.0
+  # 2年目 (m=12): NW は 1000 + 10*12 = 1120 になっているはず -> mult=2.0
+  def multiplier_fn(m, net_worth):
+    if m == 0:
+      return np.array([1.0])
+    elif m == 12:
+      return np.array([2.0])
+    return np.array([0.0])
+
+  strategy = Strategy(name="TimingTest",
+                      initial_money=1000.0,
+                      initial_loan=0.0,
+                      yearly_loan_interest=0.0,
+                      initial_asset_ratio={"A": 1.0},
+                      annual_cost=0.0,
+                      inflation_rate=None,
+                      selling_priority=["A"],
+                      extra_cashflow_sources={"Job": multiplier_fn})
+
+  res = simulate_strategy(strategy, monthly_asset_prices, monthly_cashflows)
+
+  # 1年目の収入: 10 * 1.0 * 12 = 120
+  # 2年目の収入: 10 * 2.0 * 12 = 240
+  # 合計純資産: 1000 + 120 + 240 = 1360
+  assert res.net_values[0] == 1360.0
+
+
+def test_extra_cashflow_bankrupt_mask():
+  """
+  破産したパスでは倍率関数が正しく active_paths で制限されていることを検証。
+  """
+  n_sim = 2
+  total_months = 12
+
+  # パス0: 即破産するように
+  # 初期 100, 借入 50. 合計 150 投資.
+  # 1ヶ月後に価格 0.0001 -> 評価額 0.015.
+  # 借入 50 なので、現金が 49.985 以上ないと破産.
+  prices_array = np.ones((n_sim, total_months + 1))
+  prices_array[0, 1:] = 0.0001
+  prices = {"A": prices_array}
+
+  # 収入を月 1.0 にする.
+  monthly_cashflows = {"Job": np.full((n_sim, total_months), 1.0)}
+
+  def multiplier_fn(m, net_worth):
+    # net_worth のサイズは active_paths の数になっているはず
+    return np.ones_like(net_worth)
+
+  strategy = Strategy(name="BankruptMaskTest",
+                      initial_money=100.0,
+                      initial_loan=50.0,
+                      yearly_loan_interest=0.0,
+                      initial_asset_ratio={"A": 1.0},
+                      annual_cost=0.0,
+                      inflation_rate=None,
+                      selling_priority=["A"],
+                      extra_cashflow_sources={"Job": multiplier_fn})
+
+  res = simulate_strategy(strategy, prices, monthly_cashflows=monthly_cashflows)
+
+  # パス0は破産
+  assert res.net_values[0] == 0.0
+  # パス1はNW = 100 + 12 - 0 = 112
+  assert res.net_values[1] == 112.0
+
+
+def test_extra_cashflow_no_side_effect_on_ds():
+  """
+  動的支出計算と追加キャッシュフローが正しく共存することを検証。
+  """
+  n_sim = 1
+  total_months = 24
+
+  monthly_asset_prices = {"A": np.ones((n_sim, total_months + 1))}
+  monthly_cashflows = {"Job": np.full((n_sim, total_months), 10.0)}
+
+  def mult_fn(m, nw):
+    return (nw > 1100.0).astype(float) + 1.0
+
+  ds = DynamicSpending(target_ratio=0.1, upper_limit=1.0, lower_limit=-1.0)
+
+  strategy = Strategy(name="DS_Interaction",
+                      initial_money=1000.0,
+                      initial_loan=0.0,
+                      yearly_loan_interest=0.0,
+                      initial_asset_ratio={"A": 1.0},
+                      annual_cost=ds,
+                      inflation_rate=None,
+                      selling_priority=["A"],
+                      extra_cashflow_sources={"Job": mult_fn},
+                      record_annual_spend=True)
+
+  res = simulate_strategy(strategy, monthly_asset_prices, monthly_cashflows)
+
+  # Year 1 (m=0): NW=1000. spend=100. mult=1.0. Job=120.
+  # Year 1 end NW = 1000 - 100 + 120 = 1020.
+  # Year 2 (m=12): NW=1020. spend=102. mult=1.0. Job=120.
+  # Year 2 end NW = 1020 - 102 + 120 = 1038.
+  assert res.annual_spends[0, 0] == 100.0
+  assert res.annual_spends[0, 1] == 102.0
+  assert np.allclose(res.net_values[0], 1038.0)
