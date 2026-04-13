@@ -87,7 +87,7 @@ def main():
   # 50% of 400 = 200/year = 16.666/month
   # 75% of 400 = 300/year = 25.0/month
   exp1_income_levels = {
-      "0%": 0.0,
+      "なし": 0.0,
       "25%": 100.0 / 12.0,
       "50%": 200.0 / 12.0,
       "75%": 300.0 / 12.0
@@ -111,11 +111,11 @@ def main():
   exp1_strategies = []
   for label in exp1_income_levels.keys():
     sources = cast(Dict[str, Optional[ExtraCashflowMultiplierFn]],
-                   {f"Income_{label}": None} if label != "0%" else {})
+                   {f"Income_{label}": None} if label != "なし" else {})
 
     # Fixed 100% Orukan (Exp-1-A)
     exp1_strategies.append(
-        Strategy(name=f"Fixed100_{label}",
+        Strategy(name=f"固定+{label}",
                  initial_money=INITIAL_MONEY,
                  initial_loan=0.0,
                  yearly_loan_interest=0.0,
@@ -128,7 +128,7 @@ def main():
 
     # Dynamic Rebalance (Exp-1-B)
     exp1_strategies.append(
-        Strategy(name=f"DynReb_{label}",
+        Strategy(name=f"ダイナ+{label}",
                  initial_money=INITIAL_MONEY,
                  initial_loan=0.0,
                  yearly_loan_interest=0.0,
@@ -150,9 +150,23 @@ def main():
                                              monthly_cashflows=exp1_monthly_cashflows)
 
   # サマリー保存
-  formatted_df, _ = create_styled_summary(exp1_results)
-  with open(os.path.join(DATA_DIR, "exp1_result.md"), "w", encoding="utf-8") as f:
-    f.write(formatted_df.to_markdown())
+  # 特定の形式のテーブルを作成 (Exp 1)
+  def get_survival_rate(res, years):
+    return f"{np.mean(res.sustained_months >= years * 12) * 100.0:.1f}%"
+
+  exp1_table = "| シナリオ | 戦略 | 20年生存確率 | 30年生存確率 | 50年生存確率 |\n"
+  exp1_table += "| :--- | :--- | :--- | :--- | :--- |\n"
+  for label in exp1_income_levels.keys():
+    fixed_name = f"固定+{label}"
+    dyna_name = f"ダイナ+{label}"
+    fixed_res = exp1_results[fixed_name]
+    dyna_res = exp1_results[dyna_name]
+    display_label = f"{label} (収入なし)" if label == "なし" else label
+    exp1_table += f"| **{display_label}** | オルカン100% | {get_survival_rate(fixed_res, 20)} | {get_survival_rate(fixed_res, 30)} | {get_survival_rate(fixed_res, 50)} |\n"
+    exp1_table += f"| | ダイナミックリバランス | {get_survival_rate(dyna_res, 20)} | {get_survival_rate(dyna_res, 30)} | {get_survival_rate(dyna_res, 50)} |\n"
+
+  with open(os.path.join(DATA_DIR, "exp1.md"), "w", encoding="utf-8") as f:
+    f.write(exp1_table)
 
   visualize_and_save(
       exp1_results,
@@ -169,19 +183,19 @@ def main():
 
   # Total 2000-man
   exp2_cases = {
-      "Baseline_1mo": {
+      "一括": {
           "amount": 2000.0,
           "duration": 1
       },
-      "400man_5yr": {
+      "400万×5年": {
           "amount": 400.0 / 12.0,
           "duration": 5 * 12
       },
-      "200man_10yr": {
+      "200万×10年": {
           "amount": 200.0 / 12.0,
           "duration": 10 * 12
       },
-      "100man_20yr": {
+      "100万×20年": {
           "amount": 100.0 / 12.0,
           "duration": 20 * 12
       }
@@ -193,10 +207,10 @@ def main():
     amount_val = float(cfg["amount"])
     exp2_cf_configs.append(
         PensionConfig(name=f"Income_{label}",
-                      amount=amount_val,
-                      start_month=0,
-                      end_month=duration_val,
-                      cpi_name=CPI_NAME))
+                       amount=amount_val,
+                       start_month=0,
+                       end_month=duration_val,
+                       cpi_name=CPI_NAME))
 
   exp2_monthly_cashflows = generate_cashflows(exp2_cf_configs,
                                               monthly_prices,
@@ -207,8 +221,10 @@ def main():
   for label in exp2_cases.keys():
     sources = cast(Dict[str, Optional[ExtraCashflowMultiplierFn]],
                    {f"Income_{label}": None})
+
+    # Fixed 100% Orukan
     exp2_strategies.append(
-        Strategy(name=f"Fixed100_{label}",
+        Strategy(name=f"固定+  {label}",
                  initial_money=INITIAL_MONEY,
                  initial_loan=0.0,
                  yearly_loan_interest=0.0,
@@ -219,6 +235,23 @@ def main():
                  rebalance_interval=1,
                  extra_cashflow_sources=sources))
 
+    # Dynamic Rebalance
+    exp2_strategies.append(
+        Strategy(name=f"ダイナ+  {label}",
+                 initial_money=INITIAL_MONEY,
+                 initial_loan=0.0,
+                 yearly_loan_interest=0.0,
+                 initial_asset_ratio={
+                     ORUKAN_NAME: 1.0,
+                     risk_free_asset: 0.0
+                 },
+                 annual_cost=ANNUAL_COST,
+                 inflation_rate=CPI_NAME,
+                 selling_priority=[RISK_FREE_NAME, ORUKAN_NAME],
+                 rebalance_interval=12,
+                 dynamic_rebalance_fn=dynamic_rebalance_fn,
+                 extra_cashflow_sources=sources))
+
   exp2_results = {}
   for s in exp2_strategies:
     exp2_results[s.name] = simulate_strategy(s,
@@ -226,9 +259,26 @@ def main():
                                              monthly_cashflows=exp2_monthly_cashflows)
 
   # サマリー保存
-  formatted_df, _ = create_styled_summary(exp2_results)
-  with open(os.path.join(DATA_DIR, "exp2_result.md"), "w", encoding="utf-8") as f:
-    f.write(formatted_df.to_markdown())
+  # 特定の形式のテーブルを作成 (Exp 2)
+  exp2_table = "| シナリオ | 戦略 | 20年生存確率 | 50年生存確率 | 50年後の中央値資産 |\n"
+  exp2_table += "| :--- | :--- | :--- | :--- | :--- |\n"
+  for label in exp2_cases.keys():
+    fixed_name = f"固定+  {label}"
+    dyna_name = f"ダイナ+  {label}"
+    fixed_res = exp2_results[fixed_name]
+    dyna_res = exp2_results[dyna_name]
+
+    def get_survival_rate(res, years):
+      return f"{np.mean(res.sustained_months >= years * 12) * 100.0:.1f}%"
+
+    def get_median_asset(res):
+      return f"{np.median(res.net_values) / 10000.0:.1f}億円"
+
+    exp2_table += f"| **{label}** | オルカン100% | {get_survival_rate(fixed_res, 20)} | {get_survival_rate(fixed_res, 50)} | {get_median_asset(fixed_res)} |\n"
+    exp2_table += f"| | ダイナミックリバランス | {get_survival_rate(dyna_res, 20)} | {get_survival_rate(dyna_res, 50)} | {get_median_asset(dyna_res)} |\n"
+
+  with open(os.path.join(DATA_DIR, "exp2.md"), "w", encoding="utf-8") as f:
+    f.write(exp2_table)
 
   visualize_and_save(
       exp2_results,
