@@ -2,30 +2,35 @@
 Side FIRE (労働収入) が資産寿命に与える影響を分析するスクリプト。
 
 実験設定:
-- 40歳でリタイア
-- 初期資産: 5000万円 (5,000万円)  -- 少なめに設定
-- 年間支出: 300万円 (物価連動)
-- 資産構成: オルカン 100%
+- 初期資産: 1億円
+- 投資先: オルカン100% (期待リターン7%, リスク15%, 信託報酬 0.05775%)
+- 為替リスク: USDJPY (期待リターン0%, リスク10.53%)
+- インフレ率: 1.77%, sigma=0
+- 初期出費額: 400万円
+- 税率: 20.315%
 - シミュレーション期間: 50年
-- Side FIRE収入:
-  - 最初の10年間 (120ヶ月)、月10万円 (年120万円) の労働収入を得る。
+- 試行回数: 5000回
 """
 
 import os
-from typing import Dict, List
+from typing import Dict, List, Optional, Union, cast
 
-from src.core import Strategy, simulate_strategy
-from src.lib.asset_generator import (Asset, CpiAsset,
+import numpy as np
+
+from src.core import (ExtraCashflowMultiplierFn, Strategy, ZeroRiskAsset,
+                      simulate_strategy)
+from src.lib.asset_generator import (Asset, CpiAsset, ForexAsset,
                                      YearlyLogNormalArithmetic,
                                      generate_monthly_asset_prices)
 from src.lib.cashflow_generator import (CashflowConfig, PensionConfig,
                                         generate_cashflows)
-from src.lib.visualize import (create_styled_summary,
-                               create_survival_probability_chart)
+from src.lib.dynamic_rebalance import calculate_optimal_strategy
+from src.lib.visualize import create_styled_summary, visualize_and_save
 
 # 出力先ディレクトリ
 IMG_DIR = "docs/imgs/side_fire/"
 DATA_DIR = "docs/data/side_fire/"
+TEMP_DIR = "temp/side_fire/"
 
 
 def main():
@@ -33,74 +38,205 @@ def main():
   N_SIM = 5000
   YEARS = 50
   SEED = 42
-  INITIAL_MONEY = 5000.0  # 5000万円
-  ANNUAL_COST = 300.0  # 300万円
+  INITIAL_MONEY = 10000.0  # 1億円
+  ANNUAL_COST = 400.0  # 400万円
   CPI_NAME = "Japan_CPI"
+  ORUKAN_NAME = "オルカン"
+  USDJPY_NAME = "USDJPY"
+  RISK_FREE_NAME = "無リスク資産"
 
   os.makedirs(IMG_DIR, exist_ok=True)
   os.makedirs(DATA_DIR, exist_ok=True)
+  os.makedirs(TEMP_DIR, exist_ok=True)
 
   # 1. アセット生成
-  orukan = Asset(name="オルカン",
-                 dist=YearlyLogNormalArithmetic(mu=0.07, sigma=0.15))
+  # オルカン: 期待リターン7%, リスク15%, 信託報酬 0.05775%
+  orukan = Asset(name=ORUKAN_NAME,
+                 dist=YearlyLogNormalArithmetic(mu=0.07, sigma=0.15),
+                 trust_fee=0.0005775,
+                 forex=USDJPY_NAME)
+  # 為替リスク: USDJPY (期待リターン0%, リスク10.53%)
+  usdjpy = ForexAsset(name=USDJPY_NAME,
+                      dist=YearlyLogNormalArithmetic(mu=0.0, sigma=0.1053))
+  # インフレ率: 1.77%, sigma=0
   cpi = CpiAsset(name=CPI_NAME,
                  dist=YearlyLogNormalArithmetic(mu=0.0177, sigma=0.0))
-  
-  monthly_prices = generate_monthly_asset_prices(configs=[orukan, cpi],
+
+  monthly_prices = generate_monthly_asset_prices(configs=[orukan, usdjpy, cpi],
                                                  n_paths=N_SIM,
                                                  n_months=YEARS * 12,
                                                  seed=SEED)
 
-  # 2. キャッシュフロー生成
-  # 最初の120ヶ月だけ収入を得るために、
-  # 0ヶ月目から+10万、120ヶ月目から-10万することで相殺する。
-  cf_configs: List[CashflowConfig] = [
-      PensionConfig(name="Work_Income", amount=10.0, start_month=0),
-      PensionConfig(name="Work_Stop", amount=-10.0, start_month=120),
-  ]
-  monthly_cashflows = generate_cashflows(cf_configs,
-                                         monthly_prices,
-                                         n_sim=N_SIM,
-                                         n_months=YEARS * 12)
+  risk_free_asset = ZeroRiskAsset(name=RISK_FREE_NAME, yield_rate=0.04)
 
-  # 3. 戦略定義
-  strategies = [
-      Strategy(name="完全FIRE (労働収入なし)",
-               initial_money=INITIAL_MONEY,
-               initial_loan=0.0,
-               yearly_loan_interest=0.0,
-               initial_asset_ratio={"オルカン": 1.0},
-               annual_cost=ANNUAL_COST,
-               inflation_rate=CPI_NAME,
-               selling_priority=["オルカン"]),
-      Strategy(name="Side FIRE (10年間 月10万円の労働収入)",
-               initial_money=INITIAL_MONEY,
-               initial_loan=0.0,
-               yearly_loan_interest=0.0,
-               initial_asset_ratio={"オルカン": 1.0},
-               annual_cost=ANNUAL_COST,
-               inflation_rate=CPI_NAME,
-               selling_priority=["オルカン"],
-               extra_cashflow_sources={"Work_Income": None, "Work_Stop": None}),
-  ]
+  def dynamic_rebalance_fn(total_net, cur_ann_spend, rem_years):
+    # s_rate = 年間支出額 / 純資産
+    s_rate = cur_ann_spend / np.maximum(total_net, 1.0)
+    # rem_years が極端に小さい場合の不自然な挙動を防ぐため、1.0年を下限とする
+    safe_rem_years = np.maximum(rem_years, 1.0)
+    orukan_ratio = calculate_optimal_strategy(s_rate, safe_rem_years)
+    return {ORUKAN_NAME: orukan_ratio, RISK_FREE_NAME: 1.0 - orukan_ratio}
 
-  # 4. シミュレーション実行
-  print("Side FIRE影響シミュレーションを実行中...")
-  results = {}
-  for strategy in strategies:
-    res = simulate_strategy(strategy,
-                            monthly_prices,
-                            monthly_cashflows=monthly_cashflows)
-    results[strategy.name] = res
+  # -------------------------------------------------------------------------
+  # Exp 1: Income Level relative to Expenses
+  # -------------------------------------------------------------------------
+  print("Experiment 1 実行中...")
 
-  # 5. 可視化と保存
-  formatted_df, _ = create_styled_summary(results,
-                                          bankruptcy_years=[10, 20, 30, 40, 50])
-  with open(os.path.join(DATA_DIR, "result.md"), "w", encoding="utf-8") as f:
+  # 収入パターンの作成
+  # 25% of 400 = 100/year = 8.333/month
+  # 50% of 400 = 200/year = 16.666/month
+  # 75% of 400 = 300/year = 25.0/month
+  exp1_income_levels = {
+      "0%": 0.0,
+      "25%": 100.0 / 12.0,
+      "50%": 200.0 / 12.0,
+      "75%": 300.0 / 12.0
+  }
+
+  exp1_cf_configs: List[CashflowConfig] = []
+  for label, monthly_amount in exp1_income_levels.items():
+    if monthly_amount > 0:
+      exp1_cf_configs.append(
+          PensionConfig(name=f"Income_{label}",
+                        amount=monthly_amount,
+                        start_month=0,
+                        end_month=5 * 12,
+                        cpi_name=CPI_NAME))
+
+  exp1_monthly_cashflows = generate_cashflows(exp1_cf_configs,
+                                              monthly_prices,
+                                              n_sim=N_SIM,
+                                              n_months=YEARS * 12)
+
+  exp1_strategies = []
+  for label in exp1_income_levels.keys():
+    sources = cast(Dict[str, Optional[ExtraCashflowMultiplierFn]],
+                   {f"Income_{label}": None} if label != "0%" else {})
+
+    # Fixed 100% Orukan (Exp-1-A)
+    exp1_strategies.append(
+        Strategy(name=f"Fixed100_{label}",
+                 initial_money=INITIAL_MONEY,
+                 initial_loan=0.0,
+                 yearly_loan_interest=0.0,
+                 initial_asset_ratio={ORUKAN_NAME: 1.0},
+                 annual_cost=ANNUAL_COST,
+                 inflation_rate=CPI_NAME,
+                 selling_priority=[ORUKAN_NAME],
+                 rebalance_interval=1,
+                 extra_cashflow_sources=sources))
+
+    # Dynamic Rebalance (Exp-1-B)
+    exp1_strategies.append(
+        Strategy(name=f"DynReb_{label}",
+                 initial_money=INITIAL_MONEY,
+                 initial_loan=0.0,
+                 yearly_loan_interest=0.0,
+                 initial_asset_ratio={
+                     ORUKAN_NAME: 1.0,
+                     risk_free_asset: 0.0
+                 },
+                 annual_cost=ANNUAL_COST,
+                 inflation_rate=CPI_NAME,
+                 selling_priority=[RISK_FREE_NAME, ORUKAN_NAME],
+                 rebalance_interval=12,
+                 dynamic_rebalance_fn=dynamic_rebalance_fn,
+                 extra_cashflow_sources=sources))
+
+  exp1_results = {}
+  for s in exp1_strategies:
+    exp1_results[s.name] = simulate_strategy(s,
+                                             monthly_prices,
+                                             monthly_cashflows=exp1_monthly_cashflows)
+
+  # サマリー保存
+  formatted_df, _ = create_styled_summary(exp1_results)
+  with open(os.path.join(DATA_DIR, "exp1_result.md"), "w", encoding="utf-8") as f:
     f.write(formatted_df.to_markdown())
 
-  _, chart = create_survival_probability_chart(results, max_years=YEARS)
-  chart.save(os.path.join(IMG_DIR, "survival.svg"))
+  visualize_and_save(
+      exp1_results,
+      os.path.join(TEMP_DIR, "exp1_temp.html"),
+      distribution_image_file=os.path.join(IMG_DIR, "exp1_distribution.svg"),
+      survival_image_file=os.path.join(IMG_DIR, "exp1_survival.svg"),
+      title="Exp1: Income Level relative to Expenses",
+      open_browser=False)
+
+  # -------------------------------------------------------------------------
+  # Exp 2: Duration vs. Amount (Total 2000M)
+  # -------------------------------------------------------------------------
+  print("Experiment 2 実行中...")
+
+  # Total 2000-man
+  exp2_cases = {
+      "Baseline_1mo": {
+          "amount": 2000.0,
+          "duration": 1
+      },
+      "400man_5yr": {
+          "amount": 400.0 / 12.0,
+          "duration": 5 * 12
+      },
+      "200man_10yr": {
+          "amount": 200.0 / 12.0,
+          "duration": 10 * 12
+      },
+      "100man_20yr": {
+          "amount": 100.0 / 12.0,
+          "duration": 20 * 12
+      }
+  }
+
+  exp2_cf_configs: List[CashflowConfig] = []
+  for label, cfg in exp2_cases.items():
+    duration_val = int(cfg["duration"])
+    amount_val = float(cfg["amount"])
+    exp2_cf_configs.append(
+        PensionConfig(name=f"Income_{label}",
+                      amount=amount_val,
+                      start_month=0,
+                      end_month=duration_val,
+                      cpi_name=CPI_NAME))
+
+  exp2_monthly_cashflows = generate_cashflows(exp2_cf_configs,
+                                              monthly_prices,
+                                              n_sim=N_SIM,
+                                              n_months=YEARS * 12)
+
+  exp2_strategies = []
+  for label in exp2_cases.keys():
+    sources = cast(Dict[str, Optional[ExtraCashflowMultiplierFn]],
+                   {f"Income_{label}": None})
+    exp2_strategies.append(
+        Strategy(name=f"Fixed100_{label}",
+                 initial_money=INITIAL_MONEY,
+                 initial_loan=0.0,
+                 yearly_loan_interest=0.0,
+                 initial_asset_ratio={ORUKAN_NAME: 1.0},
+                 annual_cost=ANNUAL_COST,
+                 inflation_rate=CPI_NAME,
+                 selling_priority=[ORUKAN_NAME],
+                 rebalance_interval=1,
+                 extra_cashflow_sources=sources))
+
+  exp2_results = {}
+  for s in exp2_strategies:
+    exp2_results[s.name] = simulate_strategy(s,
+                                             monthly_prices,
+                                             monthly_cashflows=exp2_monthly_cashflows)
+
+  # サマリー保存
+  formatted_df, _ = create_styled_summary(exp2_results)
+  with open(os.path.join(DATA_DIR, "exp2_result.md"), "w", encoding="utf-8") as f:
+    f.write(formatted_df.to_markdown())
+
+  visualize_and_save(
+      exp2_results,
+      os.path.join(TEMP_DIR, "exp2_temp.html"),
+      distribution_image_file=os.path.join(IMG_DIR, "exp2_distribution.svg"),
+      survival_image_file=os.path.join(IMG_DIR, "exp2_survival.svg"),
+      title="Exp2: Duration vs. Amount (Total 2000M)",
+      open_browser=False)
 
   print(f"完了。結果を {DATA_DIR} と {IMG_DIR} に保存しました。")
 
