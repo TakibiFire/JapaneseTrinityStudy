@@ -55,6 +55,52 @@ def run_fitting(df: pd.DataFrame, target_years: list[str]):
       print(f"  Error for {year}yr fitting: {err}")
 
 
+def print_representative_stats(df: pd.DataFrame):
+  """
+  代表的な戦略の生存確率を表示する。
+  """
+  print("\n" + "=" * 50)
+  print("代表的な戦略の生存確率")
+  print("=" * 50)
+
+  # 実験1 (ダイナミックリバランスなし)
+  print("\n[実験1: ダイナミックリバランスなし]")
+  conditions = [
+      (0.02, 0.02, "2%定額支出アップ"),
+      (0.03, 0.00, "上限3%, 下限0%"),
+      (0.05, -0.015, "上限5%, 下限-1.5%"),
+      (0.02, -0.02, "上限2%, 下限-2%")
+  ]
+
+  exp1_data = []
+  for up, low, label in conditions:
+    res = df[(df["is_dynamic_rebalance"] == 0) &
+             (np.isclose(df["upper_limit"], up)) &
+             (np.isclose(df["lower_limit"], low))]
+    if not res.empty:
+      s30 = res["30"].values[0]
+      s50 = res["50"].values[0]
+      exp1_data.append({"ラベル": label, "30年": f"{s30:.1%}", "50年": f"{s50:.1%}"})
+  print(pd.DataFrame(exp1_data))
+
+  # 実験2 (ダイナミックリバランスあり)
+  print("\n[実験2: ダイナミックリバランスあり (50年)]")
+  exp2_conditions = [
+      (0.03, 0.00, "上限3%, 下限0%"),
+      (0.05, -0.015, "上限5%, 下限-1.5%"),
+      (0.02, -0.02, "上限2%, 下限-2%")
+  ]
+  exp2_data = []
+  for up, low, label in exp2_conditions:
+    res = df[(df["is_dynamic_rebalance"] == 1) &
+             (np.isclose(df["upper_limit"], up)) &
+             (np.isclose(df["lower_limit"], low))]
+    if not res.empty:
+      s50 = res["50"].values[0]
+      exp2_data.append({"ラベル": label, "50年": f"{s50:.1%}"})
+  print(pd.DataFrame(exp2_data))
+
+
 def main():
   csv_path = "data/dynamic_spending_grid_comp.csv"
   if not os.path.exists(csv_path):
@@ -62,6 +108,9 @@ def main():
     return
 
   df = pd.read_csv(csv_path)
+
+  # 代表的な統計を表示
+  print_representative_stats(df)
 
   # ヒートマップを生成する対象年数
   target_years = ["30", "50"]
