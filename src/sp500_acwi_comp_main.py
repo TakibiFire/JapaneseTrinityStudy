@@ -21,6 +21,7 @@ from src.lib.asset_generator import (Asset, CpiAsset, DerivedAsset, ForexAsset,
                                      MonthlyLogNormal,
                                      YearlyLogNormalArithmetic,
                                      generate_monthly_asset_prices)
+from src.lib.simulation_defaults import AcwiModelKey, get_acwi_fat_tail_config
 from src.lib.visualize import create_styled_summary, visualize_and_save
 
 
@@ -70,13 +71,9 @@ def main() -> None:
   assets.append(fx_asset)
 
   # ベース資産の登録
-  # 1. S&P500 155yr
-  assets.append(
-      Asset(name="Base_SP500_155y",
-            dist=MonthlyLogDist(stats.genlogistic, params=sp500_155y_params),
-            trust_fee=0.0,
-            leverage=1)
-  )
+  # 1. S&P500 155yr (共通モデルから取得)
+  assets.append(get_acwi_fat_tail_config(AcwiModelKey.BASE_SP500_155Y))
+  
   # 2. S&P500 30yr
   assets.append(
       Asset(name="Base_SP500_30y",
@@ -91,15 +88,8 @@ def main() -> None:
             trust_fee=0.0,
             leverage=1)
   )
-  # 4. ACWI Approx (Derived from Base_SP500_155y without trust fee yet)
-  assets.append(
-      DerivedAsset(name="Base_ACWI_Approx",
-                   base="Base_SP500_155y",
-                   multiplier=acwi_approx_mult,
-                   noise_dist=MonthlyDist(stats.dweibull, params=acwi_approx_noise_params),
-                   log_correlation=True,
-                   trust_fee=0.0)
-  )
+  # 4. ACWI Approx (共通モデルから取得)
+  assets.append(get_acwi_fat_tail_config(AcwiModelKey.BASE_ACWI_APPROX))
 
   # 為替と各信託報酬を適用した投資用DerivedAssetを定義
   model_names = [

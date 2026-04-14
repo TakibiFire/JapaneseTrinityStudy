@@ -40,6 +40,7 @@ from src.lib.asset_generator import (Asset, AssetConfigType, CpiAsset,
                                      generate_monthly_asset_prices)
 from src.lib.cashflow_generator import (CashflowConfig, PensionConfig,
                                         generate_cashflows)
+from src.lib.simulation_defaults import get_cpi_ar12_config
 
 # 設定
 DATA_DIR = "data/"
@@ -63,23 +64,7 @@ def main():
                  dist=YearlyLogNormalArithmetic(mu=0.07, sigma=0.15))
   
   # AR(12) CPI (1970年〜)
-  initial_y = [
-      0.0027039223324009146, 0.0035938942545892623, 0.0026869698208253877,
-      -0.0008948546458437107, 0.0017889092427246362, 0.0017857147602345312,
-      -0.0008924587830196112, 0.007117467768863955, 0.003539826705123987,
-      -0.0017683470567420034, -0.0008853475567242145, -0.00621947806702042
-  ]
-  phis_1970 = [
-      0.15268125115684014, -0.10485953085717699, 0.04007371599591021,
-      0.01877889962124559, 0.12481104840559767, 0.07426982556030279,
-      0.10457421059971438, 0.028405474126351145, 0.08655547241690399,
-      -0.11318585572419704, 0.09698211923123926, 0.36329524916212186
-  ]
-  cpi_dist = MonthlyARLogNormal(c=0.00018532,
-                                phis=phis_1970,
-                                sigma_e=0.00446792,
-                                initial_y=initial_y)
-  base_cpi = CpiAsset(name=CPI_NAME, dist=cpi_dist)
+  base_cpi = get_cpi_ar12_config(name=CPI_NAME)
   
   # 年金用CPI (マクロ経済スライド 0.5% 抑制)
   # 2057年度に終了予定 (2026年から31年 = 372ヶ月)

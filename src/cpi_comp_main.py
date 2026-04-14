@@ -23,6 +23,7 @@ from src.lib.asset_generator import (Asset, CpiAsset, Distribution,
                                      MonthlyARLogNormal,
                                      YearlyLogNormalArithmetic,
                                      generate_monthly_asset_prices)
+from src.lib.simulation_defaults import get_cpi_ar12_config
 from src.lib.visualize import (create_styled_summary,
                                create_survival_probability_chart)
 
@@ -164,13 +165,6 @@ def main():
       -0.0017683470567420034, -0.0008853475567242145, -0.00621947806702042
   ]
 
-  # AR(12) 1970年〜
-  phis_1970 = [
-      0.15268125115684014, -0.10485953085717699, 0.04007371599591021,
-      0.01877889962124559, 0.12481104840559767, 0.07426982556030279,
-      0.10457421059971438, 0.028405474126351145, 0.08655547241690399,
-      -0.11318585572419704, 0.09698211923123926, 0.36329524916212186
-  ]
   # AR(12) 1981年〜
   phis_1981 = [0.07456263570805544, -0.14442648233062177, -0.0693542287128989, -0.006265287407105956, 0.06328448135944292, 0.0493508550156997, 0.09362194504911231, 0.03832889494972861, 0.03269694292183145, -0.06762784737529454, 0.07140939573134378, 0.41951806303046024]
 
@@ -178,10 +172,7 @@ def main():
       CpiParam(label='独立 (歴史的 2.44%, 4.13%)',
                dist=YearlyLogNormalArithmetic(mu=0.0244, sigma=0.0413)),
       CpiParam(label='AR(12) 粘着性モデル (1970年〜)',
-               dist=MonthlyARLogNormal(c=0.00018532,
-                                       phis=phis_1970,
-                                       sigma_e=0.00446792,
-                                       initial_y=initial_y)),
+               dist=get_cpi_ar12_config().dist),
       CpiParam(label='AR(12) 粘着性モデル (1981年〜)',
                dist=MonthlyARLogNormal(c=0.00028810,
                                        phis=phis_1981,
