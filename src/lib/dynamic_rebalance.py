@@ -8,13 +8,11 @@
 import numpy as np
 
 
-def calculate_optimal_strategy(
-    s_rate: np.ndarray,
-    remaining_years: float,
-    base_yield: float = 0.04,
-    tax_rate: float = 0.20315,
-    inflation_rate: float = 0.0177
-) -> np.ndarray:
+def calculate_optimal_strategy(s_rate: np.ndarray,
+                               remaining_years: float,
+                               base_yield: float = 0.04,
+                               tax_rate: float = 0.20315,
+                               inflation_rate: float = 0.0177) -> np.ndarray:
   """
   支出率 (S) と残り年数 (N) から最適なオルカン比率を計算する。
 
@@ -60,14 +58,9 @@ def calculate_optimal_strategy(
     s1 = s_clipped[mask1]
     n_safe = np.maximum(n, 0.001)
     # g_ratio(S, n) = -3.7097 -1.4260 * log(n*S) +0.0454 * n^2 -0.0186 * 1/S -2.3855 * exp(-n) +0.0161 * 1/n
-    ratio[mask1] = (
-        -3.7097
-        - 1.4260 * safe_log(n_safe * s1)
-        + 0.0454 * (n_safe**2)
-        - 0.0186 * (1.0 / s1)
-        - 2.3855 * np.exp(-n_safe)
-        + 0.0161 * (1.0 / n_safe)
-    )
+    ratio[mask1] = (-3.7097 - 1.4260 * safe_log(n_safe * s1) + 0.0454 *
+                    (n_safe**2) - 0.0186 * (1.0 / s1) -
+                    2.3855 * np.exp(-n_safe) + 0.0161 * (1.0 / n_safe))
 
   # Region 2: N > n_ruin (資産寿命超)
   mask2 = ~mask1
@@ -76,13 +69,38 @@ def calculate_optimal_strategy(
     m2 = np.maximum(m[mask2], 1e-10)
     n_safe = np.maximum(n, 0.001)
     # h_ratio(S, m) = +0.4566 +0.0896 * log(m) -0.6490 * log(S) -0.0570 * 1/(n*S) -1.3640 * log(n) -0.0059 * S/m
-    ratio[mask2] = (
-        +0.4566
-        + 0.0896 * safe_log(m2)
-        - 0.6490 * safe_log(s2)
-        - 0.0570 * (1.0 / (n_safe * s2))
-        - 1.3640 * safe_log(n_safe)
-        - 0.0059 * (s2 / m2)
-    )
+    ratio[mask2] = (+0.4566 + 0.0896 * safe_log(m2) - 0.6490 * safe_log(s2) -
+                    0.0570 * (1.0 / (n_safe * s2)) - 1.3640 * safe_log(n_safe) -
+                    0.0059 * (s2 / m2))
 
   return np.clip(ratio, 0.0, 1.0)
+
+
+def calculate_safe_target_ratio(rem_years: float,
+                                base_yield: float = 0.04,
+                                tax_rate: float = 0.20315,
+                                inflation_rate: float = 0.0177) -> float:
+  """
+  残存年数に基づき、資産寿命がちょうどその年数になるような
+  無リスク資産でのセーフティな取り崩し率を計算する。
+  (calculate_optimal_strategy の n_ruin 式の逆算)
+
+  Args:
+    rem_years: 残存年数
+    base_yield: 無リスク資産の利回り
+    tax_rate: 譲渡所得税率
+    inflation_rate: インフレ率
+
+  Returns:
+    float: セーフティな取り崩し率 (0~1)
+  """
+  # 実質利回り (税引後利回り - インフレ率)
+  r_eff = base_yield * (1.0 - tax_rate)
+  i_ln = np.log(1.0 + inflation_rate)
+  delta = r_eff - i_ln
+
+  # Calculate s_safe_assets such that n_ruin(s_safe_assets, delta) = rem_years
+  # s_safe = delta / (1 - exp(-delta * rem_years))
+  s_safe_assets = delta / (1.0 - np.exp(-delta * rem_years))
+
+  return s_safe_assets

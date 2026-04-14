@@ -93,16 +93,24 @@ def create_heatmap(df: pd.DataFrame,
   plot_df["survival_rate_pct"] = plot_df["survival_rate"] * 100
 
   base = alt.Chart(plot_df).encode(
-      x=alt.X(f'{x_col}:O', title=x_title, sort=x_sort),
-      y=alt.Y(f'{y_col}:O', title=y_title, sort=y_sort),
+      x=alt.X(f'{x_col}:O',
+              title=x_title,
+              sort=x_sort,
+              axis=alt.Axis(labelExpr="split(datum.label, '@')")),
+      y=alt.Y(f'{y_col}:O',
+              title=y_title,
+              sort=y_sort,
+              axis=alt.Axis(labelExpr="split(datum.label, '@')")),
   )
 
-  heatmap = base.mark_rect().encode(color=alt.Color(
-      'survival_rate:Q',
-      title='生存確率',
-      scale=alt.Scale(
-          domain=[0.0, 0.8, 0.9, 0.94, 0.97, 1.0],
-          range=['#d73027', '#fee08b', '#ffffbf', 'yellowgreen', 'lightgreen', 'green'])))
+  heatmap = base.mark_rect().encode(
+      color=alt.Color('survival_rate:Q',
+                      title='生存確率',
+                      scale=alt.Scale(domain=[0.0, 0.8, 0.9, 0.94, 0.97, 1.0],
+                                      range=[
+                                          '#d73027', '#fee08b', '#ffffbf',
+                                          'yellowgreen', 'lightgreen', 'green'
+                                      ])))
 
   text = base.mark_text(baseline='middle').encode(
       text=alt.Text('survival_rate_pct:Q', format='.1f'),
@@ -136,8 +144,7 @@ def run_optimization_analysis(df: pd.DataFrame,
   multiplierごとに最適化して求める。
   """
   print(
-      f"\n--- {target_col}年生存確率 {target_prob*100:.0f}% を達成する支出率の算出 (線形モデル) ---"
-  )
+      f"\n--- {target_col}年生存確率 {target_prob*100:.0f}% を達成する支出率の算出 (線形モデル) ---")
 
   y_target = df[target_col].values.astype(float)
   M_val = df["initial_money"].values.astype(float)
@@ -219,7 +226,7 @@ def run_optimization_analysis(df: pd.DataFrame,
     m_start = min(crossable_multipliers)
     m_end = max(crossable_multipliers)
     fine_multipliers = np.arange(m_start, m_end + 0.01, 0.1)
-    
+
     for mult in fine_multipliers:
       try:
         opt_s = brentq(lambda s: predict_prob(s, mult) - target_prob, 1.0, 20.0)
@@ -231,10 +238,13 @@ def run_optimization_analysis(df: pd.DataFrame,
 
   if not df_plot.empty:
     chart = alt.Chart(df_plot).mark_line(point=True).encode(
-        x=alt.X('multiplier:Q',
-                title='支出レベル',
-                axis=alt.Axis(
-                  labelExpr=f"format(datum.value * {BASE_SPEND_ANNUAL}, '.0f') + '万(x' + datum.value + ')'")),
+        x=alt.X(
+            'multiplier:Q',
+            title='支出レベル',
+            axis=alt.
+            Axis(labelExpr
+                 =f"format(datum.value * {BASE_SPEND_ANNUAL}, '.0f') + '万(x' + datum.value + ')'"
+                )),
         y=alt.Y('optimal_rule:Q',
                 title=f'{target_prob*100:.0f}%生存達成ルール (%)',
                 scale=alt.Scale(zero=False)),
@@ -258,15 +268,19 @@ def main():
 
   # ラベルの日本語化
   df_all["multiplier_label"] = df_all["spend_multiplier"].map(
-      lambda x: f"{BASE_SPEND_ANNUAL * x:g}万円/年 (x{x:g})")
-  df_all["rule_label"] = df_all["spending_rule"].map(lambda x: f"{x:g}%")
+      lambda x: f"{BASE_SPEND_ANNUAL * x:g}万円/年@(x{x:g})")
+  df_all["rule_label"] = df_all["spending_rule"].map(
+      lambda x: f"{x:g}%@(x{round(100/x, 1):g})")
 
   m_order = [
-      f"{BASE_SPEND_ANNUAL * x:g}万円/年 (x{x:g})"
+      f"{BASE_SPEND_ANNUAL * x:g}万円/年@(x{x:g})"
       for x in [3.0, 2.0, 1.5, 1.2, 1.0, 0.75, 0.5, 0.36]
   ]
   # ルール順: 1.5% から 6.0% まで
-  r_order = [f"{x:g}%" for x in [1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0]]
+  r_order = [
+      f"{x:g}%@(x{round(100/x, 1):g})"
+      for x in [1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0]
+  ]
 
   for use_dyn in [0, 1]:
     dyn_label = "dyn_on" if use_dyn == 1 else "dyn_off"

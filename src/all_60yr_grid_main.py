@@ -38,7 +38,8 @@ from src.lib.asset_generator import (AssetConfigType, DerivedAsset, ForexAsset,
                                      generate_monthly_asset_prices)
 from src.lib.cashflow_generator import (CashflowConfig, PensionConfig,
                                         generate_cashflows)
-from src.lib.dynamic_rebalance import calculate_optimal_strategy
+from src.lib.dynamic_rebalance import (calculate_optimal_strategy,
+                                       calculate_safe_target_ratio)
 from src.lib.retired_spending import (SpendingType,
                                       get_retired_spending_multipliers)
 from src.lib.simulation_defaults import (AcwiModelKey,
@@ -129,18 +130,9 @@ def main():
     )
     return {ORUKAN_NAME: orukan_ratio, ZERO_RISK_NAME: 1.0 - orukan_ratio}
 
-  # 35年生存確率97%を達成するように最適化されたルール (DYN_OFF)
-  # src/analyze_all_60yr_grid_main.py の分析結果に基づく
-  optimized_rules = {
-    0.36: 4.16,
-    0.5: 4.16,
-    0.75: 4.16,
-    1.0: 3.85,
-    1.2: 3.7,
-    1.5: 3.51,
-    2.0: 3.2,
-    3.0: 2.45,
-  }
+  # セーフティな支出率 (DynamicSpending用)
+  # ゼロリスク資産でも資産寿命が YEARS 年となるような支出率
+  target_ratio = calculate_safe_target_ratio(YEARS)
 
   for i, (spend_mult, rule, use_dyn_spend) in enumerate(all_combinations):
     if i % 10 == 0:
@@ -155,8 +147,7 @@ def main():
     inflation_rate_setting: Optional[str]
     if use_dyn_spend:
       # ダイナミックスペンディング (上限3%, 下限0%)
-      # target_ratio は支出レベル(spend_mult)ごとに最適化された値を使用する
-      target_ratio = optimized_rules[spend_mult] / 100.0
+      # target_ratio は calculate_safe_target_ratio(YEARS) で求めた値を使用
       annual_cost_setting = DynamicSpending(target_ratio=target_ratio,
                                             upper_limit=0.03,
                                             lower_limit=0.0)
