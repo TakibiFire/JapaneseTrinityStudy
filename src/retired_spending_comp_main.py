@@ -9,38 +9,14 @@ from typing import Any, Dict, List, Union
 
 import numpy as np
 import pandas as pd
-from scipy.interpolate import CubicSpline
 
 from src.core import Strategy, ZeroRiskAsset, simulate_strategy
 from src.lib.asset_generator import (Asset, CpiAsset, ForexAsset,
                                      YearlyLogNormalArithmetic,
                                      generate_monthly_asset_prices)
+from src.lib.retired_spending import (SpendingType,
+                                      get_retired_spending_multipliers)
 from src.lib.visualize import create_styled_summary, visualize_and_save
-
-
-def get_cost_multiplier(start_age, num_years=50):
-  """
-  年齢階級別の消費支出データから、指定された開始年齢からの生活費の乗数リストを返す。
-  乗数は開始年齢の時の生活費を 1.0 とした相対的な値。
-  """
-  # 家計調査報告のデータ
-  ages = np.array([34.4, 44.8, 54.2, 64.6, 77.6, 85.2])
-  costs = np.array([280451, 331134, 356946, 311392, 252781, 221056])
-
-  # 3次スプライン補間 (自然スプライン)
-  cs = CubicSpline(ages, costs, bc_type='natural')
-
-  # 推計対象の年齢 (開始年齢からnum_years年分)
-  target_ages = np.arange(start_age, start_age + num_years)
-  target_costs = cs(target_ages)
-
-  # 85.2歳付近の221,056円で保守的に下限クリップする
-  target_costs = np.maximum(target_costs, 221056)
-
-  # 開始年齢のコストで割って乗数にする
-  multipliers = target_costs / target_costs[0]
-
-  return multipliers.tolist()
 
 
 def main():
@@ -97,11 +73,12 @@ def main():
 
   start_ages = [30, 35, 40, 45, 50, 55, 60]
   for i, start_age in enumerate(start_ages):
-    multipliers = get_cost_multiplier(start_age, max_years)
+    multipliers = get_retired_spending_multipliers(SpendingType.BOTH, start_age,
+                                                   max_years)
     annual_costs = [base_annual_cost * m for m in multipliers]
 
     strategies.append(
-        Strategy(name=f"{i+2}. {start_age}歳から",
+        Strategy(name=f"{i+2}. {start_age}歳",
                  initial_money=initial_money,
                  initial_loan=0.0,
                  yearly_loan_interest=0.0,
