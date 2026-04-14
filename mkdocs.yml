@@ -119,5 +119,5 @@ nav:
     - 死亡率を考慮する: mortality.md
     - 公開予定 / NISA: nisa.md
     - 公開予定 / iDeco: ideco.md
-  - 何%ルールなのか:
-    - 最適戦略を試してみる: all_combinations.md
+  - 年齢別の最適戦略:
+    - 60歳の最適戦略: all_60yr.md
