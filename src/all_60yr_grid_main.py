@@ -114,7 +114,8 @@ def main():
 
   # 年齢による支出倍率の取得 (60歳から35年間)
   spending_multipliers_by_age = get_retired_spending_multipliers(
-      SpendingType.BOTH, start_age=60, num_years=YEARS)
+      [SpendingType.CONSUMPTION, SpendingType.NON_CONSUMPTION], start_age=60,
+      num_years=YEARS)
 
   print(f"全 {len(all_combinations)} パターンのシミュレーションを実行中...")
 

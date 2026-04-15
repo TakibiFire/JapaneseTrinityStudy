@@ -73,8 +73,9 @@ def main():
 
   start_ages = [30, 35, 40, 45, 50, 55, 60]
   for i, start_age in enumerate(start_ages):
-    multipliers = get_retired_spending_multipliers(SpendingType.BOTH, start_age,
-                                                   max_years)
+    multipliers = get_retired_spending_multipliers(
+        [SpendingType.CONSUMPTION, SpendingType.NON_CONSUMPTION], start_age,
+        max_years)
     annual_costs = [base_annual_cost * m for m in multipliers]
 
     strategies.append(
