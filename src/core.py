@@ -181,29 +181,36 @@ def simulate_strategy(
   # target_annual_spend: 今年の目標年間支出額（名目）
   # prev_net_reg_spend_y: 前年の正味の年間支出額（実績）
   # prev_gross_reg_spend_y: 前年の総年間支出額（実績、収入控除前）
+  # prev_base_spend_y: 前年の基本支出額（実績、追加キャッシュフローを含まない）
   # annual_net_reg_spend_tracker: 今年の正味年間支出額の累計
   # annual_gross_reg_spend_tracker: 今年の総年間支出額の累計
+  # annual_base_spend_tracker: 今年の基本支出額の累計
   target_annual_spend = np.zeros(n_sim, dtype=np.float64)
   prev_net_reg_spend_y = np.zeros(n_sim, dtype=np.float64)
   prev_gross_reg_spend_y = np.zeros(n_sim, dtype=np.float64)
+  prev_base_spend_y = np.zeros(n_sim, dtype=np.float64)
   annual_net_reg_spend_tracker = np.zeros(n_sim, dtype=np.float64)
   annual_gross_reg_spend_tracker = np.zeros(n_sim, dtype=np.float64)
+  annual_base_spend_tracker = np.zeros(n_sim, dtype=np.float64)
 
   if isinstance(strategy.annual_cost, DynamicSpending):
     init_val = total_capital * strategy.annual_cost.target_ratio
     target_annual_spend.fill(init_val)
     prev_net_reg_spend_y.fill(init_val)
     prev_gross_reg_spend_y.fill(init_val)
+    prev_base_spend_y.fill(init_val)
   elif isinstance(strategy.annual_cost, list):
     init_val = strategy.annual_cost[0]
     target_annual_spend.fill(init_val)
     prev_net_reg_spend_y.fill(init_val)
     prev_gross_reg_spend_y.fill(init_val)
+    prev_base_spend_y.fill(init_val)
   else:
     init_val = cast(float, strategy.annual_cost)
     target_annual_spend.fill(init_val)
     prev_net_reg_spend_y.fill(init_val)
     prev_gross_reg_spend_y.fill(init_val)
+    prev_base_spend_y.fill(init_val)
   
   # 追加キャッシュフローの倍率（ソース名ごとに保持）
   extra_cf_multipliers: Dict[str, np.ndarray] = {
@@ -269,21 +276,31 @@ def simulate_strategy(
         if m > 0:
           prev_net_reg_spend_y[active_paths] = annual_net_reg_spend_tracker[active_paths]
           prev_gross_reg_spend_y[active_paths] = annual_gross_reg_spend_tracker[active_paths]
+          prev_base_spend_y[active_paths] = annual_base_spend_tracker[active_paths]
           annual_net_reg_spend_tracker.fill(0.0)
           annual_gross_reg_spend_tracker.fill(0.0)
+          annual_base_spend_tracker.fill(0.0)
 
         if isinstance(strategy.annual_cost, DynamicSpending):
           if m > 0:
             # ダイナミックスペンディングの目標額（名目）
             target_spending_nominal = np.maximum(0.0, current_net_worth * strategy.annual_cost.target_ratio)
-            # 前年の正味支出に基づく上下限
-            ceiling = prev_net_reg_spend_y * (1.0 + strategy.annual_cost.upper_limit)
-            floor = prev_net_reg_spend_y * (1.0 + strategy.annual_cost.lower_limit)
+            # 前年の基本支出に基づく上下限
+            ceiling = prev_base_spend_y * (1.0 + strategy.annual_cost.upper_limit)
+            floor = prev_base_spend_y * (1.0 + strategy.annual_cost.lower_limit)
             target_annual_spend[active_paths] = np.clip(target_spending_nominal[active_paths], floor[active_paths], ceiling[active_paths])
+
+            # --- DEBUG ---
+            if debug_indices is not None and debug_results is not None:
+              for idx in debug_indices:
+                if idx < len(active_paths) and active_paths[idx]:
+                  debug_results[idx].append(f"[Debug Path {idx}] Year {m//12}: NW={current_net_worth[idx]:.2f}, target_spend_nominal={target_spending_nominal[idx]:.2f}, prev_base_spend={prev_base_spend_y[idx]:.2f}, prev_net_reg_spend={prev_net_reg_spend_y[idx]:.2f}, new_target_spend={target_annual_spend[idx]:.2f}, floor={floor[idx]:.2f}")
+            # -------------
           else:
             # m=0 の時は初期値
             target_annual_spend.fill(total_capital * strategy.annual_cost.target_ratio)
             prev_net_reg_spend_y.fill(total_capital * strategy.annual_cost.target_ratio)
+            prev_base_spend_y.fill(total_capital * strategy.annual_cost.target_ratio)
 
         # 追加キャッシュフロー倍率の更新
         for rule in strategy.cashflow_rules:
@@ -351,6 +368,7 @@ def simulate_strategy(
       
     annual_net_reg_spend_tracker[active_paths] += net_reg_spend_m[active_paths]
     annual_gross_reg_spend_tracker[active_paths] += reg_spend_m[active_paths]
+    annual_base_spend_tracker[active_paths] += base_spend_m[active_paths]
 
     # ポートフォリオからの月間の総引き出し額 (Withdrawal)
     total_withdrawal_m = (reg_spend_m - reg_income_m) + (iso_spend_m - iso_income_m) + interest_cost_m + tax_cost_m
