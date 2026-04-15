@@ -2,6 +2,8 @@
 
 <!--
 DO NOT DELETE:
+python3 src/analyze_cpi_main.py
+python3 src/analyze_monthly_cpi_main.py
 python3 src/sequence_comp_main.py
 -->
 
