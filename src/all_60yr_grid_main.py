@@ -36,7 +36,8 @@ from src.core import (DynamicSpending, Strategy, ZeroRiskAsset,
 from src.lib.asset_generator import (AssetConfigType, DerivedAsset, ForexAsset,
                                      YearlyLogNormalArithmetic,
                                      generate_monthly_asset_prices)
-from src.lib.cashflow_generator import (CashflowConfig, PensionConfig,
+from src.lib.cashflow_generator import (CashflowConfig, CashflowRule,
+                                        CashflowType, PensionConfig,
                                         generate_cashflows)
 from src.lib.dynamic_rebalance import (calculate_optimal_strategy,
                                        calculate_safe_target_ratio)
@@ -195,7 +196,10 @@ def main():
         rebalance_interval=12,
         dynamic_rebalance_fn=dynamic_rebalance_fn,
         selling_priority=[ORUKAN_NAME, ZERO_RISK_NAME],
-        extra_cashflow_sources={"Pension": None})
+        cashflow_rules=[
+            CashflowRule(source_name="Pension",
+                         cashflow_type=CashflowType.ISOLATED)
+        ])
 
     # シミュレーション
     res = simulate_strategy(strategy,

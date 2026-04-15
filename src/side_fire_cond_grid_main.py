@@ -35,7 +35,8 @@ from src.lib.asset_generator import (Asset, AssetConfigType, CpiAsset,
                                      ForexAsset, MonthlyARLogNormal,
                                      YearlyLogNormalArithmetic,
                                      generate_monthly_asset_prices)
-from src.lib.cashflow_generator import (CashflowConfig, PensionConfig,
+from src.lib.cashflow_generator import (CashflowConfig, CashflowRule,
+                                        CashflowType, PensionConfig,
                                         generate_cashflows)
 
 # 設定
@@ -164,7 +165,11 @@ def main():
         annual_cost=ANNUAL_COST,
         inflation_rate=CPI_NAME,
         selling_priority=[ORUKAN_NAME],
-        extra_cashflow_sources={"ConditionalWork": multiplier_fn})
+        cashflow_rules=[
+            CashflowRule(source_name="ConditionalWork",
+                         cashflow_type=CashflowType.ISOLATED,
+                         multiplier_fn=multiplier_fn)
+        ])
 
     # シミュレーション
     res = simulate_strategy(strategy,

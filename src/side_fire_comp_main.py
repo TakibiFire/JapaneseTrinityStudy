@@ -22,7 +22,8 @@ from src.core import (ExtraCashflowMultiplierFn, Strategy, ZeroRiskAsset,
 from src.lib.asset_generator import (Asset, CpiAsset, ForexAsset,
                                      YearlyLogNormalArithmetic,
                                      generate_monthly_asset_prices)
-from src.lib.cashflow_generator import (CashflowConfig, PensionConfig,
+from src.lib.cashflow_generator import (CashflowConfig, CashflowRule,
+                                        CashflowType, PensionConfig,
                                         generate_cashflows)
 from src.lib.dynamic_rebalance import calculate_optimal_strategy
 from src.lib.visualize import create_styled_summary, visualize_and_save
@@ -110,8 +111,10 @@ def main():
 
   exp1_strategies = []
   for label in exp1_income_levels.keys():
-    sources = cast(Dict[str, Optional[ExtraCashflowMultiplierFn]],
-                   {f"Income_{label}": None} if label != "なし" else {})
+    rules = [
+        CashflowRule(source_name=f"Income_{label}",
+                     cashflow_type=CashflowType.ISOLATED)
+    ] if label != "なし" else []
 
     # Fixed 100% Orukan (Exp-1-A)
     exp1_strategies.append(
@@ -124,7 +127,7 @@ def main():
                  inflation_rate=CPI_NAME,
                  selling_priority=[ORUKAN_NAME],
                  rebalance_interval=1,
-                 extra_cashflow_sources=sources))
+                 cashflow_rules=rules))
 
     # Dynamic Rebalance (Exp-1-B)
     exp1_strategies.append(
@@ -141,7 +144,7 @@ def main():
                  selling_priority=[RISK_FREE_NAME, ORUKAN_NAME],
                  rebalance_interval=12,
                  dynamic_rebalance_fn=dynamic_rebalance_fn,
-                 extra_cashflow_sources=sources))
+                 cashflow_rules=rules))
 
   exp1_results = {}
   for s in exp1_strategies:
@@ -219,8 +222,10 @@ def main():
 
   exp2_strategies = []
   for label in exp2_cases.keys():
-    sources = cast(Dict[str, Optional[ExtraCashflowMultiplierFn]],
-                   {f"Income_{label}": None})
+    rules = [
+        CashflowRule(source_name=f"Income_{label}",
+                     cashflow_type=CashflowType.ISOLATED)
+    ]
 
     # Fixed 100% Orukan
     exp2_strategies.append(
@@ -233,7 +238,7 @@ def main():
                  inflation_rate=CPI_NAME,
                  selling_priority=[ORUKAN_NAME],
                  rebalance_interval=1,
-                 extra_cashflow_sources=sources))
+                 cashflow_rules=rules))
 
     # Dynamic Rebalance
     exp2_strategies.append(
@@ -250,7 +255,7 @@ def main():
                  selling_priority=[RISK_FREE_NAME, ORUKAN_NAME],
                  rebalance_interval=12,
                  dynamic_rebalance_fn=dynamic_rebalance_fn,
-                 extra_cashflow_sources=sources))
+                 cashflow_rules=rules))
 
   exp2_results = {}
   for s in exp2_strategies:

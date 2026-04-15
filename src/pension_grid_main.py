@@ -38,7 +38,8 @@ from src.lib.asset_generator import (Asset, AssetConfigType, CpiAsset,
                                      MonthlyARLogNormal, SlideAdjustedCpiAsset,
                                      YearlyLogNormalArithmetic,
                                      generate_monthly_asset_prices)
-from src.lib.cashflow_generator import (CashflowConfig, PensionConfig,
+from src.lib.cashflow_generator import (CashflowConfig, CashflowRule,
+                                        CashflowType, PensionConfig,
                                         generate_cashflows)
 from src.lib.simulation_defaults import get_cpi_ar12_config
 
@@ -184,6 +185,7 @@ def main():
                                            n_months=YEARS * 12)
 
     # 戦略
+    # TODO: INCLUDE_IN_ANNUAL_SPEND を使うべきだが、backward-compatibility のために ISOLATED を今は使う
     strategy = Strategy(
         name=f"Pattern_{i}",
         initial_money=float(init_money),
@@ -193,8 +195,11 @@ def main():
         annual_cost=current_annual_cost,
         inflation_rate=CPI_NAME,
         selling_priority=["オルカン"],
-        extra_cashflow_sources={name: None for name in extra_cf_names}
-    )
+        cashflow_rules=[
+            CashflowRule(source_name=name,
+                         cashflow_type=CashflowType.ISOLATED)
+            for name in extra_cf_names
+        ])
 
     # シミュレーション
     res = simulate_strategy(strategy,

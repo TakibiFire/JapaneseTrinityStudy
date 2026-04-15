@@ -20,6 +20,20 @@
 成功判定の定義:
 1. 破産せずにシミュレーション期間（50年間）を終える
 2. シミュレーション期間中に死亡する (死亡＝成功)
+
+TODO:
+
+Regarding the regression in `mortality_comp_main.py`:
+
+My hypothesis is that the **random number sequence for mortality draws has shifted**. 
+
+In `mortality_comp_main.py`, `MortalityConfig` uses the global `np.random.rand()` state. This state is whatever remains after `generate_monthly_asset_prices` (which sets `SEED=42`) is called. If there has been *any* change in the number of random draws during asset generation (even if the assets themselves look the same), the sequence of "who dies when" will shift.
+
+Because death in this script is marked by a massive 100億円 payout (`payout=1000000.0`), even a small shift in *when* or *if* a few paths die will cause:
+1.  **Significant jumps in Median Assets** (as seen in the diff: 378億円 -> 357億円), because the median is heavily influenced by these artificial payouts.
+2.  **Small changes in Survival Probability**, as different paths are now being "saved" by death at different times.
+
+Since the logic of `ISOLATED` correctly mirrors the old engine's behavior of excluding extra cashflows from the core spending calculations, this shift in results is likely an artifact of the simulation's sensitivity to the random state rather than a logic error.
 """
 
 import os
@@ -33,7 +47,8 @@ from src.core import Strategy, simulate_strategy
 from src.lib.asset_generator import (Asset, CpiAsset, ForexAsset,
                                      YearlyLogNormalArithmetic,
                                      generate_monthly_asset_prices)
-from src.lib.cashflow_generator import (CashflowConfig, MortalityConfig,
+from src.lib.cashflow_generator import (CashflowConfig, CashflowRule,
+                                        CashflowType, MortalityConfig,
                                         generate_cashflows)
 from src.lib.life_table import FEMALE_MORTALITY_RATES, MALE_MORTALITY_RATES
 from src.lib.visualize import (create_styled_summary,
@@ -92,7 +107,10 @@ def run_simulation_for_gender(gender: str, mortality_rates: List[float],
                     tax_rate=TAX_RATE,
                     selling_priority=[ACWI_NAME],
                     rebalance_interval=12,
-                    extra_cashflow_sources={f"Mortality_{gender}_{age}": None})
+                    cashflow_rules=[
+                        CashflowRule(source_name=f"Mortality_{gender}_{age}",
+                                     cashflow_type=CashflowType.ISOLATED)
+                    ])
 
     results[s_off.name] = simulate_strategy(s_off, monthly_prices)
     results[s_on.name] = simulate_strategy(s_on,
