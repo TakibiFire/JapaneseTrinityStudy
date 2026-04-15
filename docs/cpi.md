@@ -1,5 +1,10 @@
 # 物価上昇率が取り崩しに与える影響
 
+<!--
+DO NOT DELETE:
+python3 src/sequence_comp_main.py
+-->
+
 物価上昇は、長期の取り崩しにおいて将来の生活水準を左右する大きな要因です。
 
 !!! abstract "重要なポイント"
