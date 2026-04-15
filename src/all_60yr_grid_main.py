@@ -199,7 +199,7 @@ def main():
         selling_priority=[ORUKAN_NAME, ZERO_RISK_NAME],
         cashflow_rules=[
             CashflowRule(source_name="Pension",
-                         cashflow_type=CashflowType.ISOLATED)
+                         cashflow_type=CashflowType.EXTRAORDINARY)
         ])
 
     # シミュレーション

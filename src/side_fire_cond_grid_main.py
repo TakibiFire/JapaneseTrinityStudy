@@ -50,19 +50,21 @@ def create_conditional_work_multiplier(threshold_x: float, max_year_y: int):
   """
 
   def multiplier_fn(m: int, net_worth: np.ndarray,
-                    prev_spending: np.ndarray) -> np.ndarray:
+                    prev_net_spending: np.ndarray,
+                    prev_gross_spending: np.ndarray) -> np.ndarray:
     # m: 経過月数 (12の倍数)
     # net_worth: 現在の純資産 (n_sim,)
-    # prev_spending: 前年の年間支出額 (n_sim,)
+    # prev_net_spending: 前年の正味年間支出額 (n_sim,)
+    # prev_gross_spending: 前年の総年間支出額 (n_sim,)
 
     # 期間上限のチェック
     if m >= max_year_y * 12:
       return np.zeros_like(net_worth)
 
-    # 閾値のチェック (年支出 / 総資産 > X)
+    # 閾値のチェック (総年支出 / 総資産 > X)
     # net_worth が 0 以下の場合も考慮
     safe_net_worth = np.maximum(net_worth, 1.0)
-    condition = (prev_spending / safe_net_worth) >= threshold_x
+    condition = (prev_gross_spending / safe_net_worth) >= threshold_x
 
     return condition.astype(np.float64)
 
@@ -167,7 +169,7 @@ def main():
         selling_priority=[ORUKAN_NAME],
         cashflow_rules=[
             CashflowRule(source_name="ConditionalWork",
-                         cashflow_type=CashflowType.ISOLATED,
+                         cashflow_type=CashflowType.REGULAR,
                          multiplier_fn=multiplier_fn)
         ])
 

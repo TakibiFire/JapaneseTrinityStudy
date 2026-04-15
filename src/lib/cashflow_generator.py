@@ -16,13 +16,47 @@ class CashflowType(Enum):
   """
   キャッシュフローの種類。
   """
-  INCLUDE_IN_ANNUAL_SPEND = auto()  # 年間支出計算に含める（例：年金）
-  ISOLATED = auto()                # 独立したキャッシュフローとして扱う（例：一時的な支出）
+  # --- REGULAR ---
+  # 年間支出計算の「定常予算」に含めるキャッシュフロー。
+  # 例：公的年金、定期的な生命保険料、安定した副収入など。
+  # 
+  # 特徴：
+  # - DynamicSpending の「前年支出に基づく制限（天井・床）」の基準値に影響する。
+  # - DynamicRebalance の「目標年間支出（ポートフォリオに要求する利回り）」を増減させる。
+  # - 収入（正の値）の場合、実質的な「生活費」を押し下げる効果がある。
+  # 
+  # 注意点・落とし穴：
+  # - 「資産が減った時だけ働く」ような変動の激しい労働収入を REGULAR に設定すると、
+  #   働いている年だけ「生活費が極端に低い」と判定される。
+  #   その結果、翌年の DynamicSpending が過剰に支出を抑制したり、
+  #   労働を継続すべきかどうかの閾値判定が狂う（生活費が低いので安心だと誤認する）
+  #   というフィードバックループ（副作用）が発生する可能性がある。
+  REGULAR = auto()
 
+  # --- EXTRAORDINARY ---
+  # 独立したキャッシュフローとして扱う「臨時」の収支。
+  # 例：相続、車の購入、一時的なお祝い金、緊急の医療費など。
+  # 
+  # 特徴：
+  # - ポートフォリオの総資産残高（純資産）には即座に反映される。
+  # - しかし、DynamicSpending や DynamicRebalance が参照する「定常的な生活費」
+  #   の計算からは除外される（去年の実績にはカウントされない）。
+  # 
+  # 使い分けの指針：
+  # - その収支が「将来の生活スタイルの基準」を左右するかどうかで判断する。
+  # - 一時的なイベントであれば EXTRAORDINARY を、家計の基礎体力の一部であれば
+  #   REGULAR を選択するのが基本。
+  EXTRAORDINARY = auto()
 
 # 追加キャッシュフローの倍率（条件付き労働など）を決めるコールバック関数
-# (month, current_net_worth, previous_annual_spending) -> multiplier
-ExtraCashflowMultiplierFn = Callable[[int, np.ndarray, np.ndarray], np.ndarray]
+# 引数:
+#   - m: 経過月数
+#   - net_worth: 現在の純資産 (n_sim,)
+#   - prev_net_ann_spend: 前年の正味年間支出（定常支出 - REGULARな収入）(n_sim,)
+#   - prev_gross_ann_spend: 前年の総年間支出（収入を差し引く前の支出）(n_sim,)
+# 戻り値:
+#   - multiplier: キャッシュフローに乗じる倍率 (n_sim,)
+ExtraCashflowMultiplierFn = Callable[[int, np.ndarray, np.ndarray, np.ndarray], np.ndarray]
 
 
 @dataclasses.dataclass(frozen=True)

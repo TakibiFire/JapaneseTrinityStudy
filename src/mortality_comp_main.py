@@ -109,7 +109,7 @@ def run_simulation_for_gender(gender: str, mortality_rates: List[float],
                     rebalance_interval=12,
                     cashflow_rules=[
                         CashflowRule(source_name=f"Mortality_{gender}_{age}",
-                                     cashflow_type=CashflowType.ISOLATED)
+                                     cashflow_type=CashflowType.EXTRAORDINARY)
                     ])
 
     results[s_off.name] = simulate_strategy(s_off, monthly_prices)

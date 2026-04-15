@@ -197,7 +197,7 @@ def main():
         selling_priority=["オルカン"],
         cashflow_rules=[
             CashflowRule(source_name=name,
-                         cashflow_type=CashflowType.ISOLATED)
+                         cashflow_type=CashflowType.EXTRAORDINARY)
             for name in extra_cf_names
         ])
 

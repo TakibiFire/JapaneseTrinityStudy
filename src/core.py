@@ -178,22 +178,32 @@ def simulate_strategy(
   net_values = np.zeros(n_sim, dtype=np.float64)
 
   # 定常支出の管理
+  # target_annual_spend: 今年の目標年間支出額（名目）
+  # prev_net_reg_spend_y: 前年の正味の年間支出額（実績）
+  # prev_gross_reg_spend_y: 前年の総年間支出額（実績、収入控除前）
+  # annual_net_reg_spend_tracker: 今年の正味年間支出額の累計
+  # annual_gross_reg_spend_tracker: 今年の総年間支出額の累計
   target_annual_spend = np.zeros(n_sim, dtype=np.float64)
   prev_net_reg_spend_y = np.zeros(n_sim, dtype=np.float64)
+  prev_gross_reg_spend_y = np.zeros(n_sim, dtype=np.float64)
   annual_net_reg_spend_tracker = np.zeros(n_sim, dtype=np.float64)
+  annual_gross_reg_spend_tracker = np.zeros(n_sim, dtype=np.float64)
 
   if isinstance(strategy.annual_cost, DynamicSpending):
     init_val = total_capital * strategy.annual_cost.target_ratio
     target_annual_spend.fill(init_val)
     prev_net_reg_spend_y.fill(init_val)
+    prev_gross_reg_spend_y.fill(init_val)
   elif isinstance(strategy.annual_cost, list):
     init_val = strategy.annual_cost[0]
     target_annual_spend.fill(init_val)
     prev_net_reg_spend_y.fill(init_val)
+    prev_gross_reg_spend_y.fill(init_val)
   else:
     init_val = cast(float, strategy.annual_cost)
     target_annual_spend.fill(init_val)
     prev_net_reg_spend_y.fill(init_val)
+    prev_gross_reg_spend_y.fill(init_val)
   
   # 追加キャッシュフローの倍率（ソース名ごとに保持）
   extra_cf_multipliers: Dict[str, np.ndarray] = {
@@ -258,7 +268,9 @@ def simulate_strategy(
         # 年間支出と基準支出 (prev_net_reg_spend_y) の更新
         if m > 0:
           prev_net_reg_spend_y[active_paths] = annual_net_reg_spend_tracker[active_paths]
+          prev_gross_reg_spend_y[active_paths] = annual_gross_reg_spend_tracker[active_paths]
           annual_net_reg_spend_tracker.fill(0.0)
+          annual_gross_reg_spend_tracker.fill(0.0)
 
         if isinstance(strategy.annual_cost, DynamicSpending):
           if m > 0:
@@ -278,7 +290,8 @@ def simulate_strategy(
           if rule.multiplier_fn is not None:
             extra_cf_multipliers[rule.source_name][active_paths] = rule.multiplier_fn(
                 m, current_net_worth[active_paths],
-                prev_net_reg_spend_y[active_paths])
+                prev_net_reg_spend_y[active_paths],
+                prev_gross_reg_spend_y[active_paths])
 
     # インフレ調整
     cpi_multiplier: Union[float, np.ndarray] = 1.0
@@ -314,7 +327,7 @@ def simulate_strategy(
       multiplier = extra_cf_multipliers.get(source, 1.0)
       impact = cf_path[:, m] * multiplier
       
-      if rule.cashflow_type == CashflowType.INCLUDE_IN_ANNUAL_SPEND:
+      if rule.cashflow_type == CashflowType.REGULAR:
         # 定常収支
         reg_income_m[impact >= 0] += impact[impact >= 0]
         reg_spend_m[impact < 0] += np.abs(impact[impact < 0])
@@ -337,6 +350,7 @@ def simulate_strategy(
       net_reg_spend_m += interest_cost_m + tax_cost_m
       
     annual_net_reg_spend_tracker[active_paths] += net_reg_spend_m[active_paths]
+    annual_gross_reg_spend_tracker[active_paths] += reg_spend_m[active_paths]
 
     # ポートフォリオからの月間の総引き出し額 (Withdrawal)
     total_withdrawal_m = (reg_spend_m - reg_income_m) + (iso_spend_m - iso_income_m) + interest_cost_m + tax_cost_m

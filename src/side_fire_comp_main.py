@@ -113,7 +113,7 @@ def main():
   for label in exp1_income_levels.keys():
     rules = [
         CashflowRule(source_name=f"Income_{label}",
-                     cashflow_type=CashflowType.ISOLATED)
+                     cashflow_type=CashflowType.EXTRAORDINARY)
     ] if label != "なし" else []
 
     # Fixed 100% Orukan (Exp-1-A)
@@ -224,7 +224,7 @@ def main():
   for label in exp2_cases.keys():
     rules = [
         CashflowRule(source_name=f"Income_{label}",
-                     cashflow_type=CashflowType.ISOLATED)
+                     cashflow_type=CashflowType.EXTRAORDINARY)
     ]
 
     # Fixed 100% Orukan

@@ -627,7 +627,7 @@ def test_simulate_strategy_extra_cashflow():
       annual_cost=120.0,  # 月10.0
       inflation_rate=None,
       selling_priority=["AssetA"],
-      cashflow_rules=[CashflowRule("MyCashflow", CashflowType.ISOLATED)])
+      cashflow_rules=[CashflowRule("MyCashflow", CashflowType.EXTRAORDINARY)])
 
   res = simulate_strategy(strategy, prices, monthly_cashflows=monthly_cashflows)
 
@@ -676,7 +676,7 @@ def test_extra_cashflow_validation():
                       annual_cost=0.0,
                       inflation_rate=None,
                       selling_priority=["A"],
-                      cashflow_rules=[CashflowRule("CF1", CashflowType.ISOLATED)])
+                      cashflow_rules=[CashflowRule("CF1", CashflowType.EXTRAORDINARY)])
                       
   prices = {"A": np.ones((2, 13))}  # n_sim=2, total_months=12
   
@@ -715,7 +715,7 @@ def test_simulate_strategy_large_income_and_spend():
                       annual_cost=12.0,  # 月1.0の取り崩し
                       inflation_rate=None,
                       selling_priority=["AssetA"],
-                      cashflow_rules=[CashflowRule("BigCF", CashflowType.ISOLATED)])
+                      cashflow_rules=[CashflowRule("BigCF", CashflowType.EXTRAORDINARY)])
 
   res = simulate_strategy(strategy, prices, monthly_cashflows=monthly_cashflows)
   
@@ -751,7 +751,7 @@ def test_extra_cashflow_multiplier():
 
   # 資産が 1050 未満なら 働く (1.0), 1050 以上なら 働かない (0.0)
   # 倍率関数は m % 12 == 0 でのみ評価される
-  def multiplier_fn(m, net_worth, prev_spending):
+  def multiplier_fn(m, net_worth, prev_net, prev_gross):
     return (net_worth < 1050.0).astype(float)
 
   strategy = Strategy(
@@ -763,7 +763,7 @@ def test_extra_cashflow_multiplier():
       annual_cost=0.0,
       inflation_rate=None,
       selling_priority=["オルカン"],
-      cashflow_rules=[CashflowRule("Job", CashflowType.ISOLATED, multiplier_fn)])
+      cashflow_rules=[CashflowRule("Job", CashflowType.EXTRAORDINARY, multiplier_fn)])
 
   # m=0: NW=1000 -> Mult=1.0 for the year.
   res = simulate_strategy(strategy, monthly_asset_prices, monthly_cashflows)
@@ -793,9 +793,9 @@ def test_extra_cashflow_mixed():
       inflation_rate=None,
       selling_priority=["オルカン"],
       cashflow_rules=[
-          CashflowRule("Pension", CashflowType.ISOLATED, None),
-          CashflowRule("Job", CashflowType.ISOLATED,
-                       lambda m, nw, ps: np.array([0.5]))
+          CashflowRule("Pension", CashflowType.EXTRAORDINARY, None),
+          CashflowRule("Job", CashflowType.EXTRAORDINARY,
+                       lambda m, nw, pn, pg: np.array([0.5]))
       ])
 
   res = simulate_strategy(strategy, monthly_asset_prices, monthly_cashflows)
@@ -817,7 +817,7 @@ def test_extra_cashflow_detailed_timing():
   # NW に応じて倍率を変える
   # 1年目 (m=0): NW=1000 -> mult=1.0
   # 2年目 (m=12): NW は 1000 + 10*12 = 1120 になっているはず -> mult=2.0
-  def multiplier_fn(m, net_worth, prev_spending):
+  def multiplier_fn(m, net_worth, prev_net, prev_gross):
     if m == 0:
       return np.array([1.0])
     elif m == 12:
@@ -832,7 +832,7 @@ def test_extra_cashflow_detailed_timing():
                       annual_cost=0.0,
                       inflation_rate=None,
                       selling_priority=["A"],
-                      cashflow_rules=[CashflowRule("Job", CashflowType.ISOLATED, multiplier_fn)])
+                      cashflow_rules=[CashflowRule("Job", CashflowType.EXTRAORDINARY, multiplier_fn)])
 
   res = simulate_strategy(strategy, monthly_asset_prices, monthly_cashflows)
 
@@ -860,7 +860,7 @@ def test_extra_cashflow_bankrupt_mask():
   # 収入を月 1.0 にする.
   monthly_cashflows = {"Job": np.full((n_sim, total_months), 1.0)}
 
-  def multiplier_fn(m, net_worth, prev_spending):
+  def multiplier_fn(m, net_worth, prev_net, prev_gross):
     # net_worth のサイズは active_paths の数になっているはず
     return np.ones_like(net_worth)
 
@@ -872,7 +872,7 @@ def test_extra_cashflow_bankrupt_mask():
                       annual_cost=0.0,
                       inflation_rate=None,
                       selling_priority=["A"],
-                      cashflow_rules=[CashflowRule("Job", CashflowType.ISOLATED, multiplier_fn)])
+                      cashflow_rules=[CashflowRule("Job", CashflowType.EXTRAORDINARY, multiplier_fn)])
 
   res = simulate_strategy(strategy, prices, monthly_cashflows=monthly_cashflows)
 
@@ -892,7 +892,7 @@ def test_extra_cashflow_no_side_effect_on_ds():
   monthly_asset_prices = {"A": np.ones((n_sim, total_months + 1))}
   monthly_cashflows = {"Job": np.full((n_sim, total_months), 10.0)}
 
-  def mult_fn(m, nw, ps):
+  def mult_fn(m, nw, pn, pg):
     return (nw > 1100.0).astype(float) + 1.0
 
   ds = DynamicSpending(target_ratio=0.1, upper_limit=1.0, lower_limit=-1.0)
@@ -905,7 +905,7 @@ def test_extra_cashflow_no_side_effect_on_ds():
                       annual_cost=ds,
                       inflation_rate=None,
                       selling_priority=["A"],
-                      cashflow_rules=[CashflowRule("Job", CashflowType.ISOLATED, mult_fn)],
+                      cashflow_rules=[CashflowRule("Job", CashflowType.EXTRAORDINARY, mult_fn)],
                       record_annual_spend=True)
 
   res = simulate_strategy(strategy, monthly_asset_prices, monthly_cashflows)
@@ -934,8 +934,8 @@ def test_conditional_work_multiplier_receives_prev_spending():
 
   received_spendings = []
 
-  def mock_multiplier(m, net_worth, prev_spending):
-    received_spendings.append(prev_spending.copy())
+  def mock_multiplier(m, net_worth, prev_net, prev_gross):
+    received_spendings.append(prev_net.copy())
     return np.ones_like(net_worth)
 
   strategy = Strategy(name="Test",
@@ -946,7 +946,7 @@ def test_conditional_work_multiplier_receives_prev_spending():
                       annual_cost=annual_cost,
                       inflation_rate=None,
                       selling_priority=["Cash"],
-                      cashflow_rules=[CashflowRule("Work", CashflowType.ISOLATED, mock_multiplier)])
+                      cashflow_rules=[CashflowRule("Work", CashflowType.EXTRAORDINARY, mock_multiplier)])
 
   simulate_strategy(strategy, prices, monthly_cashflows={"Work": np.zeros((n_sim, years * 12))})
 
@@ -967,7 +967,7 @@ def test_conditional_work_logic():
 
   prices = {"Cash": np.ones((n_sim, years * 12 + 1))}
 
-  def work_if_low(m, net_worth, prev_spending):
+  def work_if_low(m, net_worth, prev_net, prev_gross):
     # NW < 950 の時のみ働く
     # Year 0: NW=1000 -> 働かない
     # Year 1: 1年間の支出100後、NW=900 -> 働く
@@ -981,7 +981,7 @@ def test_conditional_work_logic():
                       annual_cost=annual_cost,
                       inflation_rate=None,
                       selling_priority=["Cash"],
-                      cashflow_rules=[CashflowRule("Work", CashflowType.ISOLATED, work_if_low)])
+                      cashflow_rules=[CashflowRule("Work", CashflowType.EXTRAORDINARY, work_if_low)])
 
   # 労働収入: 月50 (年600)
   work_cf = np.full((n_sim, years * 12), 50.0)
@@ -1016,7 +1016,7 @@ def test_cashflow_type_include_in_annual_spend():
                       annual_cost=ds,
                       inflation_rate=None,
                       selling_priority=["A"],
-                      cashflow_rules=[CashflowRule("Income", CashflowType.INCLUDE_IN_ANNUAL_SPEND)],
+                      cashflow_rules=[CashflowRule("Income", CashflowType.REGULAR)],
                       record_annual_spend=True)
 
   res = simulate_strategy(strategy, prices, monthly_cashflows=monthly_cashflows)
@@ -1062,7 +1062,7 @@ def test_cashflow_type_isolated_vs_include():
                           annual_cost=ds,
                           inflation_rate=None,
                           selling_priority=["A"],
-                          cashflow_rules=[CashflowRule("Income", CashflowType.ISOLATED)],
+                          cashflow_rules=[CashflowRule("Income", CashflowType.EXTRAORDINARY)],
                           record_annual_spend=True)
 
   res_iso = simulate_strategy(strategy_iso, prices, monthly_cashflows=monthly_cashflows)
@@ -1103,7 +1103,7 @@ def test_cashflow_type_include_in_annual_spend_excess_income():
                       annual_cost=ds,
                       inflation_rate=None,
                       selling_priority=["A"],
-                      cashflow_rules=[CashflowRule("BigIncome", CashflowType.INCLUDE_IN_ANNUAL_SPEND)],
+                      cashflow_rules=[CashflowRule("BigIncome", CashflowType.REGULAR)],
                       record_annual_spend=True)
 
   res = simulate_strategy(strategy, prices, monthly_cashflows=monthly_cashflows)
@@ -1128,8 +1128,8 @@ def test_strategy_duplicate_cashflow_rules():
              inflation_rate=None,
              selling_priority=["A"],
              cashflow_rules=[
-                 CashflowRule("CF1", CashflowType.ISOLATED),
-                 CashflowRule("CF1", CashflowType.INCLUDE_IN_ANNUAL_SPEND)
+                 CashflowRule("CF1", CashflowType.EXTRAORDINARY),
+                 CashflowRule("CF1", CashflowType.REGULAR)
              ])
 
 
@@ -1180,7 +1180,7 @@ def test_cashflow_type_include_in_annual_spend_expense():
                       annual_cost=ds,
                       inflation_rate=None,
                       selling_priority=["A"],
-                      cashflow_rules=[CashflowRule("Expense", CashflowType.INCLUDE_IN_ANNUAL_SPEND)],
+                      cashflow_rules=[CashflowRule("Expense", CashflowType.REGULAR)],
                       record_annual_spend=True)
 
   res = simulate_strategy(strategy, prices, monthly_cashflows=monthly_cashflows)
@@ -1214,7 +1214,7 @@ def test_cashflow_type_isolated_expense():
                       annual_cost=ds,
                       inflation_rate=None,
                       selling_priority=["A"],
-                      cashflow_rules=[CashflowRule("Expense", CashflowType.ISOLATED)],
+                      cashflow_rules=[CashflowRule("Expense", CashflowType.EXTRAORDINARY)],
                       record_annual_spend=True)
 
   res = simulate_strategy(strategy, prices, monthly_cashflows=monthly_cashflows)
@@ -1254,7 +1254,7 @@ def test_dynamic_rebalance_cur_ann_spend_with_regular_cashflow():
                       annual_cost=strategy_cost,
                       inflation_rate=None,
                       selling_priority=["A"],
-                      cashflow_rules=[CashflowRule("Income", CashflowType.INCLUDE_IN_ANNUAL_SPEND)],
+                      cashflow_rules=[CashflowRule("Income", CashflowType.REGULAR)],
                       rebalance_interval=1,
                       dynamic_rebalance_fn=dummy_rebalance_fn)
 
@@ -1264,4 +1264,51 @@ def test_dynamic_rebalance_cur_ann_spend_with_regular_cashflow():
   # cur_ann_spend = 5.0 * 12 = 60.0
   for val in received_cur_ann_spend:
     assert val[0] == pytest.approx(60.0)
+
+
+def test_extra_cashflow_multiplier_receives_prev_gross():
+  """
+  ExtraCashflowMultiplierFn が前年の正味支出と総支出の両方を正しく受け取れることを検証する。
+  """
+  n_sim = 1
+  total_months = 24
+  prices = {"A": np.ones((n_sim, total_months + 1))}
+
+  # 定常収入 5.0/month (年60)
+  monthly_cashflows = {"Income": np.full((n_sim, total_months), 5.0),
+                       "Job": np.zeros((n_sim, total_months))}
+  
+  # 定常支出 10.0/month (年120)
+  annual_cost = 120.0
+
+  received_stats = []
+
+  def mock_multiplier(m, net_worth, prev_net, prev_gross):
+    received_stats.append((prev_net.copy(), prev_gross.copy()))
+    return np.ones_like(net_worth)
+
+  strategy = Strategy(name="GrossTest",
+                      initial_money=1000.0,
+                      initial_loan=0.0,
+                      yearly_loan_interest=0.0,
+                      initial_asset_ratio={"A": 1.0},
+                      annual_cost=annual_cost,
+                      inflation_rate=None,
+                      selling_priority=["A"],
+                      cashflow_rules=[
+                          CashflowRule("Income", CashflowType.REGULAR),
+                          CashflowRule("Job", CashflowType.EXTRAORDINARY, mock_multiplier)
+                      ])
+
+  simulate_strategy(strategy, prices, monthly_cashflows=monthly_cashflows)
+
+  # m=0: 初期値
+  assert received_stats[0][0][0] == pytest.approx(120.0)
+  assert received_stats[0][1][0] == pytest.approx(120.0)
+
+  # m=12: 1年目の実績
+  # prev_net = 120 - 60 = 60
+  # prev_gross = 120
+  assert received_stats[1][0][0] == pytest.approx(60.0)
+  assert received_stats[1][1][0] == pytest.approx(120.0)
 
