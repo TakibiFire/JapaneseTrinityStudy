@@ -3,6 +3,7 @@ import pytest
 
 from src.core import (DynamicSpending, SimulationResult, Strategy,
                       ZeroRiskAsset, simulate_strategy)
+from src.lib.cashflow_generator import CashflowRule, CashflowType
 
 
 def test_simulate_strategy_no_ruin():
@@ -626,7 +627,7 @@ def test_simulate_strategy_extra_cashflow():
       annual_cost=120.0,  # 月10.0
       inflation_rate=None,
       selling_priority=["AssetA"],
-      extra_cashflow_sources={"MyCashflow": None})
+      cashflow_rules=[CashflowRule("MyCashflow", CashflowType.ISOLATED)])
 
   res = simulate_strategy(strategy, prices, monthly_cashflows=monthly_cashflows)
 
@@ -675,7 +676,7 @@ def test_extra_cashflow_validation():
                       annual_cost=0.0,
                       inflation_rate=None,
                       selling_priority=["A"],
-                      extra_cashflow_sources={"CF1": None})
+                      cashflow_rules=[CashflowRule("CF1", CashflowType.ISOLATED)])
                       
   prices = {"A": np.ones((2, 13))}  # n_sim=2, total_months=12
   
@@ -714,7 +715,7 @@ def test_simulate_strategy_large_income_and_spend():
                       annual_cost=12.0,  # 月1.0の取り崩し
                       inflation_rate=None,
                       selling_priority=["AssetA"],
-                      extra_cashflow_sources={"BigCF": None})
+                      cashflow_rules=[CashflowRule("BigCF", CashflowType.ISOLATED)])
 
   res = simulate_strategy(strategy, prices, monthly_cashflows=monthly_cashflows)
   
@@ -762,7 +763,7 @@ def test_extra_cashflow_multiplier():
       annual_cost=0.0,
       inflation_rate=None,
       selling_priority=["オルカン"],
-      extra_cashflow_sources={"Job": multiplier_fn})
+      cashflow_rules=[CashflowRule("Job", CashflowType.ISOLATED, multiplier_fn)])
 
   # m=0: NW=1000 -> Mult=1.0 for the year.
   res = simulate_strategy(strategy, monthly_asset_prices, monthly_cashflows)
@@ -791,10 +792,11 @@ def test_extra_cashflow_mixed():
       annual_cost=0.0,
       inflation_rate=None,
       selling_priority=["オルカン"],
-      extra_cashflow_sources={
-          "Pension": None,
-          "Job": lambda m, nw, ps: np.array([0.5])
-      })
+      cashflow_rules=[
+          CashflowRule("Pension", CashflowType.ISOLATED, None),
+          CashflowRule("Job", CashflowType.ISOLATED,
+                       lambda m, nw, ps: np.array([0.5]))
+      ])
 
   res = simulate_strategy(strategy, monthly_asset_prices, monthly_cashflows)
   # 1000 + (5 * 12) + (10 * 0.5 * 12) = 1120
@@ -830,7 +832,7 @@ def test_extra_cashflow_detailed_timing():
                       annual_cost=0.0,
                       inflation_rate=None,
                       selling_priority=["A"],
-                      extra_cashflow_sources={"Job": multiplier_fn})
+                      cashflow_rules=[CashflowRule("Job", CashflowType.ISOLATED, multiplier_fn)])
 
   res = simulate_strategy(strategy, monthly_asset_prices, monthly_cashflows)
 
@@ -870,7 +872,7 @@ def test_extra_cashflow_bankrupt_mask():
                       annual_cost=0.0,
                       inflation_rate=None,
                       selling_priority=["A"],
-                      extra_cashflow_sources={"Job": multiplier_fn})
+                      cashflow_rules=[CashflowRule("Job", CashflowType.ISOLATED, multiplier_fn)])
 
   res = simulate_strategy(strategy, prices, monthly_cashflows=monthly_cashflows)
 
@@ -903,7 +905,7 @@ def test_extra_cashflow_no_side_effect_on_ds():
                       annual_cost=ds,
                       inflation_rate=None,
                       selling_priority=["A"],
-                      extra_cashflow_sources={"Job": mult_fn},
+                      cashflow_rules=[CashflowRule("Job", CashflowType.ISOLATED, mult_fn)],
                       record_annual_spend=True)
 
   res = simulate_strategy(strategy, monthly_asset_prices, monthly_cashflows)
@@ -913,8 +915,8 @@ def test_extra_cashflow_no_side_effect_on_ds():
   # Year 2 (m=12): NW=1020. spend=102. mult=1.0. Job=120.
   # Year 2 end NW = 1020 - 102 + 120 = 1038.
   assert res.annual_spends is not None
-  assert res.annual_spends[0, 0] == 100.0
-  assert res.annual_spends[0, 1] == 102.0
+  assert res.annual_spends[0, 0] == pytest.approx(100.0)
+  assert res.annual_spends[0, 1] == pytest.approx(102.0)
   assert np.allclose(res.net_values[0], 1038.0)
 
 
@@ -944,14 +946,14 @@ def test_conditional_work_multiplier_receives_prev_spending():
                       annual_cost=annual_cost,
                       inflation_rate=None,
                       selling_priority=["Cash"],
-                      extra_cashflow_sources={"Work": mock_multiplier})
+                      cashflow_rules=[CashflowRule("Work", CashflowType.ISOLATED, mock_multiplier)])
 
   simulate_strategy(strategy, prices, monthly_cashflows={"Work": np.zeros((n_sim, years * 12))})
 
   # m=0: 初期支出 100.0
-  assert np.all(received_spendings[0] == 100.0)
+  assert np.all(received_spendings[0] == pytest.approx(100.0))
   # m=12: 前年の支出 100.0
-  assert np.all(received_spendings[1] == 100.0)
+  assert np.all(received_spendings[1] == pytest.approx(100.0))
 
 
 def test_conditional_work_logic():
@@ -979,7 +981,7 @@ def test_conditional_work_logic():
                       annual_cost=annual_cost,
                       inflation_rate=None,
                       selling_priority=["Cash"],
-                      extra_cashflow_sources={"Work": work_if_low})
+                      cashflow_rules=[CashflowRule("Work", CashflowType.ISOLATED, work_if_low)])
 
   # 労働収入: 月50 (年600)
   work_cf = np.full((n_sim, years * 12), 50.0)
@@ -988,4 +990,278 @@ def test_conditional_work_logic():
   # Year 0: 収入なし。1年目末の資産 = 1000 - 100 = 900.
   # Year 1: 収入あり(600)。2年目末の資産 = 900 - 100 + 600 = 1400.
   assert res.net_values[0] == pytest.approx(1400.0)
+
+
+def test_cashflow_type_include_in_annual_spend():
+  """
+  INCLUDE_IN_ANNUAL_SPEND の収入が年間支出トラッカーを減らし、
+  翌年のダイナミックスペンディングの制限に影響を与えることを検証する。
+  """
+  n_sim = 1
+  total_months = 24
+  prices = {"A": np.ones((n_sim, total_months + 1))}
+
+  # 毎月 5.0 の収入
+  monthly_cashflows = {"Income": np.full((n_sim, total_months), 5.0)}
+
+  # ターゲット 10% (1000 * 0.1 = 100/year)
+  # 上限 5% (105), 下限 -5% (95)
+  ds = DynamicSpending(target_ratio=0.1, upper_limit=0.05, lower_limit=-0.05)
+
+  strategy = Strategy(name="IncludeTest",
+                      initial_money=1000.0,
+                      initial_loan=0.0,
+                      yearly_loan_interest=0.0,
+                      initial_asset_ratio={"A": 1.0},
+                      annual_cost=ds,
+                      inflation_rate=None,
+                      selling_priority=["A"],
+                      cashflow_rules=[CashflowRule("Income", CashflowType.INCLUDE_IN_ANNUAL_SPEND)],
+                      record_annual_spend=True)
+
+  res = simulate_strategy(strategy, prices, monthly_cashflows=monthly_cashflows)
+
+  # Year 1 (m=0..11):
+  # ターゲット支出 = 100.0
+  # 収入 = 5.0 * 12 = 60.0
+  # 正味の定常支出 (net_reg_spend) = 100.0 - 60.0 = 40.0
+  # annual_spends[0, 0] は正味の 40.0 になるはず
+  assert res.annual_spends is not None
+  assert res.annual_spends[0, 0] == pytest.approx(40.0)
+
+  # Year 2 (m=12..23):
+  # 年始 NW = 1000 - 40 = 960 (実際は withdrawal は 40)
+  # ターゲット支出 = 960 * 0.1 = 96.0
+  # 前年正味支出 = 40.0
+  # 上限 = 40 * 1.05 = 42.0
+  # 下限 = 40 * 0.95 = 38.0
+  # 支出制限適用 -> 42.0 (ベース支出)
+  # 正味の定常支出 = 42.0 (ベース) - 60.0 (収入) = -18.0
+  assert res.annual_spends[0, 1] == pytest.approx(-18.0)
+
+
+def test_cashflow_type_isolated_vs_include():
+  """
+  ISOLATED と INCLUDE_IN_ANNUAL_SPEND の違いを検証する。
+  ISOLATED は年間支出トラッカーに影響を与えない。
+  """
+  n_sim = 1
+  total_months = 24
+  prices = {"A": np.ones((n_sim, total_months + 1))}
+
+  # 毎月 5.0 の収入
+  monthly_cashflows = {"Income": np.full((n_sim, total_months), 5.0)}
+  ds = DynamicSpending(target_ratio=0.1, upper_limit=0.05, lower_limit=-0.05)
+
+  # Case 1: ISOLATED
+  strategy_iso = Strategy(name="IsoTest",
+                          initial_money=1000.0,
+                          initial_loan=0.0,
+                          yearly_loan_interest=0.0,
+                          initial_asset_ratio={"A": 1.0},
+                          annual_cost=ds,
+                          inflation_rate=None,
+                          selling_priority=["A"],
+                          cashflow_rules=[CashflowRule("Income", CashflowType.ISOLATED)],
+                          record_annual_spend=True)
+
+  res_iso = simulate_strategy(strategy_iso, prices, monthly_cashflows=monthly_cashflows)
+
+  # Year 1:
+  # ターゲット支出 = 100.0
+  # 収入 = 60.0 (ISOLATED なので tracker には入らない)
+  # 正味支出 tracker = 100.0
+  assert res_iso.annual_spends is not None
+  assert res_iso.annual_spends[0, 0] == pytest.approx(100.0)
+  # Year 2:
+  # 年始 NW = 1000 - (100 - 60) = 960
+  # ターゲット = 96.0
+  # 前年 tracker = 100.0
+  # 下限 = 95.0, 上限 = 105.0
+  # ターゲット 96.0 は範囲内なのでそのまま採用
+  assert res_iso.annual_spends[0, 1] == pytest.approx(96.0)
+
+
+def test_cashflow_type_include_in_annual_spend_excess_income():
+  """
+  INCLUDE_IN_ANNUAL_SPEND の収入がベース支出を上回る場合を検証。
+  """
+  n_sim = 1
+  total_months = 12
+  prices = {"A": np.ones((n_sim, total_months + 1))}
+
+  # 毎月 20.0 の収入 (年 240)
+  monthly_cashflows = {"BigIncome": np.full((n_sim, total_months), 20.0)}
+  # ターゲット 100/year
+  ds = DynamicSpending(target_ratio=0.1, upper_limit=0.05, lower_limit=-0.05)
+
+  strategy = Strategy(name="ExcessIncomeTest",
+                      initial_money=1000.0,
+                      initial_loan=0.0,
+                      yearly_loan_interest=0.0,
+                      initial_asset_ratio={"A": 1.0},
+                      annual_cost=ds,
+                      inflation_rate=None,
+                      selling_priority=["A"],
+                      cashflow_rules=[CashflowRule("BigIncome", CashflowType.INCLUDE_IN_ANNUAL_SPEND)],
+                      record_annual_spend=True)
+
+  res = simulate_strategy(strategy, prices, monthly_cashflows=monthly_cashflows)
+
+  # Year 1:
+  # 支出 100, 収入 240 -> 正味支出 -140
+  assert res.annual_spends is not None
+  assert res.annual_spends[0, 0] == pytest.approx(-140.0)
+  # NW = 1000 - (-140) = 1140
+  assert res.net_values[0] == pytest.approx(1140.0)
+
+
+def test_strategy_duplicate_cashflow_rules():
+  """キャッシュフロールールの重複チェックを検証。"""
+  with pytest.raises(ValueError, match="Duplicate source_name found in cashflow_rules."):
+    Strategy(name="DupTest",
+             initial_money=100.0,
+             initial_loan=0.0,
+             yearly_loan_interest=0.0,
+             initial_asset_ratio={"A": 1.0},
+             annual_cost=10.0,
+             inflation_rate=None,
+             selling_priority=["A"],
+             cashflow_rules=[
+                 CashflowRule("CF1", CashflowType.ISOLATED),
+                 CashflowRule("CF1", CashflowType.INCLUDE_IN_ANNUAL_SPEND)
+             ])
+
+
+def test_simulate_strategy_exp_regard_interest_tax_as_regular():
+  """利息や税金を定常支出として扱う実験的フラグの検証。"""
+  n_sim = 1
+  total_months = 12
+  prices = {"A": np.ones((n_sim, total_months + 1))}
+
+  # 借入1000, 金利 12%/year = 1%/month = 10/month
+  # 税金 0
+  strategy = Strategy(name="ExpFlagTest",
+                      initial_money=1000.0,
+                      initial_loan=1000.0,
+                      yearly_loan_interest=0.12,
+                      initial_asset_ratio={"A": 1.0},
+                      annual_cost=0.0,
+                      inflation_rate=None,
+                      selling_priority=["A"],
+                      record_annual_spend=True)
+
+  # フラグ False (デフォルト): 利息は tracker に入らない
+  res1 = simulate_strategy(strategy, prices, exp_regard_interest_tax_as_regular=False)
+  assert res1.annual_spends is not None
+  assert res1.annual_spends[0, 0] == pytest.approx(0.0)
+
+  # フラグ True: 利息 (10 * 12 = 120) が tracker に入る
+  res2 = simulate_strategy(strategy, prices, exp_regard_interest_tax_as_regular=True)
+  assert res2.annual_spends is not None
+  assert res2.annual_spends[0, 0] == pytest.approx(120.0)
+
+
+def test_cashflow_type_include_in_annual_spend_expense():
+  """INCLUDE_IN_ANNUAL_SPEND の支出が DynamicSpending の制限を増やすことを検証。"""
+  n_sim = 1
+  total_months = 24
+  prices = {"A": np.ones((n_sim, total_months + 1))}
+
+  # 毎月 5.0 の追加支出 (年 60)
+  monthly_cashflows = {"Expense": np.full((n_sim, total_months), -5.0)}
+  ds = DynamicSpending(target_ratio=0.1, upper_limit=0.05, lower_limit=-0.05)
+
+  strategy = Strategy(name="IncludeExpenseTest",
+                      initial_money=1000.0,
+                      initial_loan=0.0,
+                      yearly_loan_interest=0.0,
+                      initial_asset_ratio={"A": 1.0},
+                      annual_cost=ds,
+                      inflation_rate=None,
+                      selling_priority=["A"],
+                      cashflow_rules=[CashflowRule("Expense", CashflowType.INCLUDE_IN_ANNUAL_SPEND)],
+                      record_annual_spend=True)
+
+  res = simulate_strategy(strategy, prices, monthly_cashflows=monthly_cashflows)
+
+  # Year 1: 支出 100 + 追加支出 60 = 160
+  assert res.annual_spends is not None
+  assert res.annual_spends[0, 0] == pytest.approx(160.0)
+
+  # Year 2: 前年 160. 下限 160 * 0.95 = 152.
+  # 年始 NW = 1000 - 160 = 840. ターゲット = 84.
+  # ターゲット 84 は 下限 152 より小さいので 152 が採用される (ベース支出)
+  # 正味の定常支出 = 152.0 (ベース) + 60.0 (追加支出) = 212.0
+  assert res.annual_spends[0, 1] == pytest.approx(212.0)
+
+
+def test_cashflow_type_isolated_expense():
+  """ISOLATED の支出が DynamicSpending の制限に影響しないことを検証。"""
+  n_sim = 1
+  total_months = 24
+  prices = {"A": np.ones((n_sim, total_months + 1))}
+
+  # 毎月 5.0 の追加支出 (年 60)
+  monthly_cashflows = {"Expense": np.full((n_sim, total_months), -5.0)}
+  ds = DynamicSpending(target_ratio=0.1, upper_limit=0.05, lower_limit=-0.05)
+
+  strategy = Strategy(name="IsoExpenseTest",
+                      initial_money=1000.0,
+                      initial_loan=0.0,
+                      yearly_loan_interest=0.0,
+                      initial_asset_ratio={"A": 1.0},
+                      annual_cost=ds,
+                      inflation_rate=None,
+                      selling_priority=["A"],
+                      cashflow_rules=[CashflowRule("Expense", CashflowType.ISOLATED)],
+                      record_annual_spend=True)
+
+  res = simulate_strategy(strategy, prices, monthly_cashflows=monthly_cashflows)
+
+  # Year 1: tracker はベース支出の 100 のまま
+  assert res.annual_spends is not None
+  assert res.annual_spends[0, 0] == pytest.approx(100.0)
+
+  # Year 2: 年始 NW = 1000 - 100 - 60 = 840. ターゲット = 84.
+  # 前年 tracker 100. 下限 95. 上限 105.
+  # ターゲット 84 は下限 95 より小さいので 95 が採用される
+  assert res.annual_spends[0, 1] == pytest.approx(95.0)
+
+
+def test_dynamic_rebalance_cur_ann_spend_with_regular_cashflow():
+  """ダイナミックリバランスに渡される cur_ann_spend が正味の定常支出であることを検証。"""
+  n_sim = 1
+  total_months = 12
+  prices = {"A": np.ones((n_sim, total_months + 1))}
+
+  # 定常収入 5.0/month (年60)
+  monthly_cashflows = {"Income": np.full((n_sim, total_months), 5.0)}
+  # 定常支出 10.0/month (年120)
+  strategy_cost = 120.0
+
+  received_cur_ann_spend = []
+
+  def dummy_rebalance_fn(net_value, cur_ann_spend, remaining_years):
+    received_cur_ann_spend.append(cur_ann_spend.copy())
+    return {"A": np.ones_like(net_value)}
+
+  strategy = Strategy(name="DR_CF_Test",
+                      initial_money=1000.0,
+                      initial_loan=0.0,
+                      yearly_loan_interest=0.0,
+                      initial_asset_ratio={"A": 1.0},
+                      annual_cost=strategy_cost,
+                      inflation_rate=None,
+                      selling_priority=["A"],
+                      cashflow_rules=[CashflowRule("Income", CashflowType.INCLUDE_IN_ANNUAL_SPEND)],
+                      rebalance_interval=1,
+                      dynamic_rebalance_fn=dummy_rebalance_fn)
+
+  simulate_strategy(strategy, prices, monthly_cashflows=monthly_cashflows)
+
+  # 定常支出 10.0 - 収入 5.0 = 5.0 (月額)
+  # cur_ann_spend = 5.0 * 12 = 60.0
+  for val in received_cur_ann_spend:
+    assert val[0] == pytest.approx(60.0)
 

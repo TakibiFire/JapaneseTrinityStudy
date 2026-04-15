@@ -4,10 +4,35 @@
 絶対的な名目金額を生成する。
 """
 
+import dataclasses
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional
+from enum import Enum, auto
+from typing import Callable, Dict, List, Optional
 
 import numpy as np
+
+
+class CashflowType(Enum):
+  """
+  キャッシュフローの種類。
+  """
+  INCLUDE_IN_ANNUAL_SPEND = auto()  # 年間支出計算に含める（例：年金）
+  ISOLATED = auto()                # 独立したキャッシュフローとして扱う（例：一時的な支出）
+
+
+# 追加キャッシュフローの倍率（条件付き労働など）を決めるコールバック関数
+# (month, current_net_worth, previous_annual_spending) -> multiplier
+ExtraCashflowMultiplierFn = Callable[[int, np.ndarray, np.ndarray], np.ndarray]
+
+
+@dataclasses.dataclass(frozen=True)
+class CashflowRule:
+  """
+  追加キャッシュフローのルール定義。
+  """
+  source_name: str
+  cashflow_type: CashflowType
+  multiplier_fn: Optional[ExtraCashflowMultiplierFn] = None
 
 
 class CashflowConfig(ABC):
