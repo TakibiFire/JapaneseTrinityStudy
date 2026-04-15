@@ -48,7 +48,7 @@ from src.lib.simulation_defaults import (AcwiModelKey,
                                          get_cpi_ar12_config)
 
 # 設定
-DATA_DIR = "data/all_combinations/"
+DATA_DIR = "data/all_60yr/"
 CSV_PATH = os.path.join(DATA_DIR, "all_60yr_grid.csv")
 
 
