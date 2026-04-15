@@ -1,5 +1,10 @@
 # 無リスク資産とのリバランス
 
+<!--
+DO NOT DELETE:
+python3 src/zero_risk_rebalance_comp_main.py 
+-->
+
 [現金とのリバランス](cash_rebalance.md)では、リバランスを行うことで長期的な生存確率が低下することを確認しました。では、利回りのある無リスク資産（4%）を組み合わせた場合、リバランスの効果はどう変わるでしょうか。
 
 !!! abstract "重要なポイント"
