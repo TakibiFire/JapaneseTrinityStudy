@@ -150,9 +150,11 @@ def main():
     if use_dyn_spend:
       # ダイナミックスペンディング (上限3%, 下限0%)
       # target_ratio は calculate_safe_target_ratio(YEARS) で求めた値を使用
-      annual_cost_setting = DynamicSpending(target_ratio=target_ratio,
-                                            upper_limit=0.03,
-                                            lower_limit=0.0)
+      annual_cost_setting = DynamicSpending(
+          initial_annual_spend=initial_annual_cost,
+          target_ratio=target_ratio,
+          upper_limit=0.03,
+          lower_limit=0.0)
       # DynamicSpendingは名目で上限下限を扱うため、シミュレーション側のインフレ調整はオフ
       inflation_rate_setting = None
     else:

@@ -152,7 +152,8 @@ def test_dynamic_spending_validation():
   """
   DynamicSpendingを用いた場合のStrategy初期化時のバリデーションを検証する。
   """
-  spending = DynamicSpending(target_ratio=0.04,
+  spending = DynamicSpending(initial_annual_spend=4.0,
+                             target_ratio=0.04,
                              upper_limit=0.05,
                              lower_limit=-0.015)
 
@@ -170,14 +171,15 @@ def test_dynamic_spending_validation():
 def test_dynamic_spending_initial_cost():
   """
   DynamicSpendingを用いた場合、初年度の年間支出額が
-  (初期資産 * target_ratio) として計算されることを検証する。
+  initial_annual_spend として使用されることを検証する。
   """
   n_sim = 1
   total_months = 12
   prices = {"A": np.ones((n_sim, total_months + 1))}
 
-  # 初期資産 100.0, ターゲット 5% -> 初年度支出は 5.0
-  spending = DynamicSpending(target_ratio=0.05,
+  # 初期資産 100.0, ターゲット 5%, 初動 5.0 -> 初年度支出は 5.0
+  spending = DynamicSpending(initial_annual_spend=5.0,
+                             target_ratio=0.05,
                              upper_limit=0.05,
                              lower_limit=-0.015)
   strategy = Strategy(name="TestSpendingInitial",
@@ -209,7 +211,8 @@ def test_dynamic_spending_ceiling():
 
   # 初期資産 100.0, ターゲット 5%, 上限 5%
   # 税金の影響を排除するため tax_rate=0 とする
-  spending = DynamicSpending(target_ratio=0.05,
+  spending = DynamicSpending(initial_annual_spend=5.0,
+                             target_ratio=0.05,
                              upper_limit=0.05,
                              lower_limit=-0.015)
   strategy = Strategy(name="TestSpendingCeiling",
@@ -249,7 +252,8 @@ def test_dynamic_spending_floor():
   prices = {"A": prices_array}
 
   # 初期資産 100.0, ターゲット 5%, 下限 -2%
-  spending = DynamicSpending(target_ratio=0.05,
+  spending = DynamicSpending(initial_annual_spend=5.0,
+                             target_ratio=0.05,
                              upper_limit=0.05,
                              lower_limit=-0.02)
   strategy = Strategy(name="TestSpendingFloor",
@@ -289,7 +293,8 @@ def test_dynamic_spending_three_years():
   prices_array[:, 24:] = 0.5
   prices = {"A": prices_array}
 
-  spending = DynamicSpending(target_ratio=0.05,
+  spending = DynamicSpending(initial_annual_spend=5.0,
+                             target_ratio=0.05,
                              upper_limit=0.05,
                              lower_limit=-0.02)
   strategy = Strategy(name="TestSpendingThreeYears",
@@ -895,7 +900,7 @@ def test_extra_cashflow_no_side_effect_on_ds():
   def mult_fn(m, nw, pn, pg):
     return (nw > 1100.0).astype(float) + 1.0
 
-  ds = DynamicSpending(target_ratio=0.1, upper_limit=1.0, lower_limit=-1.0)
+  ds = DynamicSpending(initial_annual_spend=100.0, target_ratio=0.1, upper_limit=1.0, lower_limit=-1.0)
 
   strategy = Strategy(name="DS_Interaction",
                       initial_money=1000.0,
@@ -1006,7 +1011,7 @@ def test_cashflow_type_include_in_annual_spend():
 
   # ターゲット 10% (1000 * 0.1 = 100/year)
   # 上限 5% (105), 下限 -5% (95)
-  ds = DynamicSpending(target_ratio=0.1, upper_limit=0.05, lower_limit=-0.05)
+  ds = DynamicSpending(initial_annual_spend=100.0, target_ratio=0.1, upper_limit=0.05, lower_limit=-0.05)
 
   strategy = Strategy(name="IncludeTest",
                       initial_money=1000.0,
@@ -1032,12 +1037,12 @@ def test_cashflow_type_include_in_annual_spend():
   # Year 2 (m=12..23):
   # 年始 NW = 1000 - 40 = 960 (実際は withdrawal は 40)
   # ターゲット支出 = 960 * 0.1 = 96.0
-  # 前年正味支出 = 40.0
-  # 上限 = 40 * 1.05 = 42.0
-  # 下限 = 40 * 0.95 = 38.0
-  # 支出制限適用 -> 42.0 (ベース支出)
-  # 正味の定常支出 = 42.0 (ベース) - 60.0 (収入) = -18.0
-  assert res.annual_spends[0, 1] == pytest.approx(-18.0)
+  # 前年基本支出 (prev_base_spend_y) = 100.0 (追加キャッシュフローの影響を受けない)
+  # 上限 = 100 * 1.05 = 105.0
+  # 下限 = 100 * 0.95 = 95.0
+  # ターゲット 96.0 は範囲内なのでそのまま採用
+  # 正味の定常支出 = 96.0 (ベース) - 60.0 (収入) = 36.0
+  assert res.annual_spends[0, 1] == pytest.approx(36.0)
 
 
 def test_cashflow_type_isolated_vs_include():
@@ -1051,7 +1056,7 @@ def test_cashflow_type_isolated_vs_include():
 
   # 毎月 5.0 の収入
   monthly_cashflows = {"Income": np.full((n_sim, total_months), 5.0)}
-  ds = DynamicSpending(target_ratio=0.1, upper_limit=0.05, lower_limit=-0.05)
+  ds = DynamicSpending(initial_annual_spend=100.0, target_ratio=0.1, upper_limit=0.05, lower_limit=-0.05)
 
   # Case 1: ISOLATED
   strategy_iso = Strategy(name="IsoTest",
@@ -1093,7 +1098,7 @@ def test_cashflow_type_include_in_annual_spend_excess_income():
   # 毎月 20.0 の収入 (年 240)
   monthly_cashflows = {"BigIncome": np.full((n_sim, total_months), 20.0)}
   # ターゲット 100/year
-  ds = DynamicSpending(target_ratio=0.1, upper_limit=0.05, lower_limit=-0.05)
+  ds = DynamicSpending(initial_annual_spend=100.0, target_ratio=0.1, upper_limit=0.05, lower_limit=-0.05)
 
   strategy = Strategy(name="ExcessIncomeTest",
                       initial_money=1000.0,
@@ -1170,7 +1175,7 @@ def test_cashflow_type_include_in_annual_spend_expense():
 
   # 毎月 5.0 の追加支出 (年 60)
   monthly_cashflows = {"Expense": np.full((n_sim, total_months), -5.0)}
-  ds = DynamicSpending(target_ratio=0.1, upper_limit=0.05, lower_limit=-0.05)
+  ds = DynamicSpending(initial_annual_spend=100.0, target_ratio=0.1, upper_limit=0.05, lower_limit=-0.05)
 
   strategy = Strategy(name="IncludeExpenseTest",
                       initial_money=1000.0,
@@ -1189,11 +1194,13 @@ def test_cashflow_type_include_in_annual_spend_expense():
   assert res.annual_spends is not None
   assert res.annual_spends[0, 0] == pytest.approx(160.0)
 
-  # Year 2: 前年 160. 下限 160 * 0.95 = 152.
+  # Year 2:
   # 年始 NW = 1000 - 160 = 840. ターゲット = 84.
-  # ターゲット 84 は 下限 152 より小さいので 152 が採用される (ベース支出)
-  # 正味の定常支出 = 152.0 (ベース) + 60.0 (追加支出) = 212.0
-  assert res.annual_spends[0, 1] == pytest.approx(212.0)
+  # 前年基本支出 (prev_base_spend_y) = 100.0
+  # 下限 = 100 * 0.95 = 95.0
+  # ターゲット 84 は 下限 95 より小さいので 95 が採用される (ベース支出)
+  # 正味の定常支出 = 95.0 (ベース) + 60.0 (追加支出) = 155.0
+  assert res.annual_spends[0, 1] == pytest.approx(155.0)
 
 
 def test_cashflow_type_isolated_expense():
@@ -1204,7 +1211,7 @@ def test_cashflow_type_isolated_expense():
 
   # 毎月 5.0 の追加支出 (年 60)
   monthly_cashflows = {"Expense": np.full((n_sim, total_months), -5.0)}
-  ds = DynamicSpending(target_ratio=0.1, upper_limit=0.05, lower_limit=-0.05)
+  ds = DynamicSpending(initial_annual_spend=100.0, target_ratio=0.1, upper_limit=0.05, lower_limit=-0.05)
 
   strategy = Strategy(name="IsoExpenseTest",
                       initial_money=1000.0,

@@ -31,10 +31,15 @@ class ZeroRiskAsset:
 class DynamicSpending:
   """
   ダイナミック・スペンディング（動的支出）戦略の設定。
+
+  支出額を資産残高の一定割合（target_ratio）に保とうとするが、
+  前年の基本支出（annual_base_spend）に対して一定の範囲（lower_limit, upper_limit）
+  に収まるように調整する。
   """
-  target_ratio: float
-  upper_limit: float
-  lower_limit: float
+  initial_annual_spend: float  # 初年度の目標基本支出額 (万円/年)
+  target_ratio: float          # 目標支出率 (純資産に対する割合)
+  upper_limit: float           # 前年比の最大上昇率 (0.03 = +3%)
+  lower_limit: float           # 前年比の最大下降率 (-0.005 = -0.5%)
 
 
 # ダイナミックリバランス用のコールバック関数
@@ -194,7 +199,7 @@ def simulate_strategy(
   annual_base_spend_tracker = np.zeros(n_sim, dtype=np.float64)
 
   if isinstance(strategy.annual_cost, DynamicSpending):
-    init_val = total_capital * strategy.annual_cost.target_ratio
+    init_val = strategy.annual_cost.initial_annual_spend
     target_annual_spend.fill(init_val)
     prev_net_reg_spend_y.fill(init_val)
     prev_gross_reg_spend_y.fill(init_val)
@@ -266,20 +271,20 @@ def simulate_strategy(
     # 2. 支出額の決定
     # 純資産の計算（動的支出または条件付きキャッシュフローがある場合のみ、年1回実行）
     if m % 12 == 0:
+      # 年間支出トラッカーのリセット (全パスで実行)
+      if m > 0:
+        prev_net_reg_spend_y[active_paths] = annual_net_reg_spend_tracker[active_paths]
+        prev_gross_reg_spend_y[active_paths] = annual_gross_reg_spend_tracker[active_paths]
+        prev_base_spend_y[active_paths] = annual_base_spend_tracker[active_paths]
+        annual_net_reg_spend_tracker.fill(0.0)
+        annual_gross_reg_spend_tracker.fill(0.0)
+        annual_base_spend_tracker.fill(0.0)
+
       if isinstance(strategy.annual_cost, DynamicSpending) or has_dynamic_cf:
         current_net_worth = cash.copy()
         for name, u in units.items():
           current_net_worth[active_paths] += u[active_paths] * local_monthly_asset_prices[name][active_paths, m]
         current_net_worth[active_paths] -= strategy.initial_loan
-
-        # 年間支出と基準支出 (prev_net_reg_spend_y) の更新
-        if m > 0:
-          prev_net_reg_spend_y[active_paths] = annual_net_reg_spend_tracker[active_paths]
-          prev_gross_reg_spend_y[active_paths] = annual_gross_reg_spend_tracker[active_paths]
-          prev_base_spend_y[active_paths] = annual_base_spend_tracker[active_paths]
-          annual_net_reg_spend_tracker.fill(0.0)
-          annual_gross_reg_spend_tracker.fill(0.0)
-          annual_base_spend_tracker.fill(0.0)
 
         if isinstance(strategy.annual_cost, DynamicSpending):
           if m > 0:
@@ -296,11 +301,7 @@ def simulate_strategy(
                 if idx < len(active_paths) and active_paths[idx]:
                   debug_results[idx].append(f"[Debug Path {idx}] Year {m//12}: NW={current_net_worth[idx]:.2f}, target_spend_nominal={target_spending_nominal[idx]:.2f}, prev_base_spend={prev_base_spend_y[idx]:.2f}, prev_net_reg_spend={prev_net_reg_spend_y[idx]:.2f}, new_target_spend={target_annual_spend[idx]:.2f}, floor={floor[idx]:.2f}")
             # -------------
-          else:
-            # m=0 の時は初期値
-            target_annual_spend.fill(total_capital * strategy.annual_cost.target_ratio)
-            prev_net_reg_spend_y.fill(total_capital * strategy.annual_cost.target_ratio)
-            prev_base_spend_y.fill(total_capital * strategy.annual_cost.target_ratio)
+          # else (m=0) の時は初期化時に設定済み
 
         # 追加キャッシュフロー倍率の更新
         for rule in strategy.cashflow_rules:
