@@ -1,5 +1,11 @@
 # 高齢になると支出が減るという話
 
+<!--
+DO NOT DELETE:
+python3 src/analyze_retired_spending.py
+python3 src/retired_spending_comp_main.py
+-->
+
 [ダイナミック・スペンディング](dynamic_spending.md) では支出を我慢して生存確率を上げる戦略を話してきました。実際支出を減らすのはどれくらい辛いのでしょうか。
 
 今回は、取り崩し戦略のシミュレーションで忘れがちな事実を深堀りします。それは**高齢になると支出が減る**という話です。
