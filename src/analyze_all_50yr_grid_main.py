@@ -22,123 +22,12 @@ from sklearn.linear_model import LinearRegression
 from sklearn.metrics import r2_score
 from sklearn.preprocessing import PolynomialFeatures, StandardScaler
 
+from src.lib.analyze_all_yr import (create_heatmap,
+                                    run_best_combination_analysis)
+
 # 設定
 IMG_DIR = "docs/imgs/all_50yr"
 TEMP_IMG_DIR = "temp/all_50yr"
-
-
-def create_heatmap(df: pd.DataFrame,
-                   target_col: str,
-                   title: str,
-                   x_col: str,
-                   x_title: str,
-                   y_col: str,
-                   y_title: str,
-                   output_name: str,
-                   x_sort: Optional[List[Any]] = None,
-                   y_sort: Optional[List[Any]] = None):
-  """
-  ヒートマップを作成して保存する。
-  """
-  plot_df = df.copy()
-  plot_df["survival_rate"] = plot_df[target_col]
-  plot_df["survival_rate_pct"] = plot_df["survival_rate"] * 100
-
-  base = alt.Chart(plot_df).encode(
-      x=alt.X(f'{x_col}:O',
-              title=x_title,
-              sort=x_sort,
-              axis=alt.Axis(labelExpr="split(datum.label, '@')")),
-      y=alt.Y(f'{y_col}:O',
-              title=y_title,
-              sort=y_sort,
-              axis=alt.Axis(labelExpr="split(datum.label, '@')")),
-  )
-
-  heatmap = base.mark_rect().encode(
-      color=alt.Color('survival_rate:Q',
-                      title='生存確率',
-                      scale=alt.Scale(domain=[0.0, 0.8, 0.9, 0.94, 0.97, 1.0],
-                                      range=[
-                                          '#d73027', '#fee08b', '#ffffbf',
-                                          'yellowgreen', 'lightgreen', 'green'
-                                      ])))
-
-  text = base.mark_text(baseline='middle').encode(
-      text=alt.Text('survival_rate_pct:Q', format='.1f'),
-      color=alt.condition(alt.datum.survival_rate > 0.6, alt.value('black'),
-                          alt.value('white')))
-
-  chart = (heatmap + text).properties(title=title, width=500, height=400)
-
-  # STDOUT出力
-  print(f"\n--- {title} ---")
-  pivot = plot_df.pivot_table(index=y_col,
-                              columns=x_col,
-                              values="survival_rate_pct")
-  if y_sort:
-    pivot = pivot.reindex(index=y_sort)
-  if x_sort:
-    pivot = pivot.reindex(columns=x_sort)
-  print(pivot.to_string())
-
-  output_path = os.path.join(IMG_DIR, output_name)
-  os.makedirs(IMG_DIR, exist_ok=True)
-  chart.save(output_path)
-  print(f"✅ {output_path} に保存しました。")
-
-
-def create_best_combo_heatmap(df_best: pd.DataFrame,
-                              title: str,
-                              x_col: str,
-                              x_title: str,
-                              y_col: str,
-                              y_title: str,
-                              output_name: str,
-                              x_sort: Optional[List[Any]] = None,
-                              y_sort: Optional[List[Any]] = None):
-  """
-  最適な組み合わせ(Pxx_Dx)を可視化するヒートマップ。
-  """
-  plot_df = df_best.copy()
-
-  # Categorical color scale for combos
-  color_map = {
-      "65歳,あり": "#9AE6B4",  # Light green
-      "65歳,なし": "#B2F5EA",  # Light teal
-      "60歳,あり": "#FBD38D",  # Light orange
-      "60歳,なし": "#FEB2B2"  # Light red
-  }
-  domain = list(color_map.keys())
-  range_ = list(color_map.values())
-
-  base = alt.Chart(plot_df).encode(
-      x=alt.X(f'{x_col}:O',
-              title=x_title,
-              sort=x_sort,
-              axis=alt.Axis(labelExpr="split(datum.label, '@')")),
-      y=alt.Y(f'{y_col}:O',
-              title=y_title,
-              sort=y_sort,
-              axis=alt.Axis(labelExpr="split(datum.label, '@')")),
-  )
-
-  heatmap = base.mark_rect().encode(
-      color=alt.Color('display_combo:N',
-                      title='選択された戦略',
-                      scale=alt.Scale(domain=domain, range=range_)))
-
-  # Text shows strategy, its prob, and dyn flip gap with newline
-  text = base.mark_text(baseline='middle',
-                        lineBreak='\n').encode(text=alt.Text('combo_label:N'),
-                                               color=alt.value('black'))
-
-  chart = (heatmap + text).properties(title=title, width=500, height=450)
-
-  output_path = os.path.join(IMG_DIR, output_name)
-  os.makedirs(IMG_DIR, exist_ok=True)
-  chart.save(output_path)
-  print(f"✅ {output_path} に保存しました。")
 
 
 def create_spend_percentile_chart(df: pd.DataFrame, title: str,
@@ -273,6 +162,7 @@ def run_heatmap_analysis(df_survival: pd.DataFrame):
         for year_target in ["45"]:
           title = f"50歳開始・{h_label}・年金{p_age}歳・{year_target}年後生存確率(%) {dyn_title_suffix}"
           output_name = f"grid_heatmap_{year_target}yr_h{h_size}_p{p_age}_{dyn_label}.svg"
+          output_path = os.path.join(IMG_DIR, output_name)
 
           create_heatmap(df_h,
                          target_col=year_target,
@@ -281,7 +171,7 @@ def run_heatmap_analysis(df_survival: pd.DataFrame):
                          x_title="初期支出率 (%ルール)",
                          y_col="multiplier_label",
                          y_title="支出レベル",
-                         output_name=output_name,
+                         output_path=output_path,
                          x_sort=r_order,
                          y_sort=m_order)
 
@@ -326,127 +216,6 @@ def run_percentile_analysis(df_all: pd.DataFrame):
           create_spend_percentile_chart(df_plot, title, output_name)
 
 
-def run_best_combination_analysis(df_survival: pd.DataFrame):
-  """
-  (pension_start_age, use_dynamic_spending) の最適な組み合わせを分析する。
-  """
-  print("\n\n" + "=" * 20 + " 最適な組み合わせ (受給開始年齢 × Dynamic Spending) の分析 " +
-        "=" * 20)
-
-  target_year = "45"
-  # 分析対象のディメンション
-  dim_cols = ['household_size', 'spend_multiplier', 'spending_rule']
-
-  # 優先順位: P60_D1, P65_D1, P60_D0, P65_D0
-  PREF_ORDER = ["P60_D1", "P65_D1", "P60_D0", "P65_D0"]
-
-  def get_selected_strategy(group: pd.DataFrame) -> pd.Series:
-    # 生存確率で降順ソート
-    sorted_group = group.sort_values(by=[target_year], ascending=False)
-    top_prob = float(sorted_group[target_year].max())
-
-    # 組み合わせラベルを作成
-    sorted_group["combo"] = sorted_group.apply(
-        lambda r:
-        f"P{int(r['pension_start_age'])}_D{int(r['use_dynamic_spending'])}",
-        axis=1)
-
-    # ユーザー指定の優先順位でスキャン
-    selected_row = None
-    for pref in PREF_ORDER:
-      match = sorted_group[sorted_group["combo"] == pref]
-      if not match.empty:
-        row = match.iloc[0]
-        # 許容範囲: top_prob - 0.01 以上なら採用
-        if float(row[target_year]) >= (top_prob - 0.01):
-          selected_row = row.copy()
-          break
-
-    if selected_row is None:
-      selected_row = sorted_group.iloc[0].copy()
-
-    selected_row["best_combo"] = selected_row["combo"]
-
-    # DynamicSpending を反転させた場合との比較 (gap)
-    target_p_age = selected_row['pension_start_age']
-    target_use_dyn = selected_row['use_dynamic_spending']
-    flipped_dyn = 1 - target_use_dyn
-
-    flipped_row = group[(group['pension_start_age'] == target_p_age) &
-                        (group['use_dynamic_spending'] == flipped_dyn)]
-
-    if not flipped_row.empty:
-      prob_flipped = float(flipped_row.iloc[0][target_year])
-      gap = float(selected_row[target_year]) - prob_flipped
-      selected_row["dyn_gap"] = gap
-    else:
-      selected_row["dyn_gap"] = 0.0
-
-    # 表示用ラベルの作成
-    dyn_str = "あり" if selected_row['use_dynamic_spending'] == 1 else "なし"
-    selected_row[
-        "display_combo"] = f"{int(selected_row['pension_start_age'])}歳,{dyn_str}"
-
-    return selected_row
-
-  # Mypy のためにリストを使う
-  results = []
-  for keys, group in df_survival.groupby(dim_cols):
-    results.append(get_selected_strategy(group))
-  df_best = pd.DataFrame(results)
-
-  # Heatmap text label (3rd row added: gap with flipped dyn)
-  df_best["combo_label"] = df_best.apply(
-      lambda r:
-      f"{r['display_combo']}\n{r[target_year]*100:.1f}%\n({r['dyn_gap']*100:+.1f}%)",
-      axis=1)
-
-  # ヒートマップ用のラベル作成
-  df_best["multiplier_label"] = df_best.apply(
-      lambda r:
-      f"{int(round(r['initial_annual_cost'])):d}万円/年@(x{r['spend_multiplier']:g})",
-      axis=1)
-  df_best["rule_label"] = df_best["spending_rule"].map(
-      lambda x: f"{x:g}%@(x{round(100/x, 1):g})")
-
-  actual_multipliers = sorted(df_best["spend_multiplier"].unique(),
-                              reverse=True)
-  actual_rules = sorted(df_best["spending_rule"].unique())
-
-  m_order = []
-  for m in actual_multipliers:
-    cost = df_best[df_best["spend_multiplier"] ==
-                   m]["initial_annual_cost"].iloc[0]
-    m_order.append(f"{int(round(cost)):d}万円/年@(x{m:g})")
-  r_order = [f"{x:g}%@(x{round(100/x, 1):g})" for x in actual_rules]
-
-  # ヒートマップ生成
-  for h_size in sorted(df_best["household_size"].unique()):
-    h_label = "2人世帯" if h_size == 2 else "単身世帯"
-    df_h = df_best[df_best["household_size"] == h_size].copy()
-
-    create_best_combo_heatmap(
-        df_h,
-        title=f"戦略選択: {h_label} (優先順: 60歳あり > 65歳あり > 60歳なし > 65歳なし, 許容差1%)",
-        x_col="rule_label",
-        x_title="初期支出率 (%ルール)",
-        y_col="multiplier_label",
-        y_title="支出レベル",
-        output_name=f"best_strategy_h{h_size}.svg",
-        x_sort=r_order,
-        y_sort=m_order)
-
-  # CSV出力
-  csv_output = os.path.join(TEMP_IMG_DIR, "best_strategy.csv")
-  os.makedirs(TEMP_IMG_DIR, exist_ok=True)
-  df_best.to_csv(csv_output, index=False)
-  print(f"✅ {csv_output} にCSVを保存しました。")
-
-  print(f"\n--- {target_year}年後生存確率を最大化する組み合わせの分布 ---")
-  counts = df_best["display_combo"].value_counts().sort_index()
-  print(counts.to_string())
-
-
 def run_p60_d1_heatmap(df_survival: pd.DataFrame):
   """
   P60, D1, H1 のヒートマップを作成する。
@@ -477,6 +246,7 @@ def run_p60_d1_heatmap(df_survival: pd.DataFrame):
   year_target = "45"
   title = f"50歳開始・単身世帯・年金60歳・{year_target}年後生存確率(%) (ダイナミックスペンディングON)"
   output_name = f"grid_heatmap_{year_target}yr_h1_p60_dyn_on.svg"
+  output_path = os.path.join(IMG_DIR, output_name)
 
   create_heatmap(df_h,
                  target_col=year_target,
@@ -485,7 +255,7 @@ def run_p60_d1_heatmap(df_survival: pd.DataFrame):
                  x_title="初期支出率 (%ルール)",
                  y_col="multiplier_label",
                  y_title="支出レベル",
-                 output_name=output_name,
+                 output_path=output_path,
                  x_sort=r_order,
                  y_sort=m_order)
 
@@ -1028,7 +798,13 @@ def main():
                                      "survival"].copy()
 
   # 1. 最適組み合わせ分析
-  run_best_combination_analysis(df_p_d_survival)
+  run_best_combination_analysis(
+      df_p_d_survival,
+      target_year="45",
+      img_dir=IMG_DIR,
+      temp_dir=TEMP_IMG_DIR,
+      title_prefix="単身世帯",
+      output_name="best_strategy_h1.svg")
 
   # 2. 支出額パーセンタイル推移の生成
   run_percentile_analysis(df_p_d_all)
