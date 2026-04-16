@@ -1028,41 +1028,41 @@ def main():
                                      "survival"].copy()
 
   # 1. 最適組み合わせ分析
-  # run_best_combination_analysis(df_p_d_survival)
+  run_best_combination_analysis(df_p_d_survival)
 
   # 2. 支出額パーセンタイル推移の生成
-  # run_percentile_analysis(df_p_d_all)
+  run_percentile_analysis(df_p_d_all)
 
   # 3. df_p60_d1_survival からヒートマップを作成
-  # run_p60_d1_heatmap(df_p60_d1_survival)
+  run_p60_d1_heatmap(df_p60_d1_survival)
 
   # 4. 予測モデルの評価
-  # fitting_results = run_fitting_analysis(df_p60_d1_survival, "45")
+  fitting_results = run_fitting_analysis(df_p60_d1_survival, "45")
 
   # # 5. ステップワイズ特徴量選択による生存確率の近似式算出
-  # # fitting_results の中から最も Adj R2 が高い Logit 手法を選択する (境界線の算出には Logit が適しているため)
-  # logit_results = [r for r in fitting_results if r["use_logit"]]
-  # best_eval = max(logit_results, key=lambda x: x["adj_r2"])
+  # fitting_results の中から最も Adj R2 が高い Logit 手法を選択する (境界線の算出には Logit が適しているため)
+  logit_results = [r for r in fitting_results if r["use_logit"]]
+  best_eval = max(logit_results, key=lambda x: x["adj_r2"])
 
-  # model_sw, selected_sw, poly_sw = run_stepwise_fitting_analysis(
-  #     df_p60_d1_survival,
-  #     "45",
-  #     max_adj_r2=float(best_eval["adj_r2"]),
-  #     poly_deg=int(best_eval["poly_deg"]),
-  #     interaction_only=bool(best_eval["interaction_only"]),
-  #     use_logit=True)
+  model_sw, selected_sw, poly_sw = run_stepwise_fitting_analysis(
+      df_p60_d1_survival,
+      "45",
+      max_adj_r2=float(best_eval["adj_r2"]),
+      poly_deg=int(best_eval["poly_deg"]),
+      interaction_only=bool(best_eval["interaction_only"]),
+      use_logit=True)
 
   # # 6. 生存達成データの生成 (97, 95, 90, 80, 70%)
   target_probs = [0.97, 0.95, 0.90, 0.80, 0.70]
-  # df_plot, base_cost = run_survival_curve_analysis(df_p60_d1_survival,
-  #                                                  model_sw,
-  #                                                  selected_sw,
-  #                                                  poly_sw,
-  #                                                  use_logit=True,
-  #                                                  target_probs=target_probs)
+  df_plot, base_cost = run_survival_curve_analysis(df_p60_d1_survival,
+                                                   model_sw,
+                                                   selected_sw,
+                                                   poly_sw,
+                                                   use_logit=True,
+                                                   target_probs=target_probs)
 
   # 7. 3つのグラフを保存
-  # save_survival_charts(df_plot, base_cost, target_probs)
+  save_survival_charts(df_plot, base_cost, target_probs)
 
   # 8. 資産と支出額のみを用いたモデル評価
   asset_spend_results = run_asset_spend_fitting_analysis(df_p60_d1_survival, "45")
