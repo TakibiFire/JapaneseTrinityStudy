@@ -34,6 +34,7 @@ import pandas as pd
 from src.core import (DynamicSpending, Strategy, ZeroRiskAsset,
                       simulate_strategy)
 from src.lib.asset_generator import (AssetConfigType, DerivedAsset, ForexAsset,
+                                     SlideAdjustedCpiAsset,
                                      YearlyLogNormalArithmetic,
                                      generate_monthly_asset_prices)
 from src.lib.cashflow_generator import (CashflowConfig, CashflowRule,
@@ -58,6 +59,7 @@ def main():
   YEARS = 35  # 60歳から95歳まで
   SEED = 42
   CPI_NAME = "Japan_CPI"
+  PENSION_CPI_NAME = "Pension_CPI"
   FX_NAME = "USDJPY_0_10.53"
   ZERO_RISK_NAME = "ゼロリスク資産"
   ORUKAN_NAME = "オルカン"
@@ -66,6 +68,8 @@ def main():
   PENSION_ANNUAL = 141.0  # 万円 (Step 1で決定)
   ZERO_RISK_YIELD = 0.04
   TAX_RATE = 0.20315
+  CURRENT_YEAR = 2026
+  MACRO_ECONOMIC_SLIDE_END_YEAR = 2057
 
   os.makedirs(DATA_DIR, exist_ok=True)
 
@@ -90,8 +94,15 @@ def main():
   # CPI (共通モデル)
   base_cpi = get_cpi_ar12_config(name=CPI_NAME)
 
+  # 年金用CPI (マクロ経済スライド 0.5% 抑制)
+  pension_cpi = SlideAdjustedCpiAsset(
+      name=PENSION_CPI_NAME,
+      base_cpi=CPI_NAME,
+      slide_rate=0.005,
+      slide_end_month=(MACRO_ECONOMIC_SLIDE_END_YEAR - CURRENT_YEAR) * 12)
+
   configs: List[AssetConfigType] = [
-      fx_asset, base_sp500, base_acwi, orukan, base_cpi
+      fx_asset, base_sp500, base_acwi, orukan, base_cpi, pension_cpi
   ]
 
   print(f"価格推移を生成中... (試行回数: {N_SIM}, 期間: {YEARS}年)")
@@ -165,18 +176,22 @@ def main():
       inflation_rate_setting = CPI_NAME
 
     # キャッシュフロー (年金)
+    # 60歳開始時の想定: 基礎年金(62.0) + 厚生年金(79.0) = 141.0
+    KISO_ANNUAL_AT_60 = 62.0
+    KOUSEI_ANNUAL_AT_60 = 79.0
+
     cf_configs: List[CashflowConfig] = [
-        PensionConfig(
-            name="Pension",
-            amount=PENSION_ANNUAL / 12.0,
-            start_month=0,
-            # ダイナミックスペンディング時は支出が名目なので、年金も名目（CPI連動なし）として扱う
-            cpi_name=CPI_NAME if not use_dyn_spend else None)
+        # 厚生年金 (CPI連動)
+        PensionConfig(name="Pension_Kousei",
+                      amount=KOUSEI_ANNUAL_AT_60 / 12.0,
+                      start_month=0,
+                      cpi_name=CPI_NAME),
+        # 基礎年金 (マクロ経済スライド適用)
+        PensionConfig(name="Pension_Kiso",
+                      amount=KISO_ANNUAL_AT_60 / 12.0,
+                      start_month=0,
+                      cpi_name=PENSION_CPI_NAME)
     ]
-    # ダイナミックスペンディングは名目ベース。
-    # core.pyにおいて、inflation_rateがNoneの場合は名目値をそのまま使用し、
-    # PensionConfigのcpi_nameがNoneの場合も名目値が生成される。
-    # これにより、ダイナミックスペンディングONの時はすべて名目空間で計算される。
 
     monthly_cashflows = generate_cashflows(cf_configs,
                                            monthly_prices,
@@ -199,9 +214,12 @@ def main():
         rebalance_interval=12,
         dynamic_rebalance_fn=dynamic_rebalance_fn,
         selling_priority=[ORUKAN_NAME, ZERO_RISK_NAME],
+        record_annual_spend=True,  # パーセンタイル分析に必要
         cashflow_rules=[
-            CashflowRule(source_name="Pension",
-                         cashflow_type=CashflowType.EXTRAORDINARY)
+            CashflowRule(source_name="Pension_Kousei",
+                         cashflow_type=CashflowType.REGULAR),
+            CashflowRule(source_name="Pension_Kiso",
+                         cashflow_type=CashflowType.REGULAR)
         ])
 
     # シミュレーション
