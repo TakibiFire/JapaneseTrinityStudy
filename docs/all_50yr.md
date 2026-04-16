@@ -2,7 +2,8 @@
 
 <!--
 DO NOT DELETE.
-python3 src/all_50yr_grid_main.py
+python3 src/all_50yr_grid_main.py --exp_type P-D-RANGE-H1
+python3 src/all_50yr_grid_main.py --exp_type P60-D1-H1
 python3 src/analyze_all_50yr_grid_main.py
 -->
 
