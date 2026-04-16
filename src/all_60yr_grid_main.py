@@ -14,13 +14,12 @@
   - ちなみにこの値は2人以上の世帯
   - 65歳以上単身無職世帯は 16.2万 (45万の 36%相当)
 - 税率: 20.315%
-- 年金: 60歳から繰り上げ受給 (141万円/年)
+- 年金: 60歳または65歳から受給 (世帯人数と開始年齢により変動)
 
 可変条件:
-- ダイナミックスペンディング
-  - on の時: (上限3%, 下限0%)
-  - off の時: 支出トレンド: 家計調査報告のデータに基づき、年齢とともに変化
-- 何％ルールにするか
+- 年金受給開始年齢 (60, 65)
+- ダイナミックスペンディングの有無
+- 支出率のルール (資産額に対する比率)
 - 初年度支出倍率
 """
 
@@ -49,14 +48,23 @@ from src.lib.simulation_defaults import (AcwiModelKey,
                                          get_cpi_ar12_config)
 
 # 設定
+EXP_TYPE = "P60-D1"
+assert EXP_TYPE in (
+    # 年金受け取りの受給タイミングとDynamicSpendingをするかどうかの最適組み合わせを求める。
+    "P-D-RANGE",
+    # 年金受け取りの受給タイミング=60, DynamicSpending=ON が確定。
+    # より詳細なパラメータで分析を行う。
+    "P60-D1",
+)
+
 DATA_DIR = "data/all_60yr/"
-CSV_PATH = os.path.join(DATA_DIR, "all_60yr_grid.csv")
+CSV_PATH = os.path.join(DATA_DIR, f"{EXP_TYPE}.csv")
 
 
 def main():
   # 共通設定
-  N_SIM = 5000
   YEARS = 35  # 60歳から95歳まで
+  START_AGE = 60
   SEED = 42
   CPI_NAME = "Japan_CPI"
   PENSION_CPI_NAME = "Pension_CPI"
@@ -65,11 +73,28 @@ def main():
   ORUKAN_NAME = "オルカン"
 
   TRUST_FEE = 0.0005775
-  PENSION_ANNUAL = 141.0  # 万円 (Step 1で決定)
+  # 基礎年金満額: 81.6万, 厚生年金相当: 103.9万 (185.5 - 81.6)
+  KISO_FULL_ANNUAL = 81.6
+  KOUSEI_UNIT_ANNUAL = 103.9
   ZERO_RISK_YIELD = 0.04
   TAX_RATE = 0.20315
   CURRENT_YEAR = 2026
   MACRO_ECONOMIC_SLIDE_END_YEAR = 2057
+
+  if EXP_TYPE == "P-D-RANGE":
+    spend_multipliers = [0.36, 0.5, 0.75, 1.0, 1.5, 3.0]
+    spending_rules = [2.5, 3.0, 4.0, 5.0, 6.0, 8.0]
+    N_SIM = 1000
+    pension_start_ages = [60, 65]
+    use_dynamic_spending_list = [False, True]
+  elif EXP_TYPE == "P60-D1":
+    spend_multipliers = [0.36, 0.5, 0.75, 1.0, 1.2, 1.5, 2.0, 3.0]
+    spending_rules = [2.8, 3.0, 3.33, 3.66, 4.0, 4.33, 4.66, 5.0, 5.5, 6.0, 7.0]
+    N_SIM = 3000
+    pension_start_ages = [60]
+    use_dynamic_spending_list = [True]
+  else:
+    raise KeyError(f"Unsupported {EXP_TYPE}")
 
   os.makedirs(DATA_DIR, exist_ok=True)
 
@@ -113,19 +138,17 @@ def main():
 
   # 2. グリッドパラメータ
   BASE_SPEND_ANNUAL = 540.0  # 初年度支出ベースライン (45万 * 12ヶ月)
-  spend_multipliers = [0.36, 0.5, 0.75, 1.0, 1.2, 1.5, 2.0, 3.0]
-  # 支出率のルール:
-  spending_rules = [1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0]
-  use_dynamic_spending_list = [False, True]
 
   all_combinations = list(
-      product(spend_multipliers, spending_rules, use_dynamic_spending_list))
+      product(pension_start_ages, spend_multipliers, spending_rules,
+              use_dynamic_spending_list))
 
   results: List[Dict[str, Any]] = []
 
   # 年齢による支出倍率の取得 (60歳から35年間)
   spending_multipliers_by_age = get_retired_spending_multipliers(
-      [SpendingType.CONSUMPTION, SpendingType.NON_CONSUMPTION], start_age=60,
+      [SpendingType.CONSUMPTION, SpendingType.NON_CONSUMPTION],
+      start_age=START_AGE,
       num_years=YEARS)
 
   print(f"全 {len(all_combinations)} パターンのシミュレーションを実行中...")
@@ -147,7 +170,8 @@ def main():
   # ゼロリスク資産でも資産寿命が YEARS 年となるような支出率
   target_ratio = calculate_safe_target_ratio(YEARS)
 
-  for i, (spend_mult, rule, use_dyn_spend) in enumerate(all_combinations):
+  for i, (pension_start, spend_mult, rule,
+          use_dyn_spend) in enumerate(all_combinations):
     if i % 10 == 0:
       print(f"Progress: {i}/{len(all_combinations)}")
 
@@ -176,20 +200,22 @@ def main():
       inflation_rate_setting = CPI_NAME
 
     # キャッシュフロー (年金)
-    # 60歳開始時の想定: 基礎年金(62.0) + 厚生年金(79.0) = 141.0
-    KISO_ANNUAL_AT_60 = 62.0
-    KOUSEI_ANNUAL_AT_60 = 79.0
+    receipt_start_month = (pension_start - START_AGE) * 12
+    reduction_rate = 0.76 if pension_start == 60 else 1.0
+
+    kousei_annual = KOUSEI_UNIT_ANNUAL * reduction_rate
+    kiso_annual = KISO_FULL_ANNUAL * reduction_rate
 
     cf_configs: List[CashflowConfig] = [
         # 厚生年金 (CPI連動)
         PensionConfig(name="Pension_Kousei",
-                      amount=KOUSEI_ANNUAL_AT_60 / 12.0,
-                      start_month=0,
+                      amount=kousei_annual / 12.0,
+                      start_month=receipt_start_month,
                       cpi_name=CPI_NAME),
         # 基礎年金 (マクロ経済スライド適用)
         PensionConfig(name="Pension_Kiso",
-                      amount=KISO_ANNUAL_AT_60 / 12.0,
-                      start_month=0,
+                      amount=kiso_annual / 12.0,
+                      start_month=receipt_start_month,
                       cpi_name=PENSION_CPI_NAME)
     ]
 
@@ -200,7 +226,8 @@ def main():
 
     # 戦略
     strategy = Strategy(
-        name=f"Rule_{rule}%_Mult_{spend_mult}_Dyn_{use_dyn_spend}",
+        name=
+        f"P{pension_start}_Mult_{spend_mult}_Rule_{rule}%_Dyn_{use_dyn_spend}",
         initial_money=float(init_money),
         initial_loan=0.0,
         yearly_loan_interest=0.0,
@@ -227,21 +254,42 @@ def main():
                             monthly_prices,
                             monthly_cashflows=monthly_cashflows)
 
-    # 結果の記録
-    row = {
+    # 1. 生存確率
+    row_survival: Dict[str, Any] = {
+        "pension_start_age": pension_start,
         "spend_multiplier": spend_mult,
         "spending_rule": rule,
         "use_dynamic_spending": 1 if use_dyn_spend else 0,
         "initial_money": init_money,
-        "initial_annual_cost": initial_annual_cost
+        "initial_annual_cost": initial_annual_cost,
+        "value_type": "survival"
     }
-    # 各年時点の生存確率を記録
     for year in range(1, YEARS + 1):
       bankrupt_count = (res.sustained_months < year * 12).sum()
       survival_rate = 1.0 - (bankrupt_count / N_SIM)
-      row[str(year)] = survival_rate
+      row_survival[str(year)] = survival_rate
+    results.append(row_survival)
 
-    results.append(row)
+    # 2. 支出額のパーセンタイル
+    if res.annual_spends is not None:
+      p25 = np.percentile(res.annual_spends, 25, axis=0)
+      p50 = np.percentile(res.annual_spends, 50, axis=0)
+      p75 = np.percentile(res.annual_spends, 75, axis=0)
+
+      for name, p_values in [("spend25p", p25), ("spend50p", p50),
+                             ("spend75p", p75)]:
+        row_p: Dict[str, Any] = {
+            "pension_start_age": pension_start,
+            "spend_multiplier": spend_mult,
+            "spending_rule": rule,
+            "use_dynamic_spending": 1 if use_dyn_spend else 0,
+            "initial_money": init_money,
+            "initial_annual_cost": initial_annual_cost,
+            "value_type": name
+        }
+        for year in range(1, YEARS + 1):
+          row_p[str(year)] = p_values[year - 1]
+        results.append(row_p)
 
   # CSV保存
   df = pd.DataFrame(results)
