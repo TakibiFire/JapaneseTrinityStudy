@@ -7,6 +7,8 @@ data/all_60yr/ の結果を分析・可視化するスクリプト。
 3. 2次元ヒートマップによる可視化 (支出レベル vs 支出率)
 4. 予測モデルの評価 (R2 Score)
 5. ステップワイズ特徴量選択による生存確率の近似式算出
+6. 生存達成データの生成
+7. 生存確率達成ラインのグラフ保存
 """
 
 import os
@@ -20,7 +22,9 @@ from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import PolynomialFeatures
 
 from src.lib.fitting_all_yr import (FeatureSetType, run_fitting_analysis,
-                                    run_stepwise_fitting_analysis)
+                                    run_stepwise_fitting_analysis,
+                                    run_survival_curve_analysis,
+                                    save_survival_charts)
 from src.lib.visualize_all_yr import (create_heatmap,
                                       create_spend_percentile_chart,
                                       prepare_heatmap_labels,
@@ -116,13 +120,26 @@ def main():
   logit_results = [r for r in fitting_results if r["use_logit"]]
   best_eval = max(logit_results, key=lambda x: x["adj_r2"])
 
-  run_stepwise_fitting_analysis(
+  model_sw, selected_sw, poly_sw = run_stepwise_fitting_analysis(
       df_p60_d1_survival,
       target_col,
       max_adj_r2=float(best_eval["adj_r2"]),
       poly_deg=int(best_eval["poly_deg"]),
       interaction_only=bool(best_eval["interaction_only"]),
       use_logit=True)
+
+  # 6. 生存達成データの生成 (97, 95, 90, 80, 70%)
+  target_probs = [0.97, 0.95, 0.90, 0.80, 0.70]
+  df_plot_survival, base_cost = run_survival_curve_analysis(
+      df_p60_d1_survival,
+      model_sw,
+      selected_sw,
+      poly_sw,
+      use_logit=True,
+      target_probs=target_probs)
+
+  # 7. 3つのグラフを保存
+  save_survival_charts(df_plot_survival, base_cost, target_probs, img_dir=IMG_DIR)
 
 
 if __name__ == "__main__":

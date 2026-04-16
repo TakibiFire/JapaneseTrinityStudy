@@ -2,11 +2,14 @@
 生存確率の予測モデル（フィッティング）に関する共通ライブラリ。
 """
 
+import os
 from enum import Enum
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
+import altair as alt
 import numpy as np
 import pandas as pd
+from scipy.optimize import brentq
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import r2_score
 from sklearn.preprocessing import PolynomialFeatures
@@ -14,9 +17,9 @@ from sklearn.preprocessing import PolynomialFeatures
 
 class FeatureSetType(Enum):
   """特徴量セットの種類を定義する Enum。"""
-  # NOW: Need detailed comments.
+  # 初期支出率 (S) を用いた標準的な特徴量セット
   STANDARD = "standard"
-  # NOW: Need detailed comments.
+  # 初期年間支出額 (Spend) を用いた特徴量セット
   ASSET_SPEND = "asset_spend"
 
 
@@ -110,7 +113,7 @@ def run_fitting_analysis(
         use_logit: Logit空間を使用するか
     """
     poly = PolynomialFeatures(degree=poly_deg,
-                              interaction_only=interaction_only)
+                               interaction_only=interaction_only)
     X_poly = poly.fit_transform(feats)
 
     target = logit_y if use_logit else y_target
@@ -290,3 +293,169 @@ def run_stepwise_fitting_analysis(
     print_formula(0.90, "90%")
 
   return final_model, selected, poly
+
+
+def run_survival_curve_analysis(
+    df: pd.DataFrame,
+    model: LinearRegression,
+    selected_feats: List[str],
+    poly: PolynomialFeatures,
+    use_logit: bool,
+    target_probs: List[float]
+) -> Tuple[pd.DataFrame, float]:
+  """
+  近似式を用いて特定の生存確率を達成する曲線を生成し、データフレームを返す。
+
+  Args:
+    df: 入力データフレーム。以下の列が必要：
+      - 'spend_multiplier': 支出倍率
+      - 'initial_annual_cost': 初期年間支出額 (万円)
+    model: 学習済みの回帰モデル。
+    selected_feats: 選択された特徴量の名前リスト。
+    poly: 多項式変換器。
+    use_logit: ターゲットが Logit かどうか。
+    target_probs: 算出対象の生存確率のリスト (例: [0.95, 0.90])。
+
+  Returns:
+    Tuple[pd.DataFrame, float]:
+      - pd.DataFrame: 各生存確率・支出率における必要資産や支出レベルのデータフレーム。
+      - float: 基準となる支出額 (multiplier=1.0 の時の初期支出額)。
+  """
+  print(f"\n\n{'='*20} 6. 近似式による生存確率達成データの生成 {'='*20}")
+
+  # 支出率の範囲 (2.8% から 7.0%)
+  # グラフが綺麗になるよう、少し細かめに刻む
+  fine_rules = np.arange(2.8, 7.01, 0.1)
+
+  # 基準となる支出額 (multiplier=1.0 の時)
+  base_cost = df[np.isclose(df["spend_multiplier"], 1.0)]["initial_annual_cost"].iloc[0]
+
+  def get_pred_val(s: float, mult: float) -> float:
+    """
+    指定された支出率と支出倍率における生存確率（またはLogit）の予測値を算出する。
+    """
+    m_money = base_cost * mult / (s / 100.0)
+    b_feats = pd.DataFrame({
+        "M": [m_money],
+        "S": [s],
+        "Mult": [mult],
+        "invM": [1.0 / max(m_money, 1.0)],
+        "invS": [1.0 / max(s, 0.1)],
+        "logM": [np.log(max(m_money, 1.0))],
+        "logS": [np.log(max(s, 0.1))]
+    })
+    X_poly = poly.transform(b_feats)
+    feature_names = poly.get_feature_names_out(b_feats.columns)
+    c_df = pd.DataFrame(X_poly, columns=feature_names)
+    X_sel = c_df[selected_feats]
+    return float(model.predict(X_sel)[0])
+
+  plot_data = []
+  # 探索範囲
+  m_min, m_max = 0.05, 10.0
+
+  for target_p in target_probs:
+    target_val = np.log(target_p / (1 - target_p)) if use_logit else target_p
+    label = f"{target_p*100:g}%"
+
+    for s in fine_rules:
+      try:
+        s_val = float(s)
+        v_min = get_pred_val(s_val, m_min) - target_val
+        v_max = get_pred_val(s_val, m_max) - target_val
+
+        if v_min * v_max <= 0:
+          opt_m = brentq(lambda m: get_pred_val(s_val, m) - target_val, m_min,
+                         m_max)
+          spend = opt_m * base_cost
+          plot_data.append({
+              "spending_rule": s_val,
+              "multiplier": opt_m,
+              "annual_spend_man": spend,
+              "initial_money": spend / (s_val / 100.0),
+              "target_prob": label
+          })
+      except Exception:
+        pass
+
+  df_plot = pd.DataFrame(plot_data)
+  return df_plot, float(base_cost)
+
+
+def save_survival_charts(
+    df_plot: pd.DataFrame,
+    base_cost: float,
+    target_probs: List[float],
+    img_dir: str
+) -> None:
+  """
+  生成されたデータから生存確率達成ラインのグラフを作成して保存する。
+
+  Args:
+    df_plot: run_survival_curve_analysis で生成されたデータフレーム。
+    base_cost: 基準となる支出額。
+    target_probs: ターゲット生存確率のリスト。
+    img_dir: 画像の保存先ディレクトリ。
+  """
+  if df_plot.empty:
+    print("曲線を描画できるデータが見わたりませんでした。")
+    return
+
+  prob_order = [f"{p*100:g}%" for p in target_probs]
+
+  # 1. 支出率 (S) vs 支出レベル (Spend)
+  chart1 = alt.Chart(df_plot).mark_line(point=True, clip=True).encode(
+      x=alt.X('spending_rule:Q',
+              title='初期支出率 (%)',
+              scale=alt.Scale(domain=[2.8, 7.0])),
+      y=alt.Y('annual_spend_man:Q',
+              title='支出レベル (万円/年)',
+              scale=alt.Scale(domain=[0, base_cost * 3.0])),
+      color=alt.Color('target_prob:N',
+                      title='目標生存確率',
+                      sort=prob_order,
+                      scale=alt.Scale(domain=prob_order)),
+      tooltip=['spending_rule', 'multiplier', 'annual_spend_man', 'initial_money', 'target_prob']
+  ).properties(title="生存確率達成ライン (初期支出率 vs 支出レベル)", width=600, height=400)
+
+  path1 = os.path.join(img_dir, "survival_rule_vs_spend.svg")
+  chart1.save(path1)
+  print(f"✅ {path1} に保存しました。")
+
+  # 2-a: x=総資産, y=支出レベル
+  chart2 = alt.Chart(df_plot).mark_line(point=True, clip=True).encode(
+      x=alt.X('initial_money:Q',
+              title='総資産 (万円)',
+              scale=alt.Scale(domain=[0, 30000])),
+      y=alt.Y('annual_spend_man:Q',
+              title='支出レベル (万円/年)',
+              scale=alt.Scale(domain=[0, base_cost * 3.0])),
+      color=alt.Color('target_prob:N',
+                      title='目標生存確率',
+                      sort=prob_order,
+                      scale=alt.Scale(domain=prob_order)),
+      tooltip=['spending_rule', 'multiplier', 'annual_spend_man', 'initial_money', 'target_prob']
+  ).properties(title="生存確率達成ライン (総資産 vs 支出レベル)", width=600, height=400)
+
+  path2 = os.path.join(img_dir, "survival_asset_vs_spend.svg")
+  chart2.save(path2)
+  print(f"✅ {path2} に保存しました。")
+
+  # 2-b: x=総資産, y=初期支出率
+  chart3 = alt.Chart(df_plot).mark_line(point=True, clip=True).encode(
+      x=alt.X('initial_money:Q',
+              title='総資産 (万円)',
+              scale=alt.Scale(domain=[0, 30000])),
+      y=alt.Y('spending_rule:Q',
+              title='初期支出率 (%)',
+              scale=alt.Scale(domain=[2.8, 7.0])),
+      color=alt.Color('target_prob:N',
+                      title='目標生存確率',
+                      sort=prob_order,
+                      scale=alt.Scale(domain=prob_order)),
+      tooltip=['spending_rule', 'multiplier', 'annual_spend_man', 'initial_money', 'target_prob']
+  ).properties(title="生存確率達成ライン (総資産 vs 初期支出率)", width=600, height=400)
+
+  path3 = os.path.join(img_dir, "survival_asset_vs_rule.svg")
+  chart3.save(path3)
+  print(f"✅ {path3} に保存しました。")
