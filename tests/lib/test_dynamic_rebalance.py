@@ -39,6 +39,11 @@ def test_calculate_safe_target_ratio_long_term():
   assert ratio == pytest.approx(0.014329, abs=1e-6)
 
 
+def test_calculate_safe_target_ratio_45():
+  ratio = calculate_safe_target_ratio(45)
+  assert ratio == pytest.approx(0.03015, abs=1e-6)
+
+
 def test_calculate_optimal_strategy_region1():
   """
   資産寿命内 (Region 1) の計算テスト。
