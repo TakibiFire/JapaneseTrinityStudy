@@ -1,14 +1,14 @@
 """
-data/all_combinations/all_60yr_grid.csv の結果を分析・可視化するスクリプト。
+data/all_60yr/ の結果を分析・可視化するスクリプト。
 
 内容:
 1. 予測モデルの評価 (P vs Logit)
 2. 2次元ヒートマップによる可視化 (支出レベル vs 支出率)
-※ダイナミックスペンディングのON/OFF別に分析を行う。
+3. 最適な組み合わせの分析 (受給開始年齢 × Dynamic Spending)
 """
 
 import os
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 import altair as alt
 import numpy as np
@@ -18,9 +18,12 @@ from sklearn.linear_model import LinearRegression
 from sklearn.metrics import r2_score
 from sklearn.preprocessing import PolynomialFeatures
 
+from src.lib.analyze_all_yr import (create_heatmap,
+                                    run_best_combination_analysis)
+
 # 設定
-CSV_PATH = "data/all_combinations/all_60yr_grid.csv"
 IMG_DIR = "docs/imgs/all_60yr"
+TEMP_DIR = "temp/all_60yr"
 BASE_SPEND_ANNUAL = 540.0
 
 
@@ -30,11 +33,11 @@ def run_fitting_analysis(df: pd.DataFrame, target_col: str):
   """
   print(f"\n--- 予測モデルの評価 (R2 Score) - {target_col}年生存確率 ---")
 
-  y_target = df[target_col].values.astype(float)
+  y_target = np.asarray(df[target_col].to_numpy(), dtype=float)
   # M = initial_money, S = spending_rule, Mult = spend_multiplier
-  M_val = df["initial_money"].values.astype(float)
-  S_val = df["spending_rule"].values.astype(float)
-  Mult_val = df["spend_multiplier"].values.astype(float)
+  M_val = np.asarray(df["initial_money"].to_numpy(), dtype=float)
+  S_val = np.asarray(df["spending_rule"].to_numpy(), dtype=float)
+  Mult_val = np.asarray(df["spend_multiplier"].to_numpy(), dtype=float)
 
   # 対数オッズ空間
   y_clipped = np.clip(y_target, 0.001, 0.999)
@@ -53,7 +56,7 @@ def run_fitting_analysis(df: pd.DataFrame, target_col: str):
 
   def evaluate(name, poly_deg, interaction_only, use_logit):
     poly = PolynomialFeatures(degree=poly_deg,
-                              interaction_only=interaction_only)
+                               interaction_only=interaction_only)
     X_poly = poly.fit_transform(feats)
 
     target = logit_y if use_logit else y_target
@@ -75,67 +78,6 @@ def run_fitting_analysis(df: pd.DataFrame, target_col: str):
   evaluate("Logitに対する2次モデル (交互作用のみ)", 2, True, True)
 
 
-def create_heatmap(df: pd.DataFrame,
-                   target_col: str,
-                   title: str,
-                   x_col: str,
-                   x_title: str,
-                   y_col: str,
-                   y_title: str,
-                   output_name: str,
-                   x_sort: Optional[List[Any]] = None,
-                   y_sort: Optional[List[Any]] = None):
-  """
-  ヒートマップを作成して保存する。
-  """
-  plot_df = df.copy()
-  plot_df["survival_rate"] = plot_df[target_col]
-  plot_df["survival_rate_pct"] = plot_df["survival_rate"] * 100
-
-  base = alt.Chart(plot_df).encode(
-      x=alt.X(f'{x_col}:O',
-              title=x_title,
-              sort=x_sort,
-              axis=alt.Axis(labelExpr="split(datum.label, '@')")),
-      y=alt.Y(f'{y_col}:O',
-              title=y_title,
-              sort=y_sort,
-              axis=alt.Axis(labelExpr="split(datum.label, '@')")),
-  )
-
-  heatmap = base.mark_rect().encode(
-      color=alt.Color('survival_rate:Q',
-                      title='生存確率',
-                      scale=alt.Scale(domain=[0.0, 0.8, 0.9, 0.94, 0.97, 1.0],
-                                      range=[
-                                          '#d73027', '#fee08b', '#ffffbf',
-                                          'yellowgreen', 'lightgreen', 'green'
-                                      ])))
-
-  text = base.mark_text(baseline='middle').encode(
-      text=alt.Text('survival_rate_pct:Q', format='.1f'),
-      color=alt.condition(alt.datum.survival_rate > 0.6, alt.value('black'),
-                          alt.value('white')))
-
-  chart = (heatmap + text).properties(title=title, width=400, height=300)
-
-  # STDOUT出力
-  print(f"\n--- {title} ---")
-  pivot = plot_df.pivot_table(index=y_col,
-                              columns=x_col,
-                              values="survival_rate_pct")
-  if y_sort:
-    pivot = pivot.reindex(index=y_sort)
-  if x_sort:
-    pivot = pivot.reindex(columns=x_sort)
-  print(pivot.to_string())
-
-  output_path = os.path.join(IMG_DIR, output_name)
-  os.makedirs(IMG_DIR, exist_ok=True)
-  chart.save(output_path)
-  print(f"✅ {output_path} に保存しました。")
-
-
 def run_optimization_analysis(df: pd.DataFrame,
                               target_col: str,
                               target_prob: float = 0.97):
@@ -146,10 +88,10 @@ def run_optimization_analysis(df: pd.DataFrame,
   print(
       f"\n--- {target_col}年生存確率 {target_prob*100:.0f}% を達成する支出率の算出 (線形モデル) ---")
 
-  y_target = df[target_col].values.astype(float)
-  M_val = df["initial_money"].values.astype(float)
-  S_val = df["spending_rule"].values.astype(float)
-  Mult_val = df["spend_multiplier"].values.astype(float)
+  y_target = np.asarray(df[target_col].to_numpy(), dtype=float)
+  M_val = np.asarray(df["initial_money"].to_numpy(), dtype=float)
+  S_val = np.asarray(df["spending_rule"].to_numpy(), dtype=float)
+  Mult_val = np.asarray(df["spend_multiplier"].to_numpy(), dtype=float)
 
   # 特徴量セット (run_fitting_analysis と合わせる)
   feats_df = pd.DataFrame({
@@ -182,7 +124,7 @@ def run_optimization_analysis(df: pd.DataFrame,
     X = poly.transform(f)
     return model.predict(X)[0]
 
-  # 対象となる支出レベル (dict出力用)
+  # 対象となる支出レベル
   target_multipliers = [0.36, 0.5, 0.75, 1.0, 1.2, 1.5, 2.0, 3.0]
 
   # 1. 実際のデータ範囲で target_prob を達成可能な multiplier の範囲を特定
@@ -260,55 +202,40 @@ def run_optimization_analysis(df: pd.DataFrame,
 
 
 def main():
-  if not os.path.exists(CSV_PATH):
-    print(f"Error: {CSV_PATH} が見つかりません。")
+  P_D_RANGE_CSV = "data/all_60yr/P-D-RANGE.csv"
+  if not os.path.exists(P_D_RANGE_CSV):
+    print(f"Error: {P_D_RANGE_CSV} が見つかりません。")
     return
 
-  df_all = pd.read_csv(CSV_PATH)
+  df_p_d_all = pd.read_csv(P_D_RANGE_CSV)
+  df_p_d_survival = df_p_d_all[df_p_d_all["value_type"] == "survival"].copy()
 
-  # ラベルの日本語化
-  df_all["multiplier_label"] = df_all["spend_multiplier"].map(
-      lambda x: f"{BASE_SPEND_ANNUAL * x:g}万円/年@(x{x:g})")
-  df_all["rule_label"] = df_all["spending_rule"].map(
-      lambda x: f"{x:g}%@(x{round(100/x, 1):g})")
+  P60_D1_CSV = "data/all_60yr/P60-D1.csv"
+  if not os.path.exists(P60_D1_CSV):
+    print(f"Error: {P60_D1_CSV} が見つかりません。")
+    return
 
-  m_order = [
-      f"{BASE_SPEND_ANNUAL * x:g}万円/年@(x{x:g})"
-      for x in [3.0, 2.0, 1.5, 1.2, 1.0, 0.75, 0.5, 0.36]
-  ]
-  # ルール順: 1.5% から 6.0% まで
-  r_order = [
-      f"{x:g}%@(x{round(100/x, 1):g})"
-      for x in [1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0]
-  ]
+  df_p60_d1_all = pd.read_csv(P60_D1_CSV)
+  df_p60_d1_survival = df_p60_d1_all[df_p60_d1_all["value_type"] == "survival"].copy()
 
-  for use_dyn in [0, 1]:
-    dyn_label = "dyn_on" if use_dyn == 1 else "dyn_off"
-    dyn_title_suffix = "(ダイナミックスペンディングON)" if use_dyn == 1 else "(支出トレンド適用)"
+  # 1. 最適な組み合わせの分析 (35年後)
+  run_best_combination_analysis(
+      df_p_d_survival,
+      target_year="35",
+      img_dir=IMG_DIR,
+      temp_dir=TEMP_DIR,
+      title_prefix="60歳リタイア",
+      threshold=0.02,
+      pref_order=["P60_D1", "P65_D1", "P60_D0", "P65_D0"],  # 優先順位: 60歳ありを最優先
+      width=500,
+      height=450
+  )
 
-    print(f"\n\n{'='*20} {dyn_label.upper()} {'='*20}")
-    df = df_all[df_all["use_dynamic_spending"] == use_dyn].copy()
+  # 2. 予測モデルの評価
+  run_fitting_analysis(df_p60_d1_survival, "35")
 
-    for year_target in ["30", "35"]:
-      # 1. 分析の実行
-      run_fitting_analysis(df, year_target)
-
-      # 2. 可視化
-      create_heatmap(
-          df,
-          target_col=year_target,
-          title=f"60歳リタイア開始・{year_target}年後の生存確率(%) {dyn_title_suffix}",
-          x_col="rule_label",
-          x_title="初期支出率 (%ルール)",
-          y_col="multiplier_label",
-          y_title="支出レベル",
-          output_name=f"grid_heatmap_{year_target}yr_{dyn_label}.svg",
-          x_sort=r_order,
-          y_sort=m_order)
-
-    # 3. 97%生存確率の最適化 (DYN_OFF, 35年のみ)
-    if use_dyn == 0:
-      run_optimization_analysis(df, "35", 0.97)
+  # 3. 97%生存確率の最適化
+  run_optimization_analysis(df_p60_d1_survival, "35", 0.97)
 
 
 if __name__ == "__main__":
