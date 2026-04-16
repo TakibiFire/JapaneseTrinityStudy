@@ -89,7 +89,9 @@ def create_best_combo_heatmap(df_best: pd.DataFrame,
                               y_title: str,
                               output_path: str,
                               x_sort: Optional[List[Any]] = None,
-                              y_sort: Optional[List[Any]] = None):
+                              y_sort: Optional[List[Any]] = None,
+                              width: int = 500,
+                              height: int = 450):
   """
   最適な組み合わせ(Pxx_Dx)を可視化するヒートマップ。
 
@@ -103,6 +105,8 @@ def create_best_combo_heatmap(df_best: pd.DataFrame,
     output_path: 保存先のフルパス
     x_sort: X軸のソート順
     y_sort: Y軸のソート順
+    width: グラフの幅
+    height: グラフの高さ
   """
   plot_df = df_best.copy()
 
@@ -137,7 +141,7 @@ def create_best_combo_heatmap(df_best: pd.DataFrame,
                         lineBreak='\n').encode(text=alt.Text('combo_label:N'),
                                                color=alt.value('black'))
 
-  chart = (heatmap + text).properties(title=title, width=500, height=450)
+  chart = (heatmap + text).properties(title=title, width=width, height=height)
 
   os.makedirs(os.path.dirname(output_path), exist_ok=True)
   chart.save(output_path)
@@ -156,7 +160,9 @@ def run_best_combination_analysis(df_survival: pd.DataFrame,
                                   pref_order: List[str] = [
                                       "P60_D1", "P65_D1", "P60_D0", "P65_D0"
                                   ],
-                                  threshold: float = 0.01):
+                                  threshold: float = 0.01,
+                                  width: int = 500,
+                                  height: int = 450):
   """
   (受給開始年齢 × Dynamic Spending) の最適な組み合わせを分析する。
 
@@ -177,6 +183,8 @@ def run_best_combination_analysis(df_survival: pd.DataFrame,
     dim_cols: 分析対象のディメンション列
     pref_order: 戦略の優先順位 (Pxx_Dx 形式)
     threshold: 最適戦略を選択する際の許容差 (デフォルト 0.01 = 1%)
+    width: グラフの幅
+    height: グラフの高さ
   """
   # 必要なカラムの確認
   required_cols = [
@@ -286,7 +294,9 @@ def run_best_combination_analysis(df_survival: pd.DataFrame,
                              y_title="支出レベル",
                              output_path=output_path,
                              x_sort=r_order,
-                             y_sort=m_order)
+                             y_sort=m_order,
+                             width=width,
+                             height=height)
 
   # CSV出力
   csv_filename = output_name.replace(".svg", ".csv")
