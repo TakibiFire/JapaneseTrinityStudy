@@ -22,10 +22,10 @@ from sklearn.linear_model import LinearRegression
 from sklearn.metrics import r2_score
 from sklearn.preprocessing import PolynomialFeatures, StandardScaler
 
-from src.lib.analyze_all_yr import (create_heatmap,
-                                    create_spend_percentile_chart,
-                                    prepare_heatmap_labels,
-                                    run_best_combination_analysis)
+from src.lib.visualize_all_yr import (create_heatmap,
+                                      create_spend_percentile_chart,
+                                      prepare_heatmap_labels,
+                                      run_best_combination_analysis)
 
 # 設定
 IMG_DIR = "docs/imgs/all_50yr"
