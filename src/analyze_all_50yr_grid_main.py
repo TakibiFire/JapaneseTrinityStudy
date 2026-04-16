@@ -19,9 +19,10 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import brentq
 from sklearn.linear_model import LinearRegression
-from sklearn.metrics import r2_score
-from sklearn.preprocessing import PolynomialFeatures, StandardScaler
+from sklearn.preprocessing import PolynomialFeatures
 
+from src.lib.fitting_all_yr import (FeatureSetType, run_fitting_analysis,
+                                    run_stepwise_fitting_analysis)
 from src.lib.visualize_all_yr import (create_heatmap,
                                       create_spend_percentile_chart,
                                       prepare_heatmap_labels,
@@ -177,196 +178,6 @@ def run_p60_d1_heatmap(df_survival: pd.DataFrame):
                  y_sort=m_order)
 
 
-def run_fitting_analysis(df: pd.DataFrame, target_col: str) -> List[Dict[str, Any]]:
-  """
-  予測モデルの評価を行い STDOUT に出力する。
-  """
-  print(f"\n\n{'='*20} 予測モデルの評価 (R2 Score) - {target_col}年生存確率 {'='*20}")
-
-  y_target = df[target_col].to_numpy().astype(float)
-  M_val = df["initial_money"].to_numpy().astype(float)
-  S_val = df["spending_rule"].to_numpy().astype(float)
-  Mult_val = df["spend_multiplier"].to_numpy().astype(float)
-
-  # 対数オッズ空間
-  y_clipped = np.clip(y_target, 0.001, 0.999)
-  logit_y = np.log(y_clipped / (1 - y_clipped))
-
-  # 特徴量セット
-  feats = pd.DataFrame({
-      "M": M_val,
-      "S": S_val,
-      "Mult": Mult_val,
-      "invM": 1.0 / np.maximum(M_val, 1.0),
-      "invS": 1.0 / np.maximum(S_val, 0.1),
-      "logM": np.log(np.maximum(M_val, 1.0)),
-      "logS": np.log(np.maximum(S_val, 0.1))
-  })
-
-  results = []
-
-  def evaluate(name, poly_deg, interaction_only, use_logit):
-    poly = PolynomialFeatures(degree=poly_deg,
-                               interaction_only=interaction_only)
-    X_poly = poly.fit_transform(feats)
-
-    target = logit_y if use_logit else y_target
-    model = LinearRegression()
-    model.fit(X_poly, target)
-
-    pred_raw = model.predict(X_poly)
-    if use_logit:
-      y_pred = 1 / (1 + np.exp(-pred_raw))
-    else:
-      y_pred = np.clip(pred_raw, 0, 1)
-
-    r2 = r2_score(y_target, y_pred)
-    n = len(y_target)
-    p = X_poly.shape[1] - 1  # 定数項を除く
-    adj_r2 = 1 - (1 - r2) * (n - 1) / (n - p - 1)
-    print(
-        f"{name:<40} | R2: {r2:.4f} | Adj R2: {adj_r2:.4f} | 特徴量数: {X_poly.shape[1]}"
-    )
-    results.append({
-        "name": name,
-        "poly_deg": poly_deg,
-        "interaction_only": interaction_only,
-        "use_logit": use_logit,
-        "adj_r2": adj_r2
-    })
-
-  evaluate("確率Pに対する2次モデル (交互作用のみ)", 2, True, False)
-  evaluate("Logitに対する2次モデル (交互作用のみ)", 2, True, True)
-  evaluate("確率Pに対する3次モデル (交互作用のみ)", 3, True, False)
-  evaluate("Logitに対する3次モデル (交互作用のみ)", 3, True, True)
-
-  return results
-
-
-def run_stepwise_fitting_analysis(df: pd.DataFrame,
-                                  target_col: str,
-                                  max_adj_r2: float,
-                                  poly_deg: int = 2,
-                                  interaction_only: bool = True,
-                                  use_logit: bool = False):
-  """
-  ステップワイズ特徴量選択による生存確率の近似式算出。
-  """
-  print(f"\n\n{'='*20} 5. ステップワイズ特徴量選択による生存確率の近似式算出 {'='*20}")
-  print(
-      f"ターゲット: {target_col}年生存確率, Logit使用: {use_logit}, Degree: {poly_deg}, InteractionOnly: {interaction_only}"
-  )
-  threshold = max_adj_r2 * 0.99
-  print(f"目標 Adj R2 (99% of {max_adj_r2:.4f}): {threshold:.4f}")
-
-  y_raw = df[target_col].to_numpy().astype(float)
-  if use_logit:
-    y_clipped = np.clip(y_raw, 0.0001, 0.9999)
-    y_target = np.log(y_clipped / (1 - y_clipped))
-  else:
-    y_target = y_raw
-
-  # 特徴量の準備
-  M_val = df["initial_money"].to_numpy().astype(float)
-  S_val = df["spending_rule"].to_numpy().astype(float)
-  Mult_val = df["spend_multiplier"].to_numpy().astype(float)
-
-  base_feats = pd.DataFrame({
-      "M": M_val,
-      "S": S_val,
-      "Mult": Mult_val,
-      "invM": 1.0 / np.maximum(M_val, 1.0),
-      "invS": 1.0 / np.maximum(S_val, 0.1),
-      "logM": np.log(np.maximum(M_val, 1.0)),
-      "logS": np.log(np.maximum(S_val, 0.1))
-  })
-
-  poly = PolynomialFeatures(degree=poly_deg, interaction_only=interaction_only)
-  X_all = poly.fit_transform(base_feats)
-  feature_names = poly.get_feature_names_out(base_feats.columns)
-
-  candidate_df = pd.DataFrame(X_all, columns=feature_names)
-  if "1" in candidate_df.columns:
-    candidate_df = candidate_df.drop(columns=["1"])
-
-  selected: List[str] = []
-  current_r2 = -1.0
-  n = len(y_target)
-
-  print(
-      f"{'Step':>4} | {'追加された特徴量':<20} | {'R2 Score':>8} | {'Adj R2':>8} | {'向上幅':>8}"
-  )
-  print("-" * 65)
-
-  for step in range(1, 41):
-    best_feat = None
-    best_r2 = -1e9
-    best_adj_r2 = -1e9
-    for feat in candidate_df.columns:
-      if feat in selected:
-        continue
-      trial = selected + [feat]
-      model = LinearRegression()
-      model.fit(candidate_df[trial], y_target)
-
-      pred_raw = model.predict(candidate_df[trial])
-      if use_logit:
-        y_pred = 1 / (1 + np.exp(-pred_raw))
-      else:
-        y_pred = np.clip(pred_raw, 0, 1)
-
-      r2 = r2_score(y_raw, y_pred)
-      p = len(trial)
-      adj_r2 = 1 - (1 - r2) * (n - 1) / (n - p - 1)
-
-      if adj_r2 > best_adj_r2:
-        best_r2 = r2
-        best_adj_r2 = adj_r2
-        best_feat = feat
-
-    if best_feat:
-      improvement = best_r2 - current_r2 if current_r2 != -1.0 else best_r2
-      print(
-          f"{step:4d} | {best_feat:<20} | {best_r2:8.4f} | {best_adj_r2:8.4f} | {improvement:+8.4f}"
-      )
-      selected.append(best_feat)
-      current_r2 = best_r2
-
-      if best_adj_r2 >= threshold:
-        print(f"目標 Adj R2 に達したため終了します。")
-        break
-    else:
-      break
-
-  # 最終モデル
-  final_model = LinearRegression()
-  final_model.fit(candidate_df[selected], y_target)
-
-  print(f"\n--- 最終モデルの係数 (ターゲット: {target_col}年) ---")
-  print(f"切片 (Intercept): {final_model.intercept_:.6f}")
-  coef_df = pd.DataFrame({"特徴量": selected, "係数": final_model.coef_})
-  print(coef_df.to_string(index=False))
-
-  # 97% / 90% の算出
-  def print_formula(target_val, label):
-    parts = [f"{final_model.intercept_:.6f}"]
-    for f, c in zip(selected, final_model.coef_):
-      parts.append(f"({c:+.6f} * {f})")
-    formula = " + ".join(parts)
-    print(f"\n--- {label} 生存確率の条件式 ---")
-    if use_logit:
-      print(f"Logit(P) = {np.log(target_val/(1-target_val)):.4f}")
-      print(f"0 = {formula} - {np.log(target_val/(1-target_val)):.4f}")
-    else:
-      print(f"P = {target_val:.4f}")
-      print(f"0 = {formula} - {target_val:.4f}")
-
-  print_formula(0.97, "97%")
-  print_formula(0.90, "90%")
-
-  return final_model, selected, poly
-
-
 def run_survival_curve_analysis(df: pd.DataFrame,
                                 model: LinearRegression,
                                 selected_feats: List[str],
@@ -502,154 +313,6 @@ def save_survival_charts(df_plot: pd.DataFrame, base_cost: float, target_probs: 
   print(f"✅ {path3} に保存しました。")
 
 
-def run_asset_spend_fitting_analysis(df: pd.DataFrame, target_col: str):
-  """
-  Step 8: 総資産 (M) と支出額 (Spend/Mult) のみを用いて生存確率を予測するモデルの評価。
-  """
-  print(f"\n\n{'='*20} 8. 資産と支出額のみを用いたモデル評価 (R2 Score) - {target_col}年 {'='*20}")
-
-  y_target = df[target_col].to_numpy().astype(float)
-  M_val = df["initial_money"].to_numpy().astype(float)
-  # 支出額 (Multiplier を使用)
-  Mult_val = df["spend_multiplier"].to_numpy().astype(float)
-  # 実支出額 (万円)
-  Spend_val = df["initial_annual_cost"].to_numpy().astype(float)
-
-  # 対数オッズ空間
-  y_clipped = np.clip(y_target, 0.001, 0.999)
-  logit_y = np.log(y_clipped / (1 - y_clipped))
-
-  # 特徴量セット (Rule S を意図的に除外)
-  feats = pd.DataFrame({
-      "M": M_val,
-      "Mult": Mult_val,
-      "Spend": Spend_val,
-      "invM": 1.0 / np.maximum(M_val, 1.0),
-      "invSpend": 1.0 / np.maximum(Spend_val, 1.0),
-      "logM": np.log(np.maximum(M_val, 1.0)),
-      "logSpend": np.log(np.maximum(Spend_val, 1.0))
-  })
-
-  results = []
-
-  def evaluate(name, poly_deg, interaction_only, use_logit):
-    poly = PolynomialFeatures(degree=poly_deg,
-                               interaction_only=interaction_only)
-    X_poly = poly.fit_transform(feats)
-
-    target = logit_y if use_logit else y_target
-    model = LinearRegression()
-    model.fit(X_poly, target)
-
-    pred_raw = model.predict(X_poly)
-    if use_logit:
-      y_pred = 1 / (1 + np.exp(-pred_raw))
-    else:
-      y_pred = np.clip(pred_raw, 0, 1)
-
-    r2 = r2_score(y_target, y_pred)
-    n = len(y_target)
-    p = X_poly.shape[1] - 1
-    adj_r2 = 1 - (1 - r2) * (n - 1) / (n - p - 1)
-    print(
-        f"{name:<40} | R2: {r2:.4f} | Adj R2: {adj_r2:.4f} | 特徴量数: {X_poly.shape[1]}"
-    )
-    results.append({
-        "name": name,
-        "poly_deg": poly_deg,
-        "interaction_only": interaction_only,
-        "use_logit": use_logit,
-        "adj_r2": adj_r2
-    })
-
-  evaluate("P に対する2次 (Asset/Spendのみ)", 2, True, False)
-  evaluate("Logit に対する2次 (Asset/Spendのみ)", 2, True, True)
-  evaluate("P に対する3次 (Asset/Spendのみ)", 3, True, False)
-  evaluate("Logit に対する3次 (Asset/Spendのみ)", 3, True, True)
-
-  return results
-
-
-def run_asset_spend_stepwise_analysis(df: pd.DataFrame,
-                                      target_col: str,
-                                      max_adj_r2: float,
-                                      poly_deg: int = 2,
-                                      interaction_only: bool = True,
-                                      use_logit: bool = False):
-  """
-  Step 9: 資産と支出額のみを用いたステップワイズ特徴量選択による近似式算出。
-  """
-  print(f"\n\n{'='*20} 9. 資産と支出額のみを用いたステップワイズ近似式算出 {'='*20}")
-  print(f"ターゲット: {target_col}年, Logit使用: {use_logit}, Degree: {poly_deg}")
-  threshold = max_adj_r2 * 0.97
-  print(f"目標 Adj R2 (97% of {max_adj_r2:.4f}): {threshold:.4f}")
-
-  y_raw = df[target_col].to_numpy().astype(float)
-  if use_logit:
-    y_clipped = np.clip(y_raw, 0.0001, 0.9999)
-    y_target = np.log(y_clipped / (1 - y_clipped))
-  else:
-    y_target = y_raw
-
-  M_val = df["initial_money"].to_numpy().astype(float)
-  Mult_val = df["spend_multiplier"].to_numpy().astype(float)
-  Spend_val = df["initial_annual_cost"].to_numpy().astype(float)
-
-  base_feats = pd.DataFrame({
-      "M": M_val,
-      "Mult": Mult_val,
-      "Spend": Spend_val,
-      "invM": 1.0 / np.maximum(M_val, 1.0),
-      "invSpend": 1.0 / np.maximum(Spend_val, 1.0),
-      "logM": np.log(np.maximum(M_val, 1.0)),
-      "logSpend": np.log(np.maximum(Spend_val, 1.0))
-  })
-
-  poly = PolynomialFeatures(degree=poly_deg, interaction_only=interaction_only)
-  X_all = poly.fit_transform(base_feats)
-  feature_names = poly.get_feature_names_out(base_feats.columns)
-  candidate_df = pd.DataFrame(X_all, columns=feature_names)
-  if "1" in candidate_df.columns: candidate_df = candidate_df.drop(columns=["1"])
-
-  selected: List[str] = []
-  current_r2 = -1.0
-  n = len(y_target)
-
-  print(f"{'Step':>4} | {'追加された特徴量':<20} | {'R2 Score':>8} | {'Adj R2':>8} | {'向上幅':>8}")
-  print("-" * 65)
-
-  for step in range(1, 41):
-    best_feat = None
-    best_r2 = -1e9
-    best_adj_r2 = -1e9
-    for feat in candidate_df.columns:
-      if feat in selected: continue
-      trial = selected + [feat]
-      model = LinearRegression().fit(candidate_df[trial], y_target)
-      pred_raw = model.predict(candidate_df[trial])
-      y_pred = 1/(1+np.exp(-pred_raw)) if use_logit else np.clip(pred_raw, 0, 1)
-      r2 = r2_score(y_raw, y_pred)
-      adj_r2 = 1 - (1 - r2) * (n - 1) / (n - len(trial) - 1)
-      if adj_r2 > best_adj_r2:
-        best_r2, best_adj_r2, best_feat = r2, adj_r2, feat
-
-    if best_feat:
-      improvement = best_r2 - current_r2 if current_r2 != -1.0 else best_r2
-      print(f"{step:4d} | {best_feat:<20} | {best_r2:8.4f} | {best_adj_r2:8.4f} | {improvement:+8.4f}")
-      selected.append(best_feat)
-      current_r2 = best_r2
-      if best_adj_r2 >= threshold:
-        print(f"目標 Adj R2 に達したため終了します。")
-        break
-    else: break
-
-  final_model = LinearRegression().fit(candidate_df[selected], y_target)
-  print(f"\n--- 最終モデルの係数 (資産/支出のみ) ---")
-  print(f"切片 (Intercept): {final_model.intercept_:.6f}")
-  coef_df = pd.DataFrame({"特徴量": selected, "係数": final_model.coef_})
-  print(coef_df.to_string(index=False))
-
-
 def run_rule_of_thumb_analysis(df: pd.DataFrame, target_probs: List[float]):
   """
   Step 10: 資産と支出額の2つの特徴量のみを用いた簡略式の算出とテーブル出力。
@@ -758,20 +421,21 @@ def main():
   save_survival_charts(df_plot, base_cost, target_probs)
 
   # 8. 資産と支出額のみを用いたモデル評価
-  asset_spend_results = run_asset_spend_fitting_analysis(df_p60_d1_survival, "45")
+  asset_spend_results = run_fitting_analysis(df_p60_d1_survival, "45", feature_set_type=FeatureSetType.ASSET_SPEND)
 
   # 9. 資産と支出額のみを用いたステップワイズ近似式算出
   # 最も高い Adj R2 を持つ Logit モデルを選択
   logit_as_results = [r for r in asset_spend_results if r["use_logit"]]
   best_as_eval = max(logit_as_results, key=lambda x: x["adj_r2"])
 
-  run_asset_spend_stepwise_analysis(
+  run_stepwise_fitting_analysis(
       df_p60_d1_survival,
       "45",
       max_adj_r2=float(best_as_eval["adj_r2"]),
       poly_deg=int(best_as_eval["poly_deg"]),
       interaction_only=bool(best_as_eval["interaction_only"]),
-      use_logit=True)
+      use_logit=True,
+      feature_set_type=FeatureSetType.ASSET_SPEND)
 
   # 10. 初期支出率を求める公式 (Rule of Thumb) の出力
   run_rule_of_thumb_analysis(df_p60_d1_survival, target_probs)
