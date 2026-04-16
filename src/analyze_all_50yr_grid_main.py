@@ -16,10 +16,9 @@ from typing import List
 
 import numpy as np
 import pandas as pd
-from scipy.optimize import brentq
-from sklearn.linear_model import LinearRegression
 
 from src.lib.fitting_all_yr import (FeatureSetType, run_fitting_analysis,
+                                    run_rule_of_thumb_analysis,
                                     run_stepwise_fitting_analysis,
                                     run_survival_curve_analysis,
                                     save_survival_charts)
@@ -105,52 +104,6 @@ def run_p60_d1_heatmap(df_survival: pd.DataFrame):
                  y_sort=m_order)
 
 
-def run_rule_of_thumb_analysis(df: pd.DataFrame, target_probs: List[float]):
-  """
-  Step 10: 資産と支出額の2つの特徴量のみを用いた簡略式の算出とテーブル出力。
-  """
-  print(f"\n\n{'='*20} 10. 初期支出率を求める公式 (Rule of Thumb) {'='*20}")
-
-  target_col = "45"
-  y_raw = df[target_col].to_numpy().astype(float)
-  # Logitターゲット
-  y_clipped = np.clip(y_raw, 0.0001, 0.9999)
-  y_logit = np.log(y_clipped / (1 - y_clipped))
-
-  M_val = df["initial_money"].to_numpy().astype(float)
-  Spend_val = df["initial_annual_cost"].to_numpy().astype(float)
-
-  # 指定された2つの特徴量のみを使用
-  X = pd.DataFrame({
-      "M invSpend": M_val / Spend_val,
-      "invSpend": 1.0 / Spend_val
-  })
-
-  model = LinearRegression().fit(X, y_logit)
-
-  c_m_inv = model.coef_[0]
-  c_inv = model.coef_[1]
-  intercept = model.intercept_
-
-  print("| 目標生存確率 | 初期支出率を求める公式 |")
-  print("| --: | --- |")
-
-  for p in target_probs:
-    logit_p = np.log(p / (1 - p))
-    k = logit_p - intercept
-
-    # Spend = (c1*M + c2) / K
-    # Spend = (c1/K)*M + (c2/K)
-    slope = c_m_inv / k
-    offset = c_inv / k
-
-    # 支出率 S = Spend/M * 100 = (slope*M + offset)/M * 100 = slope*100 + (offset*100)/M
-    s_base = slope * 100
-    s_const = offset
-
-    print(f"| {p*100:g}% | 総資産の {s_base:.1f}% + {s_const:.0f}万円 |")
-
-
 def main():
   P_D_RANGE_CSV = "data/all_50yr/P-D-RANGE-H1.csv"
   if not os.path.exists(P_D_RANGE_CSV):
@@ -169,9 +122,10 @@ def main():
   df_p60_d1_survival = df_p60_d1_all[df_p60_d1_all["value_type"] ==
                                      "survival"].copy()
 
+  target_year = "45"
   # 1. 最適組み合わせ分析
   run_best_combination_analysis(df_p_d_survival,
-                                target_year="45",
+                                target_year=target_year,
                                 img_dir=IMG_DIR,
                                 temp_dir=TEMP_IMG_DIR,
                                 title_prefix="単身世帯",
@@ -184,7 +138,7 @@ def main():
   run_p60_d1_heatmap(df_p60_d1_survival)
 
   # 4. 予測モデルの評価
-  fitting_results = run_fitting_analysis(df_p60_d1_survival, "45")
+  fitting_results = run_fitting_analysis(df_p60_d1_survival, target_year)
 
   # # 5. ステップワイズ特徴量選択による生存確率の近似式算出
   # fitting_results の中から最も Adj R2 が高い Logit 手法を選択する (境界線の算出には Logit が適しているため)
@@ -193,7 +147,7 @@ def main():
 
   model_sw, selected_sw, poly_sw = run_stepwise_fitting_analysis(
       df_p60_d1_survival,
-      "45",
+      target_year,
       max_adj_r2=float(best_eval["adj_r2"]),
       poly_deg=int(best_eval["poly_deg"]),
       interaction_only=bool(best_eval["interaction_only"]),
@@ -213,7 +167,9 @@ def main():
 
   # 8. 資産と支出額のみを用いたモデル評価
   asset_spend_results = run_fitting_analysis(
-      df_p60_d1_survival, "45", feature_set_type=FeatureSetType.ASSET_SPEND)
+      df_p60_d1_survival,
+      target_year,
+      feature_set_type=FeatureSetType.ASSET_SPEND)
 
   # 9. 資産と支出額のみを用いたステップワイズ近似式算出
   # 最も高い Adj R2 を持つ Logit モデルを選択
@@ -221,7 +177,7 @@ def main():
   best_as_eval = max(logit_as_results, key=lambda x: x["adj_r2"])
 
   run_stepwise_fitting_analysis(df_p60_d1_survival,
-                                "45",
+                                target_year,
                                 max_adj_r2=float(best_as_eval["adj_r2"]),
                                 poly_deg=int(best_as_eval["poly_deg"]),
                                 interaction_only=bool(
@@ -230,7 +186,7 @@ def main():
                                 feature_set_type=FeatureSetType.ASSET_SPEND)
 
   # 10. 初期支出率を求める公式 (Rule of Thumb) の出力
-  run_rule_of_thumb_analysis(df_p60_d1_survival, target_probs)
+  run_rule_of_thumb_analysis(df_p60_d1_survival, target_year, target_probs)
 
 
 if __name__ == "__main__":

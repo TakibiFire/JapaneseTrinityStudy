@@ -459,3 +459,76 @@ def save_survival_charts(
   path3 = os.path.join(img_dir, "survival_asset_vs_rule.svg")
   chart3.save(path3)
   print(f"✅ {path3} に保存しました。")
+
+
+def run_rule_of_thumb_analysis(df: pd.DataFrame,
+                               target_col: str,
+                               target_probs: List[float]) -> None:
+  """
+  資産と支出額の2つの特徴量のみを用いた簡略式の算出とテーブル出力を行う (Rule of Thumb)。
+
+  この分析では、生存確率 P を目的変数とし、Logit(P) に対して
+  (資産 / 支出額) と (1 / 支出額) の2つの特徴量で線形回帰を行う。
+  得られた回帰式から、特定の生存確率を達成するための
+  「初期支出率 = 総資産の X% + Y 万円」という形式の簡略ルールを導出する。
+
+  Args:
+    df: 入力データフレーム。以下の列が必要：
+      - target_col: 生存確率
+      - 'initial_money': 初期資産 (M)
+      - 'initial_annual_cost': 初期年間支出額 (Spend)
+    target_col: ターゲットとする生存確率の列名。
+    target_probs: 公式を算出する対象の生存確率リスト。
+  """
+  print(f"\n\n{'='*20} 初期支出率を求める公式 (Rule of Thumb) {'='*20}")
+
+  y_raw = df[target_col].to_numpy().astype(float)
+  # Logitターゲット
+  y_clipped = np.clip(y_raw, 0.0001, 0.9999)
+  y_logit = np.log(y_clipped / (1 - y_clipped))
+
+  m_val = df["initial_money"].to_numpy().astype(float)
+  spend_val = df["initial_annual_cost"].to_numpy().astype(float)
+
+  # 指定された2つの特徴量のみを使用
+  # Logit(P) = c1 * (M/Spend) + c2 * (1/Spend) + Intercept
+  # K = Logit(P) - Intercept = (c1*M + c2) / Spend
+  # Spend = (c1/K)*M + (c2/K)
+  # 支出率 S = Spend/M * 100 = (c1/K)*100 + (c2/K*100)/M
+  x_df = pd.DataFrame({
+      "M/Spend": m_val / spend_val,
+      "1/Spend": 1.0 / spend_val
+  })
+
+  model = LinearRegression().fit(x_df, y_logit)
+
+  # 決定係数の算出 (Logit空間)
+  y_pred_logit = model.predict(x_df)
+  r2_logit = r2_score(y_logit, y_pred_logit)
+
+  # 確率空間での決定係数
+  y_pred_prob = 1 / (1 + np.exp(-y_pred_logit))
+  r2_prob = r2_score(y_raw, y_pred_prob)
+
+  print(f"モデル評価 (2特徴量: M/Spend, 1/Spend):")
+  print(f"  - R2 (Logit空間): {r2_logit:.4f}")
+  print(f"  - R2 (確率空間): {r2_prob:.4f}")
+  print("")
+
+  c_m_inv = model.coef_[0]
+  c_inv = model.coef_[1]
+  intercept = model.intercept_
+
+  print("| 目標生存確率 | 初期支出率を求める公式 |")
+  print("| --: | --- |")
+
+  for p in target_probs:
+    logit_p = np.log(p / (1 - p))
+    k = logit_p - intercept
+
+    # slope = (c1/K)*100
+    # offset = (c2/K)
+    slope = (c_m_inv / k) * 100
+    offset = c_inv / k
+
+    print(f"| {p*100:g}% | 総資産の {slope:.1f}% + {offset:.0f}万円 |")

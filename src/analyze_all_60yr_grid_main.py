@@ -15,7 +15,8 @@ import os
 
 import pandas as pd
 
-from src.lib.fitting_all_yr import (run_fitting_analysis,
+from src.lib.fitting_all_yr import (FeatureSetType, run_fitting_analysis,
+                                    run_rule_of_thumb_analysis,
                                     run_stepwise_fitting_analysis,
                                     run_survival_curve_analysis,
                                     save_survival_charts)
@@ -76,10 +77,11 @@ def main():
   df_p60_d1_survival = df_p60_d1_all[df_p60_d1_all["value_type"] ==
                                      "survival"].copy()
 
+  target_year = "35"
   # 1. 最適な組み合わせの分析 (35年後)
   run_best_combination_analysis(
       df_p_d_survival,
-      target_year="35",
+      target_year=target_year,
       img_dir=IMG_DIR,
       temp_dir=TEMP_DIR,
       title_prefix="60歳リタイア",
@@ -90,13 +92,13 @@ def main():
 
   # 2. 支出額パーセンタイル推移の生成
   # Only care about P60, D1, Mult1, Rule4 case.
-  df_plot = df_p_d_all[(df_p_d_all["pension_start_age"] == 60) &
-                       (df_p_d_all["spend_multiplier"] == 1.0) &
-                       (df_p_d_all["spending_rule"] == 4.0)]
-  if not df_plot.empty:
+  df_plot_p = df_p_d_all[(df_p_d_all["pension_start_age"] == 60) &
+                         (df_p_d_all["spend_multiplier"] == 1.0) &
+                         (df_p_d_all["spending_rule"] == 4.0)]
+  if not df_plot_p.empty:
     title = "年間支出額推移: 60歳リタイア, 年金60歳, 初期540万円/年, 初期支出率4%"
     output_path = os.path.join(IMG_DIR, "spend_percentiles_60yr_p60_m1_r4.svg")
-    create_spend_percentile_chart(df_plot,
+    create_spend_percentile_chart(df_plot_p,
                                   title,
                                   output_path,
                                   start_age=60,
@@ -106,8 +108,7 @@ def main():
   run_p60_d1_heatmap(df_p60_d1_survival)
 
   # 4. 予測モデルの評価
-  target_col = "35"
-  fitting_results = run_fitting_analysis(df_p60_d1_survival, target_col)
+  fitting_results = run_fitting_analysis(df_p60_d1_survival, target_year)
 
   # 5. ステップワイズ特徴量選択による生存確率の近似式算出
   # fitting_results の中から最も Adj R2 が高い Logit 手法を選択する
@@ -116,7 +117,7 @@ def main():
 
   model_sw, selected_sw, poly_sw = run_stepwise_fitting_analysis(
       df_p60_d1_survival,
-      target_col,
+      target_year,
       max_adj_r2=float(best_eval["adj_r2"]),
       poly_deg=int(best_eval["poly_deg"]),
       interaction_only=bool(best_eval["interaction_only"]),
@@ -137,6 +138,29 @@ def main():
                        base_cost,
                        target_probs,
                        img_dir=IMG_DIR)
+
+  # 8. 資産と支出額のみを用いたモデル評価
+  asset_spend_results = run_fitting_analysis(
+      df_p60_d1_survival,
+      target_year,
+      feature_set_type=FeatureSetType.ASSET_SPEND)
+
+  # 9. 資産と支出額のみを用いたステップワイズ近似式算出
+  # 最も高い Adj R2 を持つ Logit モデルを選択
+  logit_as_results = [r for r in asset_spend_results if r["use_logit"]]
+  best_as_eval = max(logit_as_results, key=lambda x: x["adj_r2"])
+
+  run_stepwise_fitting_analysis(df_p60_d1_survival,
+                                target_year,
+                                max_adj_r2=float(best_as_eval["adj_r2"]),
+                                poly_deg=int(best_as_eval["poly_deg"]),
+                                interaction_only=bool(
+                                    best_as_eval["interaction_only"]),
+                                use_logit=True,
+                                feature_set_type=FeatureSetType.ASSET_SPEND)
+
+  # 10. 初期支出率を求める公式 (Rule of Thumb) の出力
+  run_rule_of_thumb_analysis(df_p60_d1_survival, target_year, target_probs)
 
 
 if __name__ == "__main__":
