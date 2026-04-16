@@ -23,6 +23,7 @@
 - 初年度支出倍率
 """
 
+import argparse
 import os
 from itertools import product
 from typing import Any, Dict, List, Optional, Union
@@ -47,21 +48,30 @@ from src.lib.simulation_defaults import (AcwiModelKey,
                                          get_acwi_fat_tail_config,
                                          get_cpi_ar12_config)
 
-# 設定
-EXP_TYPE = "P60-D1"
-assert EXP_TYPE in (
-    # 年金受け取りの受給タイミングとDynamicSpendingをするかどうかの最適組み合わせを求める。
-    "P-D-RANGE",
-    # 年金受け取りの受給タイミング=60, DynamicSpending=ON が確定。
-    # より詳細なパラメータで分析を行う。
-    "P60-D1",
-)
-
-DATA_DIR = "data/all_60yr/"
-CSV_PATH = os.path.join(DATA_DIR, f"{EXP_TYPE}.csv")
-
 
 def main():
+  # 引数の処理
+  parser = argparse.ArgumentParser(
+      description="60歳リタイア開始・95歳までの生存確率を分析するグリッドサーチスクリプト。")
+  parser.add_argument("--exp_type",
+                      type=str,
+                      default="P60-D1",
+                      help="実験設定 (P-D-RANGE or P60-D1)")
+  args = parser.parse_args()
+
+  # 設定
+  exp_type = args.exp_type
+  assert exp_type in (
+      # 年金受け取りの受給タイミングとDynamicSpendingをするかどうかの最適組み合わせを求める。
+      "P-D-RANGE",
+      # 年金受け取りの受給タイミング=60, DynamicSpending=ON が確定。
+      # より詳細なパラメータで分析を行う。
+      "P60-D1",
+  ), f"Unsupported exp_type: {exp_type}"
+
+  data_dir = "data/all_60yr/"
+  csv_path = os.path.join(data_dir, f"{exp_type}.csv")
+
   # 共通設定
   YEARS = 35  # 60歳から95歳まで
   START_AGE = 60
@@ -81,22 +91,22 @@ def main():
   CURRENT_YEAR = 2026
   MACRO_ECONOMIC_SLIDE_END_YEAR = 2057
 
-  if EXP_TYPE == "P-D-RANGE":
+  if exp_type == "P-D-RANGE":
     spend_multipliers = [0.36, 0.5, 0.75, 1.0, 1.5, 3.0]
     spending_rules = [2.5, 3.0, 4.0, 5.0, 6.0, 8.0]
     N_SIM = 1000
     pension_start_ages = [60, 65]
     use_dynamic_spending_list = [False, True]
-  elif EXP_TYPE == "P60-D1":
+  elif exp_type == "P60-D1":
     spend_multipliers = [0.36, 0.5, 0.75, 1.0, 1.2, 1.5, 2.0, 3.0]
     spending_rules = [2.8, 3.0, 3.33, 3.66, 4.0, 4.33, 4.66, 5.0, 5.5, 6.0, 7.0]
     N_SIM = 3000
     pension_start_ages = [60]
     use_dynamic_spending_list = [True]
   else:
-    raise KeyError(f"Unsupported {EXP_TYPE}")
+    raise KeyError(f"Unsupported {exp_type}")
 
-  os.makedirs(DATA_DIR, exist_ok=True)
+  os.makedirs(data_dir, exist_ok=True)
 
   # 1. アセット生成
   # 為替 (USDJPY 0%, 10.53%)
@@ -293,8 +303,8 @@ def main():
 
   # CSV保存
   df = pd.DataFrame(results)
-  df.to_csv(CSV_PATH, index=False, encoding="utf-8-sig")
-  print(f"完了。結果を {CSV_PATH} に保存しました。")
+  df.to_csv(csv_path, index=False, encoding="utf-8-sig")
+  print(f"完了。結果を {csv_path} に保存しました。")
 
 
 if __name__ == "__main__":
