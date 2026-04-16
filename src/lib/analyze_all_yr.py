@@ -81,6 +81,40 @@ def create_heatmap(df: pd.DataFrame,
   print(f"✅ {output_path} に保存しました。")
 
 
+def prepare_heatmap_labels(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str], list[str]]:
+  """
+  ヒートマップ表示用のラベル列を追加し、ソート順を計算する。
+  元のデータフレームは変更せず、コピーを返す。
+
+  Args:
+    df: 分析対象のデータフレーム。
+        必須な column: initial_annual_cost, spend_multiplier, spending_rule
+
+  Returns:
+    df: ラベル列 (multiplier_label, rule_label) が追加されたデータフレーム
+    m_order: 支出レベル (multiplier_label) のソート順
+    r_order: 初期支出率 (rule_label) のソート順
+  """
+  df = df.copy()
+  df["multiplier_label"] = df.apply(
+      lambda r:
+      f"{int(round(r['initial_annual_cost'])):d}万円/年@(x{r['spend_multiplier']:g})",
+      axis=1)
+  df["rule_label"] = df["spending_rule"].map(
+      lambda x: f"{x:g}%@(x{round(100/x, 1):g})")
+
+  actual_multipliers = sorted(df["spend_multiplier"].unique(), reverse=True)
+  actual_rules = sorted(df["spending_rule"].unique())
+
+  m_order = []
+  for m in actual_multipliers:
+    cost = df[df["spend_multiplier"] == m]["initial_annual_cost"].iloc[0]
+    m_order.append(f"{int(round(cost)):d}万円/年@(x{m:g})")
+  r_order = [f"{x:g}%@(x{round(100/x, 1):g})" for x in actual_rules]
+
+  return df, m_order, r_order
+
+
 def create_best_combo_heatmap(df_best: pd.DataFrame,
                               title: str,
                               x_col: str,
@@ -308,3 +342,77 @@ def run_best_combination_analysis(df_survival: pd.DataFrame,
   print(f"\n--- {title_prefix} {target_year}年後生存確率を最大化する組み合わせの分布 ---")
   counts = df_best["display_combo"].value_counts().sort_index()
   print(counts.to_string())
+
+
+def create_spend_percentile_chart(df: pd.DataFrame,
+                                  title: str,
+                                  output_path: str,
+                                  start_age: int,
+                                  num_years: int,
+                                  width: int = 600,
+                                  height: int = 400):
+  """
+  支出額のパーセンタイル推移(25p, 50p, 75p)を可視化する。
+  Dynamic SpendingのON/OFF比較をサポートする。
+
+  Args:
+    df: 分析対象のデータフレーム。
+        Required columns:
+        - use_dynamic_spending: ダイナミックスペンディング使用有無 (0 or 1)
+        - value_type: 値の種類 ('spend25p', 'spend50p', 'spend75p')
+        - "1" から str(num_years) までの数字の列: 各経過年の支出額
+    title: グラフのタイトル
+    output_path: 保存先のパス
+    start_age: シミュレーション開始時の年齢 (x軸の計算に使用)
+    num_years: シミュレーション期間（年数）
+    width: グラフの幅
+    height: グラフの高さ
+  """
+  # 1からnum_yearsまでの列を年度列として扱う
+  year_cols = [str(i) for i in range(1, num_years + 1) if str(i) in df.columns]
+
+  # 年度列以外のすべての列を識別子(id_vars)として保持
+  id_vars = [c for c in df.columns if c not in year_cols]
+
+  # 必要な値の種類のみに絞り込む
+  plot_df = df[df["value_type"].isin(["spend25p", "spend50p", "spend75p"])]
+
+  df_long = plot_df.melt(id_vars=id_vars,
+                         value_vars=year_cols,
+                         var_name="year",
+                         value_name="spend")
+  df_long["year"] = df_long["year"].astype(int)
+  # 年数から年齢に変換
+  df_long["age"] = df_long["year"] + start_age
+
+  df_long["dyn_label"] = df_long["use_dynamic_spending"].map({
+      1: "ON",
+      0: "OFF"
+  })
+
+  # p25, p50, p75 を列に展開
+  pivot_df = df_long.pivot_table(index=["dyn_label", "age"],
+                                 columns="value_type",
+                                 values="spend").reset_index()
+
+  # Altairでプロット
+  base = alt.Chart(pivot_df).encode(x=alt.X("age:Q", title="年齢"))
+
+  # Area (25p-75p)
+  area = base.mark_area(opacity=0.3).encode(
+      y=alt.Y("spend25p:Q", title="年間支出額 (万円)"),
+      y2="spend75p:Q",
+      color=alt.Color("dyn_label:N",
+                      scale=alt.Scale(domain=["ON", "OFF"],
+                                      range=["red", "blue"]),
+                      title="ダイナミックスペンディング",
+                      legend=alt.Legend(orient='top')))
+
+  # Line (50p)
+  line = base.mark_line().encode(y="spend50p:Q", color=alt.Color("dyn_label:N"))
+
+  chart = (area + line).properties(title=title, width=width, height=height)
+
+  os.makedirs(os.path.dirname(output_path), exist_ok=True)
+  chart.save(output_path)
+  print(f"✅ {output_path} に保存しました。")

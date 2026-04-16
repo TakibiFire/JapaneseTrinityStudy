@@ -19,6 +19,8 @@ from sklearn.metrics import r2_score
 from sklearn.preprocessing import PolynomialFeatures
 
 from src.lib.analyze_all_yr import (create_heatmap,
+                                    create_spend_percentile_chart,
+                                    prepare_heatmap_labels,
                                     run_best_combination_analysis)
 
 # 設定
@@ -56,7 +58,7 @@ def run_fitting_analysis(df: pd.DataFrame, target_col: str):
 
   def evaluate(name, poly_deg, interaction_only, use_logit):
     poly = PolynomialFeatures(degree=poly_deg,
-                               interaction_only=interaction_only)
+                              interaction_only=interaction_only)
     X_poly = poly.fit_transform(feats)
 
     target = logit_y if use_logit else y_target
@@ -201,6 +203,34 @@ def run_optimization_analysis(df: pd.DataFrame,
     print(f"✅ {output_path} に保存しました。")
 
 
+def run_p60_d1_heatmap(df_survival: pd.DataFrame):
+  """
+  P60, D1 のヒートマップを作成する。
+  """
+  print(f"\n\n{'='*20} P60, D1 ヒートマップ生成 {'='*20}")
+
+  if df_survival.empty:
+    return
+
+  df_h, m_order, r_order = prepare_heatmap_labels(df_survival)
+
+  year_target = "35"
+  title = f"60歳リタイア・年金60歳・{year_target}年後生存確率(%) (ダイナミックスペンディングON)"
+  output_name = f"grid_heatmap_{year_target}yr_p60_dyn_on.svg"
+  output_path = os.path.join(IMG_DIR, output_name)
+
+  create_heatmap(df_h,
+                 target_col=year_target,
+                 title=title,
+                 x_col="rule_label",
+                 x_title="初期支出率 (%ルール)",
+                 y_col="multiplier_label",
+                 y_title="支出レベル",
+                 output_path=output_path,
+                 x_sort=r_order,
+                 y_sort=m_order)
+
+
 def main():
   P_D_RANGE_CSV = "data/all_60yr/P-D-RANGE.csv"
   if not os.path.exists(P_D_RANGE_CSV):
@@ -216,7 +246,8 @@ def main():
     return
 
   df_p60_d1_all = pd.read_csv(P60_D1_CSV)
-  df_p60_d1_survival = df_p60_d1_all[df_p60_d1_all["value_type"] == "survival"].copy()
+  df_p60_d1_survival = df_p60_d1_all[df_p60_d1_all["value_type"] ==
+                                     "survival"].copy()
 
   # 1. 最適な組み合わせの分析 (35年後)
   run_best_combination_analysis(
@@ -228,14 +259,26 @@ def main():
       threshold=0.02,
       pref_order=["P60_D1", "P65_D1", "P60_D0", "P65_D0"],  # 優先順位: 60歳ありを最優先
       width=500,
-      height=450
-  )
+      height=450)
 
-  # 2. 予測モデルの評価
-  run_fitting_analysis(df_p60_d1_survival, "35")
+  # 2. 支出額パーセンタイル推移の生成
+  # Only care about P60, D1, Mult1, Rule4 case.
+  df_plot = df_p_d_all[(df_p_d_all["pension_start_age"] == 60) &
+                       (df_p_d_all["spend_multiplier"] == 1.0) &
+                       (df_p_d_all["spending_rule"] == 4.0)]
+  if not df_plot.empty:
+    title = "年間支出額推移: 60歳リタイア, 年金60歳, 初期540万円/年, 初期支出率4%"
+    output_path = os.path.join(IMG_DIR, "spend_percentiles_60yr_p60_m1_r4.svg")
+    create_spend_percentile_chart(df_plot,
+                                  title,
+                                  output_path,
+                                  start_age=60,
+                                  num_years=35)
 
-  # 3. 97%生存確率の最適化
-  run_optimization_analysis(df_p60_d1_survival, "35", 0.97)
+  # 3. df_p60_d1_survival からヒートマップを作成
+  run_p60_d1_heatmap(df_p60_d1_survival)
+
+  # 3. df_p60_d1_survival からヒートマップの作成
 
 
 if __name__ == "__main__":

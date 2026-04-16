@@ -23,67 +23,13 @@ from sklearn.metrics import r2_score
 from sklearn.preprocessing import PolynomialFeatures, StandardScaler
 
 from src.lib.analyze_all_yr import (create_heatmap,
+                                    create_spend_percentile_chart,
+                                    prepare_heatmap_labels,
                                     run_best_combination_analysis)
 
 # 設定
 IMG_DIR = "docs/imgs/all_50yr"
 TEMP_IMG_DIR = "temp/all_50yr"
-
-
-def create_spend_percentile_chart(df: pd.DataFrame, title: str,
-                                  output_name: str):
-  """
-  支出額のパーセンタイル推移を可視化する（DynamicSpending ON/OFF比較）。
-  """
-  # 年度列（1-45）をロング形式に変換
-  id_vars = [
-      "household_size", "pension_start_age", "spend_multiplier",
-      "use_dynamic_spending", "spending_rule", "value_type"
-  ]
-  if "exp_name" in df.columns:
-    id_vars.append("exp_name")
-
-  year_cols = [c for c in df.columns if c.isdigit()]
-
-  df_long = df.melt(id_vars=id_vars,
-                    value_vars=year_cols,
-                    var_name="year",
-                    value_name="spend")
-  df_long["year"] = df_long["year"].astype(int)
-  # 年数から年齢(開始50歳)に変換
-  df_long["age"] = df_long["year"] + 50
-
-  df_long["dyn_label"] = df_long["use_dynamic_spending"].map({
-      1: "ON",
-      0: "OFF"
-  })
-
-  # p25, p50, p75 を列に展開
-  pivot_df = df_long.pivot_table(index=["dyn_label", "age"],
-                                 columns="value_type",
-                                 values="spend").reset_index()
-
-  # Altairでプロット
-  base = alt.Chart(pivot_df).encode(x=alt.X("age:Q", title="年齢"))
-
-  # Area (25p-75p)
-  area = base.mark_area(opacity=0.3).encode(
-      y=alt.Y("spend25p:Q", title="年間支出額 (万円)"),
-      y2="spend75p:Q",
-      color=alt.Color("dyn_label:N",
-                      scale=alt.Scale(domain=["ON", "OFF"],
-                                      range=["red", "blue"]),
-                      title="Dynamic Spending"))
-
-  # Line (50p)
-  line = base.mark_line().encode(y="spend50p:Q", color=alt.Color("dyn_label:N"))
-
-  chart = (area + line).properties(title=title, width=600, height=400)
-
-  output_path = os.path.join(IMG_DIR, output_name)
-  os.makedirs(IMG_DIR, exist_ok=True)
-  chart.save(output_path)
-  print(f"✅ {output_path} に保存しました。")
 
 
 def run_dynamic_spending_analysis(df: pd.DataFrame):
@@ -135,29 +81,12 @@ def run_heatmap_analysis(df_survival: pd.DataFrame):
         mask = (df_survival["household_size"] == h_size) & \
                (df_survival["pension_start_age"] == p_age) & \
                (df_survival["use_dynamic_spending"] == use_dyn)
-        df_h = df_survival[mask].copy()
+        df_masked = df_survival[mask].copy()
 
-        if df_h.empty:
+        if df_masked.empty:
           continue
 
-        # ラベルの日本語化と表示順の設定
-        df_h["multiplier_label"] = df_h.apply(
-            lambda r:
-            f"{int(round(r['initial_annual_cost'])):d}万円/年@(x{r['spend_multiplier']:g})",
-            axis=1)
-        df_h["rule_label"] = df_h["spending_rule"].map(
-            lambda x: f"{x:g}%@(x{round(100/x, 1):g})")
-
-        actual_multipliers = sorted(df_h["spend_multiplier"].unique(),
-                                    reverse=True)
-        actual_rules = sorted(df_h["spending_rule"].unique())
-
-        m_order = []
-        for m in actual_multipliers:
-          cost = df_h[df_h["spend_multiplier"] ==
-                      m]["initial_annual_cost"].iloc[0]
-          m_order.append(f"{int(round(cost)):d}万円/年@(x{m:g})")
-        r_order = [f"{x:g}%@(x{round(100/x, 1):g})" for x in actual_rules]
+        df_h, m_order, r_order = prepare_heatmap_labels(df_masked)
 
         for year_target in ["45"]:
           title = f"50歳開始・{h_label}・年金{p_age}歳・{year_target}年後生存確率(%) {dyn_title_suffix}"
@@ -200,10 +129,9 @@ def run_percentile_analysis(df_all: pd.DataFrame):
           mask = (df_all["household_size"] == h_size) & \
                  (df_all["pension_start_age"] == p_age) & \
                  (df_all["spend_multiplier"] == s_mult) & \
-                 (df_all["spending_rule"] == rule) & \
-                 (df_all["value_type"].isin(["spend25p", "spend50p", "spend75p"]))
+                 (df_all["spending_rule"] == rule)
 
-          df_plot = df_all[mask].copy()
+          df_plot = df_all[mask]
           if df_plot.empty:
             continue
 
@@ -212,8 +140,13 @@ def run_percentile_analysis(df_all: pd.DataFrame):
           h_label = "2人世帯" if h_size == 2 else "単身世帯"
           title = f"年間支出額推移: {h_label}, 年金{p_age}歳, 初期{int(round(init_cost))}万円/年, 初期支出率{rule:g}%"
           output_name = f"spend_percentiles_h{h_size}_p{p_age}_m{s_mult:g}_r{rule:g}.svg"
+          output_path = os.path.join(IMG_DIR, output_name)
 
-          create_spend_percentile_chart(df_plot, title, output_name)
+          create_spend_percentile_chart(df_plot,
+                                         title,
+                                         output_path,
+                                         start_age=50,
+                                         num_years=45)
 
 
 def run_p60_d1_heatmap(df_survival: pd.DataFrame):
@@ -222,26 +155,10 @@ def run_p60_d1_heatmap(df_survival: pd.DataFrame):
   """
   print(f"\n\n{'='*20} P60, D1, H1 ヒートマップ生成 {'='*20}")
 
-  df_h = df_survival.copy()
-  if df_h.empty:
+  if df_survival.empty:
     return
 
-  # ラベルの日本語化と表示順の設定
-  df_h["multiplier_label"] = df_h.apply(
-      lambda r:
-      f"{int(round(r['initial_annual_cost'])):d}万円/年@(x{r['spend_multiplier']:g})",
-      axis=1)
-  df_h["rule_label"] = df_h["spending_rule"].map(
-      lambda x: f"{x:g}%@(x{round(100/x, 1):g})")
-
-  actual_multipliers = sorted(df_h["spend_multiplier"].unique(), reverse=True)
-  actual_rules = sorted(df_h["spending_rule"].unique())
-
-  m_order = []
-  for m in actual_multipliers:
-    cost = df_h[df_h["spend_multiplier"] == m]["initial_annual_cost"].iloc[0]
-    m_order.append(f"{int(round(cost)):d}万円/年@(x{m:g})")
-  r_order = [f"{x:g}%@(x{round(100/x, 1):g})" for x in actual_rules]
+  df_h, m_order, r_order = prepare_heatmap_labels(df_survival)
 
   year_target = "45"
   title = f"50歳開始・単身世帯・年金60歳・{year_target}年後生存確率(%) (ダイナミックスペンディングON)"
