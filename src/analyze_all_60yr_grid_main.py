@@ -12,16 +12,10 @@ data/all_60yr/ の結果を分析・可視化するスクリプト。
 """
 
 import os
-from typing import Any, Dict, List, Optional, cast
 
-import altair as alt
-import numpy as np
 import pandas as pd
-from scipy.optimize import brentq
-from sklearn.linear_model import LinearRegression
-from sklearn.preprocessing import PolynomialFeatures
 
-from src.lib.fitting_all_yr import (FeatureSetType, run_fitting_analysis,
+from src.lib.fitting_all_yr import (run_fitting_analysis,
                                     run_stepwise_fitting_analysis,
                                     run_survival_curve_analysis,
                                     save_survival_charts)
@@ -139,7 +133,10 @@ def main():
       target_probs=target_probs)
 
   # 7. 3つのグラフを保存
-  save_survival_charts(df_plot_survival, base_cost, target_probs, img_dir=IMG_DIR)
+  save_survival_charts(df_plot_survival,
+                       base_cost,
+                       target_probs,
+                       img_dir=IMG_DIR)
 
 
 if __name__ == "__main__":

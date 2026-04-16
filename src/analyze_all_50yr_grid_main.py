@@ -12,14 +12,12 @@ COMMENT: Keep the above up to date.
 """
 
 import os
-from typing import Any, Dict, List, Optional
+from typing import List
 
-import altair as alt
 import numpy as np
 import pandas as pd
 from scipy.optimize import brentq
 from sklearn.linear_model import LinearRegression
-from sklearn.preprocessing import PolynomialFeatures
 
 from src.lib.fitting_all_yr import (FeatureSetType, run_fitting_analysis,
                                     run_stepwise_fitting_analysis,
