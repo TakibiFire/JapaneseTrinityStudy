@@ -98,12 +98,12 @@ DO NOT DELETE:
 30年後と50年後の生存確率（資産が枯渇せずに残っている確率）をヒートマップで確認します。
 
 <figure>
-  <img src="../imgs/dynamic_spending/grid_heatmap_30yr_survival_dyn_reb_0.svg" alt="30年後の生存確率">
+  <img src="imgs/dynamic_spending/grid_heatmap_30yr_survival_dyn_reb_0.svg" alt="30年後の生存確率">
   <figcaption>30年後の生存確率</figcaption>
 </figure>
 
 <figure>
-  <img src="../imgs/dynamic_spending/grid_heatmap_50yr_survival_dyn_reb_0.svg" alt="50年後の生存確率">
+  <img src="imgs/dynamic_spending/grid_heatmap_50yr_survival_dyn_reb_0.svg" alt="50年後の生存確率">
   <figcaption>50年後の生存確率</figcaption>
 </figure>
 
@@ -189,12 +189,12 @@ DO NOT DELETE:
 同様に、30年後と50年後の生存確率をヒートマップで確認します。
 
 <figure>
-  <img src="../imgs/dynamic_spending/grid_heatmap_30yr_survival_dyn_reb_1.svg" alt="30年後の生存確率（ダイナミックリバランスあり）">
+  <img src="imgs/dynamic_spending/grid_heatmap_30yr_survival_dyn_reb_1.svg" alt="30年後の生存確率（ダイナミックリバランスあり）">
   <figcaption>30年後の生存確率（ダイナミックリバランスあり）</figcaption>
 </figure>
 
 <figure>
-  <img src="../imgs/dynamic_spending/grid_heatmap_50yr_survival_dyn_reb_1.svg" alt="50年後の生存確率（ダイナミックリバランスあり）">
+  <img src="imgs/dynamic_spending/grid_heatmap_50yr_survival_dyn_reb_1.svg" alt="50年後の生存確率（ダイナミックリバランスあり）">
   <figcaption>50年後の生存確率（ダイナミックリバランスあり）</figcaption>
 </figure>
 
@@ -221,12 +221,12 @@ DO NOT DELETE:
 これを視覚化するため、ヴァンガード社の手法（上限5%、下限-1.5% ＋ ダイナミックリバランス）でシミュレーションを行い、「破産せずに生き残ったパス」において、実際の支出額がどのように分布しているかを確認しました。
 
 <figure>
-  <img src="../imgs/dynamic_spending/nominal_spend_hist_year_30.svg" alt="30年後の支出分布">
+  <img src="imgs/dynamic_spending/nominal_spend_hist_year_30.svg" alt="30年後の支出分布">
   <figcaption>30年後の支出分布（赤の破線はインフレに追従した場合の理想的な支出額）</figcaption>
 </figure>
 
 <figure>
-  <img src="../imgs/dynamic_spending/nominal_spend_hist_year_50.svg" alt="50年後の支出分布">
+  <img src="imgs/dynamic_spending/nominal_spend_hist_year_50.svg" alt="50年後の支出分布">
   <figcaption>50年後の支出分布</figcaption>
 </figure>
 
