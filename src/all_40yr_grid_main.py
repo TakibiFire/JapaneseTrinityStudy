@@ -101,7 +101,7 @@ def main():
     pension_start_ages = [60, 65]
     use_dynamic_spending_list = [False, True]
   elif exp_type == "P60-D1":
-    spend_multipliers = [0.36, 0.5, 0.75, 1.0, 1.2, 1.5, 2.0, 3.0]
+    spend_multipliers = [0.36, 0.5, 0.75, 1.0, 1.2, 1.5, 2.0, 3.0, 4.0, 5.0, 6.0]
     spending_rules = [2.8, 3.0, 3.33, 3.66, 4.0, 4.33, 4.66, 5.0, 5.5, 6.0, 7.0]
     N_SIM = 2000
     household_sizes = [1]

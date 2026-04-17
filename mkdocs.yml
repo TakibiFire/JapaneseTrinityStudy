@@ -43,13 +43,15 @@ theme:
 copyright: Copyright &copy; 2026 たきびFIRE
 
 extra:
+  analytics:
+    provider: google
+    property: G-0HHJ8YE8GZ
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/TakibiFire/JapaneseTrinityStudy
     - icon: fontawesome/brands/twitter
       link: https://twitter.com/takibi333
       name: たきび@FIRE
-
 extra_css:
   - stylesheets/tailwind.css
   - stylesheets/extra.css
@@ -125,3 +127,4 @@ nav:
   - 年齢別の最適戦略:
     - 60歳の最適戦略: all_60yr.md
     - 50歳の最適戦略: all_50yr.md
+    - 40歳の最適戦略: all_40yr.md
