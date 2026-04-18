@@ -119,12 +119,13 @@ nav:
     - 年金支払いと受給の効果: pension.md
     - サイドFIREの効果: side_fire.md
     - 死亡率を考慮する: mortality.md
-    - 検討中 / NISA: nisa.md
-    - 検討中 / iDeco: ideco.md
-    - 検討中 / 証券担保ローン: loan.md
-    - 検討中 / レバレッジをかけた商品: lebakan.md
-    - 検討中 / ビットコイン: btc.md
   - 年齢別の最適戦略:
     - 60歳の最適戦略: all_60yr.md
     - 50歳の最適戦略: all_50yr.md
     - 40歳の最適戦略: all_40yr.md
+  - 公開未定:
+    - NISA: nisa.md
+    - iDeco: ideco.md
+    - 証券担保ローン: loan.md
+    - レバレッジをかけた商品: lebakan.md
+    - ビットコイン: btc.md
