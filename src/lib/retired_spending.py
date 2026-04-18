@@ -114,20 +114,24 @@ def get_retired_spending_values(spending_types: List[SpendingType],
 
 def get_retired_spending_multipliers(spending_types: List[SpendingType],
                                      start_age: int,
-                                     num_years: int = 50) -> List[float]:
+                                     num_years: int = 50,
+                                     normalize: bool = True) -> List[float]:
   """
-  指定された開始年齢からの支出の倍率（開始年齢時を1.0とする）を返す。
+  指定された開始年齢からの支出の推移を返す。
 
   Args:
     spending_types: 支出の種類 (CONSUMPTION, NON_CONSUMPTION, NON_CONSUMPTION_EXCLUDE_PENSION) のリスト
     start_age: 開始年齢
     num_years: 取得する年数 (デフォルト 50)
+    normalize: 開始年齢時を1.0とするかどうか (デフォルト True)
 
   Returns:
-    開始年齢時を1.0とした相対的な支出のリスト。
+    支出（月額、単位：円）または倍率のリスト。
   """
   target_ages = np.arange(start_age, start_age + num_years)
   values = get_retired_spending_values(spending_types, target_ages)
 
-  # 開始年齢の値を 1.0 とした倍率を返す
-  return (values / values[0]).tolist()
+  if normalize:
+    # 開始年齢の値を 1.0 とした倍率を返す
+    return (values / values[0]).tolist()
+  return values.tolist()
