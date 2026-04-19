@@ -744,6 +744,55 @@ def test_simulate_strategy_large_income_and_spend():
   assert np.all(res.sustained_months == 12)  # 破産していない
 
 
+def test_simulate_strategy_ndarray_initial_money():
+  """
+  initial_money に np.ndarray を指定した場合、各パスで異なる初期資金が
+  正しく反映されることを検証する。
+  """
+  n_sim = 5
+  total_months = 12
+  prices = {"AssetA": np.ones((n_sim, total_months + 1))}
+
+  # 各パスで異なる初期資金: [100, 200, 300, 400, 500]
+  initial_money = np.array([100.0, 200.0, 300.0, 400.0, 500.0])
+  strategy = Strategy(name="NdArrayInitTest",
+                      initial_money=initial_money,
+                      initial_loan=0.0,
+                      yearly_loan_interest=0.0,
+                      initial_asset_ratio={"AssetA": 1.0},
+                      annual_cost=12.0,  # 月1.0の取り崩し
+                      inflation_rate=None,
+                      selling_priority=["AssetA"])
+
+  res = simulate_strategy(strategy, prices)
+
+  # 各パスから 12.0 ずつ差し引かれるはず
+  expected = initial_money - 12.0
+  assert res.net_values.shape == (n_sim,)
+  assert np.allclose(res.net_values, expected)
+
+
+def test_simulate_strategy_ndarray_initial_money_shape_mismatch():
+  """
+  initial_money の配列サイズが n_sim と一致しない場合にエラーが発生することを検証。
+  """
+  n_sim = 5
+  prices = {"A": np.ones((n_sim, 13))}
+  initial_money = np.array([100.0, 200.0])  # n_sim=5 に対してサイズが合わない
+
+  strategy = Strategy(name="ShapeMismatchTest",
+                      initial_money=initial_money,
+                      initial_loan=0.0,
+                      yearly_loan_interest=0.0,
+                      initial_asset_ratio={"A": 1.0},
+                      annual_cost=0.0,
+                      inflation_rate=None,
+                      selling_priority=["A"])
+
+  with pytest.raises(ValueError, match="initial_money array shape"):
+    simulate_strategy(strategy, prices)
+
+
 def test_extra_cashflow_multiplier():
   """
   倍率関数が正しく適用されることを確認する。
@@ -1318,4 +1367,48 @@ def test_extra_cashflow_multiplier_receives_prev_gross():
   # prev_gross = 120
   assert received_stats[1][0][0] == pytest.approx(60.0)
   assert received_stats[1][1][0] == pytest.approx(120.0)
+
+
+def test_simulate_strategy_non_one_starting_price():
+  """
+  開始時の価格が 1.0 ではない場合でも、資産が正しく評価されることを検証する。
+  (Money=200, Price=2.0 の場合、100ユニット保持され、価格変動がなければ 200 のまま)
+  """
+  n_sim = 1
+  total_months = 12
+  # 価格がずっと 2.0
+  prices = {"Asset": np.full((n_sim, total_months + 1), 2.0)}
+
+  strategy = Strategy(name="NonOnePriceTest",
+                      initial_money=200.0,
+                      initial_loan=0.0,
+                      yearly_loan_interest=0.0,
+                      initial_asset_ratio={"Asset": 1.0},
+                      annual_cost=0.0,
+                      inflation_rate=None,
+                      selling_priority=["Asset"])
+
+  res = simulate_strategy(strategy, prices)
+  # 価格変動がないので、200.0 が維持されるはず。
+  # 以前のバグではここで 200 * 2.0 = 400.0 になってしまっていた。
+  assert np.allclose(res.net_values, 200.0)
+
+  # 毎月 10.0 取り崩す。価格 2.0 なので 5ユニット売却。
+  # 12ヶ月で 60ユニット売却。残り 40ユニット。
+  # 最終価値 40 * 2.0 = 80.0
+  # (もし平均取得単価が 1.0 だと、譲渡益が出て税金でさらに減る)
+  strategy_withdrawal = Strategy(name="NonOnePriceWithdrawalTest",
+                                 initial_money=200.0,
+                                 initial_loan=0.0,
+                                 yearly_loan_interest=0.0,
+                                 initial_asset_ratio={"Asset": 1.0},
+                                 annual_cost=120.0,
+                                 inflation_rate=None,
+                                 selling_priority=["Asset"],
+                                 tax_rate=0.2)
+
+  res_w = simulate_strategy(strategy_withdrawal, prices)
+  # 取得単価が 2.0 なら譲渡益 0 なので、200 - 120 = 80.0
+  assert np.allclose(res_w.net_values, 80.0)
+
 
