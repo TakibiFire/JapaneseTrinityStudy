@@ -1,7 +1,7 @@
 """
 Optimal Strategy V2 のモデルフィッティングを行うスクリプト。
 
-このスクリプトは、後ろ向き動的計画法（Backward DP）を用いて、各年齢（35歳から95歳）における
+このスクリプトは、後ろ向き動的計画法（Backward DP）を用いて、各年齢（40歳から95歳）における
 最適な資産配分（オルカン比率）と、その時の生存確率を計算し、回帰モデルとして保存します。
 
 状態変数として「年間支出率 R」を採用しています：
@@ -9,7 +9,7 @@ Optimal Strategy V2 のモデルフィッティングを行うスクリプト。
 ここで、純支出合計は（支出 - 年金受取 + 年金保険料）の月次合計のうち、正の値を合算したものです。
 
 アルゴリズムの概要：
-1. 最終年齢（95歳）から開始し、35歳まで1年ずつ遡ります。
+1. 最終年齢（95歳）から開始し、40歳まで1年ずつ遡ります。
 2. 各年齢において、R のグリッド（0.005から20以上まで）を作成します。
 3. 各 R に対して、オルカン比率 A（0.0から1.0）を変化させて1年間のシミュレーションを実行します。
 4. 翌年の生存確率モデルを用いて、期待生存確率を最大化する最適な A (A_opt) を見つけます。
@@ -45,7 +45,7 @@ from src.lib.simulation_defaults import (AcwiModelKey,
                                          get_cpi_ar12_config)
 
 # 共通定数
-START_AGE = 35
+START_AGE = 40
 END_AGE = 96  # 95歳の終わりまで
 YEARS = END_AGE - START_AGE
 SEED = 42
@@ -223,23 +223,27 @@ def main():
   cf_configs: List[CashflowConfig] = []
   cf_rules: List[CashflowRule] = []
 
-  # 年金保険料 (35歳から60歳まで)
+  # 国民年金保険料 (40歳から60歳まで)
   cf_configs.append(
-      PensionConfig(name="Pension_Premium",
+      PensionConfig(name="Pension_Premium_Kiso",
                     amount=-20.4 / 12.0,
                     start_month=0,
                     end_month=(60 - START_AGE) * 12,
                     cpi_name=CPI_NAME))
   cf_rules.append(
-      CashflowRule(source_name="Pension_Premium",
+      CashflowRule(source_name="Pension_Premium_Kiso",
                    cashflow_type=CashflowType.REGULAR))
 
   # 年金受給 (60歳から)
-  # 基礎年金 81.6 * 0.76 (繰上げ), 厚生年金 76.6 * 0.76 (繰上げ)
+  # 40歳退職時の厚生年金: 49.2, 基礎年金: 81.6. 60歳開始は 0.76倍。
+  # 合計 (49.2 + 81.6) * 0.76 = 99.408. P60-H1 と整合。
   reduction_rate = 0.76
+  kousei_annual = 49.2 * reduction_rate
+  kiso_annual = 81.6 * reduction_rate
+
   cf_configs.append(
       PensionConfig(name="Pension_Receipt_Kousei",
-                    amount=(76.6 * reduction_rate) / 12.0,
+                    amount=kousei_annual / 12.0,
                     start_month=(60 - START_AGE) * 12,
                     cpi_name=CPI_NAME))
   cf_rules.append(
@@ -248,14 +252,14 @@ def main():
 
   cf_configs.append(
       PensionConfig(name="Pension_Receipt_Kiso",
-                    amount=(81.6 * reduction_rate) / 12.0,
+                    amount=kiso_annual / 12.0,
                     start_month=(60 - START_AGE) * 12,
                     cpi_name=PENSION_CPI_NAME))
   cf_rules.append(
       CashflowRule(source_name="Pension_Receipt_Kiso",
                    cashflow_type=CashflowType.REGULAR))
 
-  # 年齢による月額支出（名目ベースライン、円）の取得 (35歳から60年間)
+  # 年齢による月額支出（名目ベースライン、円）の取得 (40歳から60年間)
   # normalize=False を指定して、実際の統計値ベースの月額（円）を取得する。
   spending_monthly_values = get_retired_spending_multipliers(
       [SpendingType.CONSUMPTION, SpendingType.NON_CONSUMPTION_EXCLUDE_PENSION],
@@ -274,7 +278,7 @@ def main():
   # age -> { "y_withdraw": array, "p_model": {coef}, "r_min": float, "r_max": float, "p_min": float, "p_max": float }
   dp_results: Dict[int, Any] = {}
 
-  # 年齢 95 から 35 まで逆算
+  # 年齢 95 から 40 まで逆算
   ages_to_process = range(END_AGE - 1, START_AGE - 1, -1)
   if args.debug_level > 0:
     ages_to_process = range(END_AGE - 1, END_AGE - 4, -1)  # デバッグ時は直近3年分のみ
@@ -294,10 +298,10 @@ def main():
     monthly_net_spend += monthly_spend_base * cpi_path
 
     # 年金等
-    p_premium = monthly_cashflows["Pension_Premium"][:, start_m:end_m]
-    p_kousei = monthly_cashflows["Pension_Receipt_Kousei"][:, start_m:end_m]
-    p_kiso = monthly_cashflows["Pension_Receipt_Kiso"][:, start_m:end_m]
-    pension_total = p_premium + p_kousei + p_kiso
+    pension_total = np.zeros((n_sim, 12))
+    for name in ["Pension_Premium_Kiso", "Pension_Receipt_Kousei", "Pension_Receipt_Kiso"]:
+      if name in monthly_cashflows:
+        pension_total += monthly_cashflows[name][:, start_m:end_m]
 
     monthly_net_spend -= pension_total
 
