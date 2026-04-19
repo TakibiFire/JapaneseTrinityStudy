@@ -24,20 +24,17 @@ Optimal Strategy V2 モデルデバッグツール。
 """
 
 import argparse
-import json
 
 import numpy as np
-import pandas as pd
-from sklearn.preprocessing import PolynomialFeatures
 
 from src.core import (CashflowRule, CashflowType, Strategy, ZeroRiskAsset,
                       simulate_strategy)
-from src.lib.asset_generator import (AssetConfigType, DerivedAsset, ForexAsset,
+from src.lib.asset_generator import (DerivedAsset, ForexAsset,
                                      SlideAdjustedCpiAsset,
                                      YearlyLogNormalArithmetic,
                                      generate_monthly_asset_prices)
-from src.lib.cashflow_generator import (CashflowConfig, PensionConfig,
-                                        generate_cashflows)
+from src.lib.cashflow_generator import PensionConfig, generate_cashflows
+from src.lib.dynamic_rebalance_dp import DPOptimalStrategyPredictor
 from src.lib.retired_spending import (SpendingType,
                                       get_retired_spending_multipliers)
 from src.lib.simulation_defaults import (AcwiModelKey,
@@ -63,58 +60,6 @@ ZERO_RISK_YIELD = 0.04
 TAX_RATE = 0.20315
 CURRENT_YEAR = 2026
 MACRO_ECONOMIC_SLIDE_END_YEAR = 2057
-
-
-def sigmoid_inv(x, p_max, p_min):
-  """
-  正規化されたシグモイド値から元の確率空間に戻す逆関数。
-  """
-  # x が極端に大きい/小さい場合のオーバーフローを防ぐ
-  s = 1 / (1 + np.exp(-np.clip(x, -100, 100)))
-  return p_min + s * (p_max - p_min)
-
-
-def get_base_features(r: np.ndarray) -> np.ndarray:
-  """
-  R から基底特徴量を作成する。
-  """
-  r_safe = np.maximum(r, 1e-5)
-  return np.column_stack([r_safe, 1.0 / r_safe, np.log(r_safe)])
-
-
-def get_predicted_a(r: float, a_model_data: dict) -> float:
-  """
-  計算された R 値に基づき、モデルから最適な資産配分 A を予測する。
-  """
-  if not a_model_data:
-    return 0.5
-  base_feats = get_base_features(np.array([r]))
-  poly = PolynomialFeatures(degree=3, include_bias=True)
-  features = poly.fit_transform(base_feats)
-  predicted_a = np.clip(features @ np.array(a_model_data["coef"]), 0, 1)[0]
-  return float(predicted_a)
-
-
-def get_predicted_p(r: float, model_data: dict) -> float:
-  """
-  計算された R 値に基づき、モデルから生存確率 P を予測する。
-  """
-  p_model = model_data["p_survival_model"]
-  r_min = model_data["r_min"]
-  r_max = model_data["r_max"]
-  p_max = model_data["p_max"]
-  p_min = model_data["p_min"]
-
-  if r <= r_min:
-    return float(p_max)
-  if r >= r_max:
-    return float(p_min)
-
-  base_feats = get_base_features(np.array([r]))
-  poly = PolynomialFeatures(degree=3, include_bias=True)
-  features = poly.fit_transform(base_feats)
-  logit_p = (features @ np.array(p_model["coef"]))[0]
-  return float(sigmoid_inv(logit_p, p_max, p_min))
 
 
 def main():
@@ -153,7 +98,9 @@ def main():
       slide_rate=0.005,
       slide_end_month=(MACRO_ECONOMIC_SLIDE_END_YEAR - CURRENT_YEAR) * 12)
 
-  asset_configs = [fx_asset, base_sp500, base_acwi, orukan, base_cpi, pension_cpi]
+  asset_configs = [
+      fx_asset, base_sp500, base_acwi, orukan, base_cpi, pension_cpi
+  ]
   monthly_prices = generate_monthly_asset_prices(asset_configs,
                                                  n_paths=n_sim,
                                                  n_months=YEARS * 12,
@@ -188,9 +135,8 @@ def main():
                                          n_sim=n_sim,
                                          n_months=YEARS * 12)
 
-  # 2. モデルロード
-  with open(args.models_path, "r") as f:
-    models = json.load(f)
+  # 2. 予測器のロード
+  predictor = DPOptimalStrategyPredictor(args.models_path)
 
   if args.trace is not None:
     path_idx = args.trace
@@ -225,15 +171,13 @@ def main():
     x_n = first_y / first_r
 
     for cur_age in range(age, 96):
-      if str(cur_age) not in models:
-        break
-
       y_n = get_y_withdraw(cur_age, path_idx)
       r_n = y_n / np.maximum(x_n, 1e-7)
 
-      cur_model = models[str(cur_age)]
-      pred_a = get_predicted_a(r_n, cur_model.get("a_opt_model"))
-      p_n = get_predicted_p(r_n, cur_model)
+      # 予測器を使用して A と P を取得
+      # モデルが存在しない場合は例外が発生しプログラムが終了する
+      pred_a = predictor.predict_a_opt(cur_age, r_n)
+      p_n = predictor.predict_p_surv(cur_age, r_n)
 
       # 1年シミュレーション
       y_idx = cur_age - START_AGE
@@ -272,7 +216,8 @@ def main():
           rebalance_interval=0,
       )
       strategy.cashflow_rules = [
-          CashflowRule(source_name="Net_Spend", cashflow_type=CashflowType.REGULAR)
+          CashflowRule(source_name="Net_Spend",
+                       cashflow_type=CashflowType.REGULAR)
       ]
       res = simulate_strategy(strategy,
                               year_prices,
@@ -283,14 +228,16 @@ def main():
 
       # P(N+1)
       p_next_str = "N/A"
-      if str(cur_age + 1) in models:
-        if x_next > 0:
-          y_next = get_y_withdraw(cur_age + 1, path_idx)
-          r_next = y_next / x_next
-          p_next_val = get_predicted_p(r_next, models[str(cur_age + 1)])
+      if x_next > 0:
+        y_next = get_y_withdraw(cur_age + 1, path_idx)
+        r_next = y_next / x_next
+        try:
+          p_next_val = predictor.predict_p_surv(cur_age + 1, r_next)
           p_next_str = f"{p_next_val:6.4f}"
-        else:
-          p_next_str = f"{0.0:6.4f}"
+        except ValueError:
+          pass
+      else:
+        p_next_str = f"{0.0:6.4f}"
 
       orukan_price = monthly_prices[ORUKAN_NAME][path_idx, sm]
       print(
@@ -302,10 +249,6 @@ def main():
         print("Bankrupt!")
         break
 
-    return
-
-  if str(age + 1) not in models:
-    print(f"Error: Model for age {age + 1} not found in {args.models_path}")
     return
 
   # 3. 評価セットアップ
@@ -325,37 +268,35 @@ def main():
   y_withdraw_n = np.sum(np.maximum(0, monthly_net_spend), axis=1)
 
   # 翌年の情報
-  next_age_str = str(age + 1)
-  next_model_data = models[next_age_str]
-  next_p_model = next_model_data["p_survival_model"]
-  next_r_min = next_model_data["r_min"]
-  next_r_max = next_model_data["r_max"]
-  next_p_max = next_model_data["p_max"]
-  next_p_min = next_model_data["p_min"]
+  next_age = age + 1
+  next_model = predictor.get_p_surv_model(next_age)
 
-  next_year_idx = (age + 1) - START_AGE
+  next_year_idx = next_age - START_AGE
   next_start_m = next_year_idx * 12
   next_end_m = (next_year_idx + 1) * 12
   next_cpi_path = monthly_prices[CPI_NAME][:, next_start_m:next_end_m]
   next_monthly_spend_base = spending_monthly_values[next_year_idx] / 10000.0
-  next_p_premium = monthly_cashflows["Pension_Premium"][:, next_start_m:next_end_m]
-  next_p_kousei = monthly_cashflows["Pension_Receipt_Kousei"][:,
-                                                             next_start_m:next_end_m]
-  next_p_kiso = monthly_cashflows["Pension_Receipt_Kiso"][:, next_start_m:next_end_m]
+  next_p_premium = monthly_cashflows["Pension_Premium"][:,
+                                                        next_start_m:next_end_m]
+  next_p_kousei = monthly_cashflows[
+      "Pension_Receipt_Kousei"][:, next_start_m:next_end_m]
+  next_p_kiso = monthly_cashflows[
+      "Pension_Receipt_Kiso"][:, next_start_m:next_end_m]
   next_monthly_net_spend = next_monthly_spend_base * next_cpi_path - (
       next_p_premium + next_p_kousei + next_p_kiso)
   next_y_withdraw = np.sum(np.maximum(0, next_monthly_net_spend), axis=1)
 
   # 現在の年齢のモデル (ブルートフォースと比較用)
-  current_model_data = models.get(str(age))
-  current_a_model = current_model_data.get(
-      "a_opt_model") if current_model_data else None
+  try:
+    current_a_model = predictor.get_a_opt_model(age)
+  except ValueError:
+    current_a_model = None
 
   print(f"\n--- Debugging Age {age} (Using Age {age+1} model for survival) ---")
   if current_a_model:
-    print(f"Current Age {age} A_opt model loaded (R2={current_a_model['r2']:.4f})")
+    print(f"Current Age {age} A_opt model loaded (R2={current_a_model.r2:.4f})")
   print(
-      f"Age {age+1} Boundaries: R_min={next_r_min:.4f}, R_max={next_r_max:.4f}, P_max={next_p_max:.4f}, P_min={next_p_min:.4f}"
+      f"Age {age+1} Boundaries: R_min={next_model.r_min:.4f}, R_max={next_model.r_max:.4f}, P_max={next_model.p_max:.4f}, P_min={next_model.p_min:.4f}"
   )
 
   # Y_age の分布を表示
@@ -389,10 +330,7 @@ def main():
       continue
 
     # 1. 予測された A の計算
-    base_feats = get_base_features(np.array([r]))
-    poly = PolynomialFeatures(degree=3, include_bias=True)
-    features = poly.fit_transform(base_feats)
-    predicted_a = np.clip(features @ np.array(current_a_model["coef"]), 0, 1)[0]
+    predicted_a = predictor.predict_a_opt(age, r)
 
     # 2. テストする A の集合を決定
     # 0.0, 1.0, および Predicted A に最も近い 0.1 の倍数 2 つ
@@ -405,22 +343,22 @@ def main():
     results_for_analysis = {}  # a -> (res, x_next, r_next, p_next, avg_surv)
 
     for a in sorted_a_tests:
-      strategy = Strategy(
-          name=f"test_r{r}_a{a}",
-          initial_money=x_p_n,
-          initial_loan=0.0,
-          yearly_loan_interest=0.0,
-          initial_asset_ratio={
-              ORUKAN_NAME: a,
-              zr_asset_obj: 1.0 - a
-          },
-          annual_cost=0.0,
-          inflation_rate=None,
-          selling_priority=[ORUKAN_NAME, ZERO_RISK_NAME],
-          tax_rate=TAX_RATE,
-          rebalance_interval=0)
+      strategy = Strategy(name=f"test_r{r}_a{a}",
+                          initial_money=x_p_n,
+                          initial_loan=0.0,
+                          yearly_loan_interest=0.0,
+                          initial_asset_ratio={
+                              ORUKAN_NAME: a,
+                              zr_asset_obj: 1.0 - a
+                          },
+                          annual_cost=0.0,
+                          inflation_rate=None,
+                          selling_priority=[ORUKAN_NAME, ZERO_RISK_NAME],
+                          tax_rate=TAX_RATE,
+                          rebalance_interval=0)
       strategy.cashflow_rules = [
-          CashflowRule(source_name="Net_Spend", cashflow_type=CashflowType.REGULAR)
+          CashflowRule(source_name="Net_Spend",
+                       cashflow_type=CashflowType.REGULAR)
       ]
       res = simulate_strategy(strategy,
                               year_prices_all,
@@ -430,17 +368,13 @@ def main():
       bankrupt_this_year = res.sustained_months < 12
 
       r_next = next_y_withdraw / np.maximum(x_next, 1e-7)
-      p_next = np.zeros(n_sim)
-      p_next[(~bankrupt_this_year) & (r_next <= next_r_min)] = next_p_max
-      p_next[(~bankrupt_this_year) & (r_next >= next_r_max)] = next_p_min
 
-      in_range = (~bankrupt_this_year) & (r_next > next_r_min) & (r_next < next_r_max)
-      if np.any(in_range):
-        base_feats_in = get_base_features(r_next[in_range])
-        poly_in = PolynomialFeatures(degree=3, include_bias=True)
-        features_in = poly_in.fit_transform(base_feats_in)
-        logit_p = features_in @ np.array(next_p_model["coef"])
-        p_next[in_range] = sigmoid_inv(logit_p, next_p_max, next_p_min)
+      # ベクトル化された生存確率予測
+      p_next = predictor.predict_p_surv(next_age, r_next)
+
+      # 破産したパスの生存確率を強制的に 0.0 に設定（p_minが0でない場合のため）
+      if isinstance(p_next, np.ndarray):
+        p_next[bankrupt_this_year] = next_model.p_min
 
       avg_surv = np.mean(p_next)
       results_for_analysis[a] = (res, x_next, r_next, p_next, avg_surv)
@@ -455,8 +389,11 @@ def main():
       print(f"  A={a:.1f}: Avg Survival={results_for_analysis[a][4]:.4f}")
 
     # 詳細分析 (Predicted A に対して)
-    _, x_next_pred, r_next_pred, p_next_pred, _ = results_for_analysis[predicted_a]
-    print(f"  [Analysis for predicted A={predicted_a:.4f}] State at Start of Age {age+1}:")
+    _, x_next_pred, r_next_pred, p_next_pred, _ = results_for_analysis[
+        predicted_a]
+    print(
+        f"  [Analysis for predicted A={predicted_a:.4f}] State at Start of Age {age+1}:"
+    )
     percentiles = [25, 50, 75]
     for p in percentiles:
       val = np.percentile(x_next_pred, p)
