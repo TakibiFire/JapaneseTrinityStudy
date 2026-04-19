@@ -180,6 +180,8 @@ def main():
       f"全 {len(spending_rules) * len(strategies_to_compare)} パターンのシミュレーションを実行中..."
   )
 
+  it = 0
+  total_its = len(spending_rules) * len(strategies_to_compare)
   for rule in spending_rules:
     # 初期資産の計算
     # 支出倍率 spend_mult = 1.0 固定
@@ -196,13 +198,17 @@ def main():
     ]
 
     for strat_name in strategies_to_compare:
+      if it % 10 == 0:
+        print(f"Progress: {it}/{total_its}")
+      it += 1
+
       # 戦略に応じた動的リバランス関数の定義
       if strat_name == "固定最適比率":
-        fixed_ratio = calculate_optimal_strategy(s_rate=rule / 100.0,
+        fixed_ratio = calculate_optimal_strategy(s_rate=np.array([rule / 100.0]),
                                                  remaining_years=YEARS,
                                                  base_yield=ZERO_RISK_YIELD,
                                                  tax_rate=TAX_RATE,
-                                                 inflation_rate=INFLATION_RATE)
+                                                 inflation_rate=INFLATION_RATE)[0]
 
         def dynamic_rebalance_fn(total_net, annual_spend, rem_years):
           return {ORUKAN_NAME: fixed_ratio, ZERO_RISK_NAME: 1.0 - fixed_ratio}
@@ -229,9 +235,11 @@ def main():
 
       strategy = Strategy(name=f"{strat_name}_Rule{rule}",
                           initial_money=float(init_money),
+                          initial_loan=0.0,
+                          yearly_loan_interest=0.0,
                           initial_asset_ratio={
                               ORUKAN_NAME: 1.0,
-                              ZERO_RISK_NAME: 0.0
+                              zr_asset_obj: 0.0
                           },
                           annual_cost=annual_cost_setting,
                           inflation_rate=CPI_NAME,
