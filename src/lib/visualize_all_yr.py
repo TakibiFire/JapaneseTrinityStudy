@@ -81,7 +81,8 @@ def create_heatmap(df: pd.DataFrame,
   print(f"✅ {output_path} に保存しました。")
 
 
-def prepare_heatmap_labels(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str], list[str]]:
+def prepare_heatmap_labels(
+    df: pd.DataFrame) -> tuple[pd.DataFrame, list[str], list[str]]:
   """
   ヒートマップ表示用のラベル列を追加し、ソート順を計算する。
   元のデータフレームは変更せず、コピーを返す。
@@ -182,21 +183,18 @@ def create_best_combo_heatmap(df_best: pd.DataFrame,
   print(f"✅ {output_path} に保存しました。")
 
 
-def run_best_combination_analysis(df_survival: pd.DataFrame,
-                                  target_year: str,
-                                  img_dir: str,
-                                  temp_dir: str,
-                                  title_prefix: str = "",
-                                  output_name: str = "best_strategy.svg",
-                                  dim_cols: List[str] = [
-                                      'spend_multiplier', 'spending_rule'
-                                  ],
-                                  pref_order: List[str] = [
-                                      "P60_D1", "P65_D1", "P60_D0", "P65_D0"
-                                  ],
-                                  threshold: float = 0.01,
-                                  width: int = 500,
-                                  height: int = 450):
+def run_best_combination_analysis(
+    df_survival: pd.DataFrame,
+    target_year: str,
+    img_dir: str,
+    temp_dir: str,
+    title_prefix: str = "",
+    output_name: str = "best_strategy.svg",
+    dim_cols: List[str] = ['spend_multiplier', 'spending_rule'],
+    pref_order: List[str] = ["P60_D1", "P65_D1", "P60_D0", "P65_D0"],
+    threshold: float = 0.01,
+    width: int = 500,
+    height: int = 450):
   """
   (受給開始年齢 × Dynamic Spending) の最適な組み合わせを分析する。
 
@@ -209,7 +207,7 @@ def run_best_combination_analysis(df_survival: pd.DataFrame,
         - spending_rule: 初期支出率 (%)
         - initial_annual_cost: 初期年間支出額
         - target_year: 指定された年数（例: "45"）の生存確率
-    target_year: 分析対象の年数（例: "45"）
+    target_year: 分析対象 of 年数（例: "45"）
     img_dir: 画像の保存先ディレクトリ
     temp_dir: 一時ファイルの保存先ディレクトリ
     title_prefix: グラフタイトルの接頭辞
@@ -236,7 +234,9 @@ def run_best_combination_analysis(df_survival: pd.DataFrame,
         f"Duplicate entries found for combinations of {check_cols}. "
         "Each combination must have only one survival probability.")
 
-  print(f"\n\n{'='*20} 最適な組み合わせ (受給開始年齢 × Dynamic Spending) の分析: {title_prefix} {'='*20}")
+  print(
+      f"\n\n{'='*20} 最適な組み合わせ (受給開始年齢 × Dynamic Spending) の分析: {title_prefix} {'='*20}"
+  )
 
   def get_selected_strategy(group: pd.DataFrame) -> pd.Series:
     # 生存確率で降順ソート
@@ -321,16 +321,16 @@ def run_best_combination_analysis(df_survival: pd.DataFrame,
   output_path = os.path.join(img_dir, output_name)
   title = f"戦略選択: {title_prefix} (優先順: 60歳あり > 65歳あり > 60歳なし > 65歳なし, 許容差{threshold*100:g}%)"
   create_best_combo_heatmap(df_best,
-                             title=title,
-                             x_col="rule_label",
-                             x_title="初期支出率 (%ルール)",
-                             y_col="multiplier_label",
-                             y_title="支出レベル",
-                             output_path=output_path,
-                             x_sort=r_order,
-                             y_sort=m_order,
-                             width=width,
-                             height=height)
+                            title=title,
+                            x_col="rule_label",
+                            x_title="初期支出率 (%ルール)",
+                            y_col="multiplier_label",
+                            y_title="支出レベル",
+                            output_path=output_path,
+                            x_sort=r_order,
+                            y_sort=m_order,
+                            width=width,
+                            height=height)
 
   # CSV出力
   csv_filename = output_name.replace(".svg", ".csv")
@@ -355,10 +355,11 @@ def create_spend_percentile_chart(df: pd.DataFrame,
   支出額のパーセンタイル推移(25p, 50p, 75p)を可視化する。
   Dynamic SpendingのON/OFF比較をサポートする。
 
+  NOW: use_dynamic_spending というコラムによる挙動の変化を詳細に記す
+
   Args:
     df: 分析対象のデータフレーム。
         Required columns:
-        - use_dynamic_spending: ダイナミックスペンディング使用有無 (0 or 1)
         - value_type: 値の種類 ('spend25p', 'spend50p', 'spend75p')
         - "1" から str(num_years) までの数字の列: 各経過年の支出額
     title: グラフのタイトル
@@ -385,13 +386,25 @@ def create_spend_percentile_chart(df: pd.DataFrame,
   # 年数から年齢に変換
   df_long["age"] = df_long["year"] + start_age
 
-  df_long["dyn_label"] = df_long["use_dynamic_spending"].map({
-      1: "ON",
-      0: "OFF"
-  })
+  # use_dynamic_spending が存在しない場合は、strategy をラベルとして使用する
+  if "use_dynamic_spending" in df_long.columns:
+    df_long["group_label"] = df_long["use_dynamic_spending"].map({
+        1: "ON",
+        0: "OFF"
+    })
+    color_scale = alt.Scale(domain=["ON", "OFF"], range=["red", "blue"])
+    legend_title = "ダイナミックスペンディング"
+  elif "strategy" in df_long.columns:
+    df_long["group_label"] = df_long["strategy"]
+    color_scale = alt.Scale()
+    legend_title = "戦略"
+  else:
+    df_long["group_label"] = "Total"
+    color_scale = alt.Scale()
+    legend_title = "グループ"
 
   # p25, p50, p75 を列に展開
-  pivot_df = df_long.pivot_table(index=["dyn_label", "age"],
+  pivot_df = df_long.pivot_table(index=["group_label", "age"],
                                  columns="value_type",
                                  values="spend").reset_index()
 
@@ -402,14 +415,14 @@ def create_spend_percentile_chart(df: pd.DataFrame,
   area = base.mark_area(opacity=0.3).encode(
       y=alt.Y("spend25p:Q", title="年間支出額 (万円)"),
       y2="spend75p:Q",
-      color=alt.Color("dyn_label:N",
-                      scale=alt.Scale(domain=["ON", "OFF"],
-                                      range=["red", "blue"]),
-                      title="ダイナミックスペンディング",
+      color=alt.Color("group_label:N",
+                      scale=color_scale,
+                      title=legend_title,
                       legend=alt.Legend(orient='top')))
 
   # Line (50p)
-  line = base.mark_line().encode(y="spend50p:Q", color=alt.Color("dyn_label:N"))
+  line = base.mark_line().encode(y="spend50p:Q",
+                                 color=alt.Color("group_label:N"))
 
   chart = (area + line).properties(title=title, width=width, height=height)
 
