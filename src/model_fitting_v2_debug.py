@@ -222,9 +222,9 @@ def main():
       res = simulate_strategy(strategy,
                               year_prices,
                               monthly_cashflows=year_cf,
-                              fallback_total_months=12, calculate_post_tax=True)
+                              fallback_total_months=12)
 
-      x_next = res.post_tax_net_values[0]
+      x_next = res.net_values[0]
 
       # P(N+1)
       p_next_str = "N/A"
@@ -363,8 +363,8 @@ def main():
       res = simulate_strategy(strategy,
                               year_prices_all,
                               monthly_cashflows=year_cf,
-                              fallback_total_months=12, calculate_post_tax=True)
-      x_next = res.post_tax_net_values
+                              fallback_total_months=12)
+      x_next = res.net_values
       bankrupt_this_year = res.sustained_months < 12
 
       r_next = next_y_withdraw / np.maximum(x_next, 1e-7)
