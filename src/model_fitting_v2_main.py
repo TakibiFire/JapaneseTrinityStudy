@@ -73,7 +73,8 @@ def adaptive_sample(evaluate_fn: Any,
                     threshold_p: float = 0.02,
                     max_depth: int = 3,
                     r_min_a: Optional[float] = None,
-                    r_max_a: Optional[float] = None) -> None:
+                    r_max_a: Optional[float] = None,
+                    current_depth: int = 0) -> None:
   """
   R の範囲 [r_start, r_end] において、a_max または p が線形補間から大きく乖離する場合のみ
   再帰的に二分探索してサンプリング密度を高めます。
@@ -84,8 +85,8 @@ def adaptive_sample(evaluate_fn: Any,
     return
 
   # 端点の評価
-  res_start = evaluate_fn(r_start)
-  res_end = evaluate_fn(r_end)
+  res_start = evaluate_fn(r_start, stage="適応的サンプリング", depth=current_depth)
+  res_end = evaluate_fn(r_end, stage="適応的サンプリング", depth=current_depth)
 
   a_max_start, p_start = res_start[4], res_start[1]
   a_max_end, p_end = res_end[4], res_end[1]
@@ -94,17 +95,28 @@ def adaptive_sample(evaluate_fn: Any,
 
   # A のサンプリングを高速化するか判定
   a_fixed = None
+  reason = ""
   if r_min_a is not None and r_max_a is not None:
     if r_mid < r_min_a:
-      # A_opt は 1.0 で安定しているはず
       a_fixed = 1.0
+      reason = f"R={r_mid:.4f} < R_min_a={r_min_a:.4f} なので A=1.0 に固定"
     elif r_mid > r_max_a:
-      # A_opt は境界での値（通常 0.0 または 1.0）で安定しているはず
-      # ここでは端点の a_max を参考にする
       if abs(a_max_start - a_max_end) < 1e-4:
         a_fixed = a_max_start
+        reason = f"R={r_mid:.4f} > R_max_a={r_max_a:.4f} かつ端点の A_opt が一致するため A={a_fixed:.2f} に固定"
+    else:
+      # 遷移領域内でも、端点の A_opt が一致していれば固定を試みる（高速化）
+      if abs(a_max_start - a_max_end) < 1e-4:
+        a_fixed = a_max_start
+        reason = f"R={r_mid:.4f} は遷移領域内だが端点の A_opt が一致するため A={a_fixed:.2f} に固定"
 
-  res_mid = evaluate_fn(r_mid, a_fixed=a_fixed)
+  res_mid = evaluate_fn(r_mid,
+                        a_fixed=a_fixed,
+                        stage="適応的サンプリング",
+                        depth=current_depth,
+                        reason=reason,
+                        segment=(r_start, r_end),
+                        segment_a_opts=(a_max_start, a_max_end))
   a_max_mid, p_mid = res_mid[4], res_mid[1]
 
   # 線形補間値との差分
@@ -115,9 +127,9 @@ def adaptive_sample(evaluate_fn: Any,
                                                         p_linear) > threshold_p:
     # 乖離が大きい場合のみ、さらに深く探索
     adaptive_sample(evaluate_fn, r_start, r_mid, threshold_a, threshold_p,
-                    max_depth - 1, r_min_a, r_max_a)
+                    max_depth - 1, r_min_a, r_max_a, current_depth + 1)
     adaptive_sample(evaluate_fn, r_mid, r_end, threshold_a, threshold_p,
-                    max_depth - 1, r_min_a, r_max_a)
+                    max_depth - 1, r_min_a, r_max_a, current_depth + 1)
 
 
 def filter_anchors(r: np.ndarray, y: np.ndarray,
@@ -318,10 +330,19 @@ def main():
     # キャッシュ済み evaluate_r の結果: r -> (best_a, best_survival, survivals_per_a, a_min, a_max)
     eval_cache: Dict[float, Tuple[float, float, Dict[float, float], float,
                                   float]] = {}
+    # 探索ログ: データの探索過程を記録する
+    search_logs: List[Dict[str, Any]] = []
+    # 境界の初期化
+    r_min_p, r_max_p, r_min_a, r_max_a = None, None, None, None
 
     def evaluate_r(
         r: float,
-        a_fixed: Optional[float] = None) -> Tuple[float, float, Dict[float, float], float, float]:
+        a_fixed: Optional[float] = None,
+        stage: str = "",
+        depth: Optional[int] = None,
+        reason: str = "",
+        segment: Optional[Tuple[float, float]] = None,
+        segment_a_opts: Optional[Tuple[float, float]] = None) -> Tuple[float, float, Dict[float, float], float, float]:
       # キャッシュにあればそれを返す (浮動小数点の誤差を考慮して丸める)
       r_key = round(r, 6)
       if r_key in eval_cache:
@@ -335,6 +356,20 @@ def main():
 
       # 探索する A のリストを決定
       search_a_list = [a_fixed] if a_fixed is not None else a_grid
+
+      # ログ項目の準備（シミュレーション実行前に一部記録）
+      log_entry = {
+          "r": float(r),
+          "stage": stage,
+          "depth": depth,
+          "segment": [float(s) for s in segment] if segment else None,
+          "segment_a_opts": [float(a) for a in segment_a_opts] if segment_a_opts else None,
+          "tried_as": [float(a) for a in search_a_list],
+          "r_min_a": float(r_min_a) if r_min_a is not None else None,
+          "r_max_a": float(r_max_a) if r_max_a is not None else None,
+          "decision_reason": reason
+      }
+      search_logs.append(log_entry)
 
       for a in search_a_list:
         # 12ヶ月のシミュレーション
@@ -441,13 +476,18 @@ def main():
       result = (float(best_a), float(best_survival), survivals_per_a,
                 float(a_min), float(a_max))
       eval_cache[r_key] = result
+
+      # ログに結果を追記
+      log_entry["a_opt_result"] = float(best_a)
+      log_entry["p_survival_result"] = float(best_survival)
+
       return result
 
     # 1. R 広域探索 (Exponential Search)
     exp_r_vals = [0.005 * (2**k) for k in range(13)]
     exp_results = []
     for r in exp_r_vals:
-      res = evaluate_r(r)
+      res = evaluate_r(r, stage="広域探索")
       exp_results.append((r, res[0], res[1]))
 
     p_surv_vals = [res[2] for res in exp_results]
@@ -466,7 +506,7 @@ def main():
       r_low, r_high = exp_r_vals[drop_idx], exp_r_vals[drop_idx + 1]
       for _ in range(10):
         r_mid = (r_low + r_high) / 2
-        if evaluate_r(r_mid)[1] >= p_surv_max - 1e-4:
+        if evaluate_r(r_mid, stage="境界探索 R_min_P")[1] >= p_surv_max - 1e-4:
           r_low = r_mid
         else:
           r_high = r_mid
@@ -476,11 +516,11 @@ def main():
           0] < p_surv_max - 1e-4 else exp_r_vals[-1]
 
     # R_min_A
-    def is_free(r: float) -> bool:
-      res = evaluate_r(r)
+    def is_free(r: float, stage: str = "境界探索") -> bool:
+      res = evaluate_r(r, stage=stage)
       return res[3] <= 0.01 and res[4] >= 0.99
 
-    is_free_vals = [is_free(r) for r in exp_r_vals]
+    is_free_vals = [is_free(r, stage="境界探索 R_min_A") for r in exp_r_vals]
     a_drop_idx = -1
     for i in range(len(is_free_vals) - 1):
       if is_free_vals[i] and not is_free_vals[i + 1]:
@@ -490,7 +530,7 @@ def main():
       r_low, r_high = exp_r_vals[a_drop_idx], exp_r_vals[a_drop_idx + 1]
       for _ in range(10):
         r_mid = (r_low + r_high) / 2
-        if is_free(r_mid):
+        if is_free(r_mid, stage="境界探索 R_min_A"):
           r_low = r_mid
         else:
           r_high = r_mid
@@ -509,7 +549,7 @@ def main():
       r_low, r_high = exp_r_vals[hit_min_idx], exp_r_vals[hit_min_idx + 1]
       for _ in range(10):
         r_mid = (r_low + r_high) / 2
-        if evaluate_r(r_mid)[1] <= p_surv_min + 1e-4:
+        if evaluate_r(r_mid, stage="境界探索 R_max_P")[1] <= p_surv_min + 1e-4:
           r_high = r_mid
         else:
           r_low = r_mid
@@ -520,15 +560,16 @@ def main():
 
     # R_max_A
     a_hit_idx = -1
-    for i in range(a_drop_idx + 1, len(is_free_vals) - 1):
-      if not is_free_vals[i] and is_free_vals[i + 1]:
+    is_free_vals_max_a = [is_free(r, stage="境界探索 R_max_A") for r in exp_r_vals]
+    for i in range(a_drop_idx + 1, len(is_free_vals_max_a) - 1):
+      if not is_free_vals_max_a[i] and is_free_vals_max_a[i + 1]:
         a_hit_idx = i
         break
     if a_hit_idx != -1:
       r_low, r_high = exp_r_vals[a_hit_idx], exp_r_vals[a_hit_idx + 1]
       for _ in range(10):
         r_mid = (r_low + r_high) / 2
-        if is_free(r_mid):
+        if is_free(r_mid, stage="境界探索 R_max_A"):
           r_high = r_mid
         else:
           r_low = r_mid
@@ -551,13 +592,16 @@ def main():
       for r in step_r_vals:
         # A_opt が安定している領域ではサンプリングを高速化
         a_fixed = None
+        reason = ""
         if r < r_min_a:
           a_fixed = 1.0
+          reason = f"R={r:.4f} < R_min_a={r_min_a:.4f} なので A=1.0 に固定"
         elif r > r_max_a:
           # 境界での a_max を参考にする
-          res_boundary = evaluate_r(r_max_a)
+          res_boundary = evaluate_r(r_max_a, stage="遷移領域サンプリング（境界値確認）")
           a_fixed = res_boundary[4]
-        evaluate_r(r, a_fixed=a_fixed)
+          reason = f"R={r:.4f} > R_max_a={r_max_a:.4f} なので A={a_fixed:.2f} に固定"
+        evaluate_r(r, a_fixed=a_fixed, stage="遷移領域サンプリング", reason=reason)
       for i in range(len(step_r_vals) - 1):
         adaptive_sample(evaluate_r,
                         step_r_vals[i],
@@ -658,10 +702,11 @@ def main():
         },
         "all_points": df_age.to_dict(orient="records"),
         "training_points_p": df_fit_p.to_dict(orient="records"),
-        "training_points_a": df_fit_a.to_dict(orient="records")
+        "training_points_a": df_fit_a.to_dict(orient="records"),
+        "search_logs": search_logs
     }
-    with open(f"temp/age_{age}.json", "w") as f:
-      json.dump(dump_data, f, indent=2)
+    with open(f"temp/age_{age}.json", "w", encoding="utf-8") as f:
+      json.dump(dump_data, f, indent=2, ensure_ascii=False)
 
     # 結果保存
     dp_results[age] = {
