@@ -41,7 +41,7 @@ def test_calculate_safe_target_ratio_long_term():
 
 def test_calculate_safe_target_ratio_45():
   ratio = calculate_safe_target_ratio(45)
-  assert ratio == pytest.approx(0.03015, abs=1e-6)
+  assert ratio == pytest.approx(0.030151, abs=1e-6)
 
 
 def test_calculate_optimal_strategy_region1():
