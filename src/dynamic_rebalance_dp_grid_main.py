@@ -112,7 +112,7 @@ def main():
   # ベースラインの支出額 (月額合計 -> 年額合計)
   base_spending_monthly = get_retired_spending_values(
       spending_types, target_ages=np.array([float(START_AGE)]))[0]
-# NOW: Use Japanese comment.
+  # NOW: Use Japanese comment.
   # get_retired_spending_values returns monthly yen. Convert to annual man-yen.
   BASE_SPEND_ANNUAL_WO_PENSION = base_spending_monthly * 12.0 / 10000.0
 
@@ -204,18 +204,21 @@ def main():
 
       # 戦略に応じた動的リバランス関数の定義
       if strat_name == "固定最適比率":
-        fixed_ratio = calculate_optimal_strategy(s_rate=np.array([rule / 100.0]),
-                                                 remaining_years=YEARS,
-                                                 base_yield=ZERO_RISK_YIELD,
-                                                 tax_rate=TAX_RATE,
-                                                 inflation_rate=INFLATION_RATE)[0]
+        fixed_ratio = calculate_optimal_strategy(
+            s_rate=np.array([rule / 100.0]),
+            remaining_years=YEARS,
+            base_yield=ZERO_RISK_YIELD,
+            tax_rate=TAX_RATE,
+            inflation_rate=INFLATION_RATE)[0]
 
-        def dynamic_rebalance_fn(total_net, annual_spend, rem_years):
+        def dynamic_rebalance_fn(total_net, annual_spend, rem_years,
+                                 post_tax_net):
           return {ORUKAN_NAME: fixed_ratio, ZERO_RISK_NAME: 1.0 - fixed_ratio}
 
       elif strat_name == "ダイナミック最適比率 (V1)":
 
-        def dynamic_rebalance_fn(total_net, annual_spend, rem_years):
+        def dynamic_rebalance_fn(total_net, annual_spend, rem_years,
+                                 post_tax_net):
           s_rate = annual_spend / np.maximum(total_net, 1.0)
           ratio = calculate_optimal_strategy(s_rate=s_rate,
                                              remaining_years=rem_years,
@@ -226,9 +229,10 @@ def main():
 
       else:  # Dynamic Rebalance DP (V2)
 
-        def dynamic_rebalance_fn(total_net, annual_spend, rem_years):
+        def dynamic_rebalance_fn(total_net, annual_spend, rem_years,
+                                 post_tax_net):
           current_age = START_AGE + int(YEARS - rem_years)
-          s_rate = annual_spend / np.maximum(total_net, 1.0)
+          s_rate = annual_spend / np.maximum(post_tax_net, 1.0)
           predict_age = min(current_age, 94)
           ratio = dp_predictor.predict_a_opt(predict_age, s_rate)
           return {ORUKAN_NAME: ratio, ZERO_RISK_NAME: 1.0 - ratio}

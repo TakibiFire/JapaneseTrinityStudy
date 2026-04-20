@@ -404,11 +404,10 @@ def main():
         res = simulate_strategy(strategy,
                                 year_prices,
                                 monthly_cashflows=year_cf,
-                                fallback_total_months=12)
-        # DO NOT DELETE: calculate_post_tax=True)
-        # x_next = cast(np.ndarray, res.post_tax_net_values)  # shape (n_sim,)
-        x_next = cast(np.ndarray, res.net_values)  # shape (n_sim,)
-
+                                fallback_total_months=12,
+                                calculate_post_tax=True)
+        x_next = cast(np.ndarray, res.post_tax_net_values)  # shape (n_sim,)
+        
         # 今年の破産判定
         bankrupt_this_year = res.sustained_months < 12
 

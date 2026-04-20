@@ -70,7 +70,7 @@ def main():
 
   risk_free_asset = ZeroRiskAsset(name=RISK_FREE_NAME, yield_rate=0.04)
 
-  def dynamic_rebalance_fn(total_net, cur_ann_spend, rem_years):
+  def dynamic_rebalance_fn(total_net, cur_ann_spend, rem_years, post_tax_net):
     # s_rate = 年間支出額 / 純資産
     s_rate = cur_ann_spend / np.maximum(total_net, 1.0)
     # rem_years が極端に小さい場合の不自然な挙動を防ぐため、1.0年を下限とする

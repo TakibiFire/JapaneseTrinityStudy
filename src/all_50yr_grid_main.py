@@ -182,7 +182,7 @@ def main():
   BASE_SPEND_ANNUAL_WO_PENSION = 548.3
 
   # ダイナミックリバランスの関数
-  def dynamic_rebalance_fn(total_net, annual_spend, rem_years):
+  def dynamic_rebalance_fn(total_net, annual_spend, rem_years, post_tax_net):
     s_rate = annual_spend / np.maximum(total_net, 1.0)
     orukan_ratio = calculate_optimal_strategy(s_rate=s_rate,
                                               remaining_years=rem_years,

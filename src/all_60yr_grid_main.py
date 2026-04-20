@@ -164,7 +164,7 @@ def main():
   print(f"全 {len(all_combinations)} パターンのシミュレーションを実行中...")
 
   # ダイナミックリバランスの関数
-  def dynamic_rebalance_fn(total_net, annual_spend, rem_years):
+  def dynamic_rebalance_fn(total_net, annual_spend, rem_years, post_tax_net):
     s_rate = annual_spend / np.maximum(total_net, 1.0)
     # ゼロリスク資産の利回りを考慮して最適比率を計算
     orukan_ratio = calculate_optimal_strategy(

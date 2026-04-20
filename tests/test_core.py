@@ -518,7 +518,7 @@ def test_simulate_with_dynamic_rebalance():
 
   prices = {"オルカン": np.ones((10, 61)), "無リスク資産": np.ones((10, 61))}
 
-  def dummy_rebalance_fn(net_value, annual_spend, remaining_years):
+  def dummy_rebalance_fn(net_value, annual_spend, remaining_years, post_tax_net):
     return {
         "オルカン": np.full_like(net_value, 0.5),
         "無リスク資産": np.full_like(net_value, 0.5)
@@ -1298,7 +1298,7 @@ def test_dynamic_rebalance_cur_ann_spend_with_regular_cashflow():
 
   received_cur_ann_spend = []
 
-  def dummy_rebalance_fn(net_value, cur_ann_spend, remaining_years):
+  def dummy_rebalance_fn(net_value, cur_ann_spend, remaining_years, post_tax_net):
     received_cur_ann_spend.append(cur_ann_spend.copy())
     return {"A": np.ones_like(net_value)}
 

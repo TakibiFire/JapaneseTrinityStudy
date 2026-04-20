@@ -43,7 +43,7 @@ class DynamicSpending:
 
 
 # ダイナミックリバランス用のコールバック関数
-DynamicRebalanceFn = Callable[[np.ndarray, np.ndarray, float],
+DynamicRebalanceFn = Callable[[np.ndarray, np.ndarray, float, np.ndarray],
                                Dict[str, Union[float, np.ndarray]]]
 
 
@@ -100,6 +100,7 @@ class SimulationResult:
   """
   net_values: np.ndarray  # shape: (n_sim,)
   sustained_months: np.ndarray  # shape: (n_sim,)
+  post_tax_net_values: Optional[np.ndarray] = None  # shape: (n_sim,)
   annual_spends: Optional[np.ndarray] = None  # shape: (n_sim, n_years)
   debug_results: Optional[Dict[int, List[str]]] = None
 
@@ -116,7 +117,8 @@ def simulate_strategy(
     fallback_n_sim: int = 1000,
     fallback_total_months: int = 600,
     debug_indices: Optional[List[int]] = None,
-    exp_regard_interest_tax_as_regular: bool = False) -> SimulationResult:
+    exp_regard_interest_tax_as_regular: bool = False,
+    calculate_post_tax: bool = False) -> SimulationResult:
   """
   指定された戦略に従い、資産推移をシミュレーションする。
   
@@ -128,6 +130,7 @@ def simulate_strategy(
     fallback_total_months: 価格推移辞書が空だった場合に使用する月数
     debug_indices: デバッグ対象のパスのインデックスリスト
     exp_regard_interest_tax_as_regular: 利息や税金を定常的な支出として扱う実験的フラグ
+    calculate_post_tax: 全ての資産が課税対象であると仮定した保守的な純資産額（Post-tax Net Value）を計算するフラグ
   """
   local_monthly_asset_prices = dict(monthly_asset_prices)
 
@@ -472,9 +475,18 @@ def simulate_strategy(
           # DRには正味の年間支出を渡す（負の値にならないよう0でクリップ）
           # ここで '-' を使うのは、収入（正の値）がポートフォリオからの引き出しを減らすため。
           cur_ann_spend = np.maximum(0.0, net_reg_spend_m[reb_paths]) * 12.0
+          # リバランス時の未払い税金を計算する（正確な Post-tax Net Value を求めるため）
+          unrealized_gains_at_rebalance = np.zeros_like(total_net)
+          for name in units:
+            asset_price_at_rebalance = local_monthly_asset_prices[name][reb_paths, m + 1]
+            gain = units[name][reb_paths] * asset_price_at_rebalance - units[name][reb_paths] * average_cost[name][reb_paths]
+            unrealized_gains_at_rebalance += np.maximum(0.0, gain)
+          post_tax_net = total_net - unrealized_gains_at_rebalance * strategy.tax_rate
+          
           target_ratios = strategy.dynamic_rebalance_fn(total_net,
                                                         cur_ann_spend,
-                                                        rem_years)
+                                                        rem_years,
+                                                        post_tax_net)
           # --- DEBUG ---
           if debug_indices is not None and debug_results is not None:
             for idx in debug_indices:
@@ -569,7 +581,27 @@ def simulate_strategy(
       survivors = ~bankrupt
       net_values[survivors] = total_val[survivors] - strategy.initial_loan
 
+  post_tax_net_values: Optional[np.ndarray] = None
+  if calculate_post_tax:
+    # 最終的な未払い税金を計算する
+    # 1. 最後の年に確定したキャピタルゲインに対する税金（m=11等で処理済みの場合は tax_to_pay に入っている）
+    # 2. まだ tax_to_pay に移っていない、確定済みのキャピタルゲインに対する税金
+    unpaid_tax = tax_to_pay + np.maximum(yearly_capital_gains, 0.0) * strategy.tax_rate
+
+    # 3. 現在保有している資産の含み益に対する税金
+    unrealized_gains = np.zeros(n_sim, dtype=np.float64)
+    for name, u in units.items():
+      current_price = local_monthly_asset_prices[name][:, total_months]
+      gain = u * current_price - u * average_cost[name]
+      unrealized_gains += np.maximum(0.0, gain)
+    
+    tax_on_unrealized = unrealized_gains * strategy.tax_rate
+    
+    # 全ての税金を引いた保守的な見積もり（Post-tax Net Value）
+    post_tax_net_values = net_values - unpaid_tax - tax_on_unrealized
+
   return SimulationResult(net_values=net_values,
                           sustained_months=sustained_months,
+                          post_tax_net_values=post_tax_net_values,
                           annual_spends=annual_spends_record,
                           debug_results=debug_results)
