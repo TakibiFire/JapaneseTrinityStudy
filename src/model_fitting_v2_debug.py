@@ -294,9 +294,9 @@ def main():
 
   print(f"\n--- Debugging Age {age} (Using Age {age+1} model for survival) ---")
   if current_a_model:
-    print(f"Current Age {age} A_opt model loaded (R2={current_a_model.r2:.4f})")
+    print(f"Current Age {age} A_opt model loaded")
   print(
-      f"Age {age+1} Boundaries: R_min={next_model.r_min:.4f}, R_max={next_model.r_max:.4f}, P_max={next_model.p_max:.4f}, P_min={next_model.p_min:.4f}"
+      f"Age {age+1} Boundaries: R_min={next_model.r_min_p:.4f}, R_max={next_model.r_max_p:.4f}, P_max={next_model.p_max:.4f}, P_min={next_model.p_min:.4f}"
   )
 
   # Y_age の分布を表示
