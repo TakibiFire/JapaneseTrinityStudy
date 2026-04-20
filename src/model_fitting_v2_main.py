@@ -27,8 +27,9 @@ from typing import Any, Dict, List, Tuple, Union, cast
 
 import numpy as np
 import pandas as pd
-from sklearn.linear_model import LinearRegression
-from sklearn.preprocessing import PolynomialFeatures
+import scipy.optimize as opt
+from scipy.interpolate import pchip_interpolate
+from sklearn.isotonic import IsotonicRegression
 
 from src.core import (CashflowRule, CashflowType, Strategy, ZeroRiskAsset,
                       simulate_strategy)
@@ -65,102 +66,75 @@ CURRENT_YEAR = 2026
 MACRO_ECONOMIC_SLIDE_END_YEAR = 2057
 
 
-def logit(p: np.ndarray, p_max: float, p_min: float) -> np.ndarray:
+def adaptive_sample(evaluate_fn: Any,
+                    r_start: float,
+                    r_end: float,
+                    threshold_a: float = 0.1,
+                    threshold_p: float = 0.02,
+                    max_depth: int = 3) -> None:
   """
-  P_surv_max, P_surv_min を考慮したロジット関数。
-  p を [p_min, p_max] から [0, 1] の範囲に正規化してからロジット変換を行う。
-
-  Args:
-    p: 生存確率の配列
-    p_max: 生存確率の最大値
-    p_min: 生存確率の最小値
-
-  Returns:
-    ロジット変換後の値
+  R の範囲 [r_start, r_end] において、a_max または p が線形補間から大きく乖離する場合のみ
+  再帰的に二分探索してサンプリング密度を高めます。
   """
-  # ゼロ割や対数(0)を防ぐため、ごくわずかなマージンを持たせる
-  margin = 1e-7
-  if p_max - p_min < 2 * margin:
-    # minとmaxがほぼ同じ場合は、全て0.5とみなす（モデルとして意味をなさないがエラー回避のため）
-    normalized_p = np.full_like(p, 0.5)
-  else:
-    normalized_p = (p - p_min) / (p_max - p_min)
+  if max_depth <= 0:
+    return
 
-  p_clipped = np.clip(normalized_p, margin, 1 - margin)
-  return np.log(p_clipped / (1 - p_clipped))
+  # 端点の評価
+  res_start = evaluate_fn(r_start)
+  res_end = evaluate_fn(r_end)
+
+  a_max_start, p_start = res_start[4], res_start[1]
+  a_max_end, p_end = res_end[4], res_end[1]
+
+  r_mid = (r_start + r_end) / 2
+  res_mid = evaluate_fn(r_mid)
+  a_max_mid, p_mid = res_mid[4], res_mid[1]
+
+  # 線形補間値との差分
+  a_max_linear = (a_max_start + a_max_end) / 2.0
+  p_linear = (p_start + p_end) / 2.0
+
+  if abs(a_max_mid - a_max_linear) > threshold_a or abs(p_mid -
+                                                        p_linear) > threshold_p:
+    # 乖離が大きい場合のみ、さらに深く探索
+    adaptive_sample(evaluate_fn, r_start, r_mid, threshold_a, threshold_p,
+                    max_depth - 1)
+    adaptive_sample(evaluate_fn, r_mid, r_end, threshold_a, threshold_p,
+                    max_depth - 1)
 
 
-def sigmoid_inv(x: Union[float, np.ndarray], p_max: float,
-                p_min: float) -> Union[float, np.ndarray]:
+def filter_anchors(r: np.ndarray, y: np.ndarray,
+                   threshold: float) -> Tuple[np.ndarray, np.ndarray]:
   """
-  正規化されたシグモイド値から元の確率空間に戻す逆関数。
-
-  Args:
-    x: シグモイド関数への入力値
-    p_max: 生存確率の最大値
-    p_min: 生存確率の最小値
-
-  Returns:
-    元の確率空間における値
+  線形補間からの乖離が閾値以下になるように、アンカーポイントを削減します。
   """
-  # x が極端に大きい/小さい場合のオーバーフローを防ぐ
-  s = 1 / (1 + np.exp(-np.clip(x, -100, 100)))
-  return p_min + s * (p_max - p_min)
+  if len(r) <= 2:
+    return r, y
 
+  indices = [0, len(r) - 1]
 
-def get_base_features(r: np.ndarray) -> np.ndarray:
-  """
-  R から基底特徴量を作成する: R, 1/R, log(R)
-  exp(R) を含めると PolynomialFeatures で R が大きい時に overflow するため除外。
+  def refine(start_idx: int, end_idx: int):
+    if end_idx - start_idx <= 1:
+      return
 
-  Args:
-    r: 支出率の配列
+    r_sub = r[start_idx:end_idx + 1]
+    y_sub = y[start_idx:end_idx + 1]
 
-  Returns:
-    特徴量行列
-  """
-  r_safe = np.maximum(r, 1e-5)
-  return np.column_stack([r_safe, 1.0 / r_safe, np.log(r_safe)])
+    y_linear = np.interp(r_sub, [r[start_idx], r[end_idx]],
+                         [y[start_idx], y[end_idx]])
+    deviations = np.abs(y_sub - y_linear)
+    max_dev_idx = np.argmax(deviations)
 
+    if deviations[max_dev_idx] > threshold:
+      actual_idx = start_idx + max_dev_idx
+      if actual_idx not in indices:
+        indices.append(actual_idx)
+        refine(start_idx, actual_idx)
+        refine(actual_idx, end_idx)
 
-def fit_model(
-    x: np.ndarray,
-    y: np.ndarray) -> Tuple[List[float], float, float, float, List[str]]:
-  """
-  モデルのフィッティングを行い、係数、切片、R2、調整済みR2、特徴量名を返す。
-
-  Args:
-    x: 入力データ (R)
-    y: ターゲットデータ
-
-  Returns:
-    (係数リスト, 切片, R2, 調整済みR2, 特徴量名)
-  """
-  if len(y) == 0:
-    return [], 0.0, 0.0, 0.0, []
-
-  if np.allclose(y, y[0], atol=1e-9):
-    # 分散がない場合は定数モデルとして扱う
-    # PolynomialFeatures(degree=3) で R, 1/R, log(R) (3つ) -> 20特徴量
-    return [0.0] * 20, float(y[0]), 1.0, 1.0, []
-
-  base_feats = get_base_features(x)
-  # R, 1/R, log(R) の degree=3 多項式組み合わせ
-  poly = PolynomialFeatures(degree=3, include_bias=True)
-  features = poly.fit_transform(base_feats)
-
-  base_names = ["R", "invR", "logR"]
-  feature_names = poly.get_feature_names_out(base_names).tolist()
-
-  model = LinearRegression(fit_intercept=False)
-  model.fit(features, y)
-
-  r2 = float(model.score(features, y))
-  n = len(y)
-  p = features.shape[1] - 1
-  adj_r2 = 1 - (1 - r2) * (n - 1) / (n - p - 1) if n > p + 1 else r2
-
-  return model.coef_.tolist(), 0.0, r2, adj_r2, feature_names
+  refine(0, len(r) - 1)
+  final_indices = sorted(indices)
+  return r[final_indices], y[final_indices]
 
 
 def main():
@@ -184,7 +158,8 @@ def main():
 
   n_sim = args.n_sim
   debug = args.debug_level > 0
-  debug_paths = [int(p) for p in args.debug_paths.split(",")] if args.debug_paths else []
+  debug_paths = [int(p) for p in args.debug_paths.split(",")
+                ] if args.debug_paths else []
 
   # 1. アセットとキャッシュフローの生成
   # 為替 (USDJPY 0%, 10.53%)
@@ -281,7 +256,7 @@ def main():
   # 年齢 95 から 40 まで逆算
   ages_to_process = range(END_AGE - 1, START_AGE - 1, -1)
   if args.debug_level > 0:
-    ages_to_process = range(END_AGE - 1, END_AGE - 4, -1)  # デバッグ時は直近3年分のみ
+    ages_to_process = range(END_AGE - 1, END_AGE - 6, -1)  # デバッグ時は直近5年分のみ
 
   for age in ages_to_process:
     print(f"\n--- Processing age {age} ---")
@@ -299,7 +274,9 @@ def main():
 
     # 年金等
     pension_total = np.zeros((n_sim, 12))
-    for name in ["Pension_Premium_Kiso", "Pension_Receipt_Kousei", "Pension_Receipt_Kiso"]:
+    for name in [
+        "Pension_Premium_Kiso", "Pension_Receipt_Kousei", "Pension_Receipt_Kiso"
+    ]:
       if name in monthly_cashflows:
         pension_total += monthly_cashflows[name][:, start_m:end_m]
 
@@ -319,12 +296,14 @@ def main():
       print(f"    Avg Y_withdraw_n (Yearly): {np.mean(y_withdraw_n):.2f} 万円/年")
 
     # R (支出率) と A (オルカン比率) のグリッド
-    a_grid = np.linspace(0.0, 1.0, 11)  # 0.1刻み
+    a_grid = np.linspace(0.0, 1.0, 21)  # 0.05刻み
 
-    # キャッシュ済み evaluate_r の結果
-    eval_cache: Dict[float, Tuple[float, float]] = {}
+    # キャッシュ済み evaluate_r の結果: r -> (best_a, best_survival, survivals_per_a, a_min, a_max)
+    eval_cache: Dict[float, Tuple[float, float, Dict[float, float], float,
+                                  float]] = {}
 
-    def evaluate_r(r: float) -> Tuple[float, float]:
+    def evaluate_r(
+        r: float) -> Tuple[float, float, Dict[float, float], float, float]:
       # キャッシュにあればそれを返す (浮動小数点の誤差を考慮して丸める)
       r_key = round(r, 6)
       if r_key in eval_cache:
@@ -334,6 +313,7 @@ def main():
       x_p_n = y_withdraw_n / r
       best_survival = -1.0
       best_a = 0.0
+      survivals_per_a = {}
       for a in a_grid:
         # 12ヶ月のシミュレーション
         strategy = Strategy(
@@ -367,8 +347,9 @@ def main():
         res = simulate_strategy(strategy,
                                 year_prices,
                                 monthly_cashflows=year_cf,
-                                fallback_total_months=12)
-        x_next = res.net_values  # shape (n_sim,)
+                                fallback_total_months=12,
+                                calculate_post_tax=True)
+        x_next = cast(np.ndarray, res.post_tax_net_values)  # shape (n_sim,)
 
         # 今年の破産判定
         bankrupt_this_year = res.sustained_months < 12
@@ -379,15 +360,15 @@ def main():
           survival = (~bankrupt_this_year).astype(float)
         else:
           # 次年度の R = Y_withdraw_{N+1} / X_{N+1}
-          next_y_withdraw = dp_results[age + 1]["y_withdraw"]
+          next_y_withdraw = cast(np.ndarray, dp_results[age + 1]["y_withdraw"])
           r_next = next_y_withdraw / np.maximum(x_next, 1e-7)
 
           # 次年度の生存確率モデルを取得
           next_model = dp_results[age + 1]["p_model"]
-          next_r_min = dp_results[age + 1]["r_min"]
-          next_r_max = dp_results[age + 1]["r_max"]
-          next_p_max = dp_results[age + 1].get("p_max", 1.0)
-          next_p_min = dp_results[age + 1].get("p_min", 0.0)
+          next_r_min = cast(float, dp_results[age + 1]["r_min_p"])
+          next_r_max = cast(float, dp_results[age + 1]["r_max_p"])
+          next_p_max = cast(float, dp_results[age + 1].get("p_max", 1.0))
+          next_p_min = cast(float, dp_results[age + 1].get("p_min", 0.0))
 
           p_next = np.zeros(n_sim)
 
@@ -400,11 +381,9 @@ def main():
           in_range = (~bankrupt_this_year) & (r_next > next_r_min) & (
               r_next < next_r_max)
           if np.any(in_range):
-            base_feats = get_base_features(r_next[in_range])
-            poly = PolynomialFeatures(degree=3, include_bias=True)
-            features = poly.fit_transform(base_feats)
-            logit_p = features @ np.array(next_model["coef"])
-            p_next[in_range] = sigmoid_inv(logit_p, next_p_max, next_p_min)
+            p_next[in_range] = pchip_interpolate(next_model["r_points"],
+                                                 next_model["p_points"],
+                                                 r_next[in_range])
 
           survival = p_next
 
@@ -413,210 +392,273 @@ def main():
           print(f"      [Path Debug] R={r:.4f}, A={a:.2f}")
           for p_idx in debug_paths:
             if p_idx < n_sim:
-              print(f"        Path {p_idx}: X_next={x_next[p_idx]:.2f}, Y_next={next_y_withdraw[p_idx] if age < END_AGE-1 else 0:.2f}, R_next={r_next[p_idx] if age < END_AGE-1 else 0:.4f}, P_surv={survival[p_idx]:.4f}")
+              print(
+                  f"        Path {p_idx}: X_next={x_next[p_idx]:.2f}, Y_next={cast(np.ndarray, next_y_withdraw)[p_idx] if age < END_AGE-1 else 0:.2f}, R_next={cast(np.ndarray, r_next)[p_idx] if age < END_AGE-1 else 0:.4f}, P_surv={survival[p_idx]:.4f}"
+              )
 
-        # 全パスの平均生存確率
+        # 全パス의 平均生存確率
         avg_survival = float(np.mean(survival))
-        if avg_survival > best_survival:
+        survivals_per_a[a] = avg_survival
+        # 生存確率が同じ（例：共に1.0）場合は、より高いオルカン比率 A を選択する（tie-break）
+        if avg_survival > best_survival or (abs(avg_survival - best_survival)
+                                            < 1e-9 and a > best_a):
           best_survival = avg_survival
           best_a = a
 
-      result = (float(best_a), float(best_survival))
+      # 許容範囲 [a_min, a_max] の算出 (P >= P_max * 0.999)
+      p_max_row = max(survivals_per_a.values())
+      threshold_val = p_max_row * 0.999
+      valid_a = [
+          a_val for a_val, p_val in survivals_per_a.items()
+          if p_val >= threshold_val
+      ]
+      a_min = min(valid_a)
+      a_max = max(valid_a)
+
+      result = (float(best_a), float(best_survival), survivals_per_a,
+                float(a_min), float(a_max))
       eval_cache[r_key] = result
-      if args.debug_level >= 3:
-        print(f"    Tested R={r:.4f}, P_surv={result[1]:.4f}")
       return result
 
     # 1. R 広域探索 (Exponential Search)
-    # 0.005 から 2倍ずつ 13ステップ (最大 20.48)
     exp_r_vals = [0.005 * (2**k) for k in range(13)]
     exp_results = []
-
     for r in exp_r_vals:
-      a_opt, p_surv = evaluate_r(r)
-      exp_results.append((r, a_opt, p_surv))
+      res = evaluate_r(r)
+      exp_results.append((r, res[0], res[1]))
 
     p_surv_vals = [res[2] for res in exp_results]
     p_surv_max = max(p_surv_vals)
     p_surv_min = min(p_surv_vals)
 
     # 2. 境界探索 (Binary Search)
-    # P_surv_max から下がり始める区間を見つける
+    # R_min_P
     drop_idx = -1
     for i in range(len(p_surv_vals) - 1):
       if p_surv_vals[i] >= p_surv_max - 1e-4 and p_surv_vals[
           i + 1] < p_surv_max - 1e-4:
         drop_idx = i
         break
-
     if drop_idx != -1:
-      r_low = exp_r_vals[drop_idx]
-      r_high = exp_r_vals[drop_idx + 1]
-      # R_min の二分探索
+      r_low, r_high = exp_r_vals[drop_idx], exp_r_vals[drop_idx + 1]
       for _ in range(10):
         r_mid = (r_low + r_high) / 2
-        _, p_surv = evaluate_r(r_mid)
-        if p_surv >= p_surv_max - 1e-4:
+        if evaluate_r(r_mid)[1] >= p_surv_max - 1e-4:
           r_low = r_mid
         else:
           r_high = r_mid
-        # 確率の差が十分小さければ終了
-        if abs(p_surv - p_surv_max) < 0.0001:
-          break
-      r_min = r_low
+      r_min_p = r_low
     else:
-      # P_surv_max から下がらないか、最初から下がっている
-      if p_surv_vals[0] < p_surv_max - 1e-4:
-        r_min = exp_r_vals[0]
-      else:
-        r_min = exp_r_vals[-1]
+      r_min_p = exp_r_vals[0] if p_surv_vals[
+          0] < p_surv_max - 1e-4 else exp_r_vals[-1]
 
-    # P_surv_min に到達する区間を見つける
+    # R_min_A
+    def is_free(r: float) -> bool:
+      res = evaluate_r(r)
+      return res[3] <= 0.01 and res[4] >= 0.99
+
+    is_free_vals = [is_free(r) for r in exp_r_vals]
+    a_drop_idx = -1
+    for i in range(len(is_free_vals) - 1):
+      if is_free_vals[i] and not is_free_vals[i + 1]:
+        a_drop_idx = i
+        break
+    if a_drop_idx != -1:
+      r_low, r_high = exp_r_vals[a_drop_idx], exp_r_vals[a_drop_idx + 1]
+      for _ in range(10):
+        r_mid = (r_low + r_high) / 2
+        if is_free(r_mid):
+          r_low = r_mid
+        else:
+          r_high = r_mid
+      r_min_a = r_low
+    else:
+      r_min_a = exp_r_vals[0] if not is_free_vals[0] else exp_r_vals[-1]
+
+    # R_max_P
     hit_min_idx = -1
     for i in range(len(p_surv_vals) - 1):
       if p_surv_vals[i] > p_surv_min + 1e-4 and p_surv_vals[
           i + 1] <= p_surv_min + 1e-4:
         hit_min_idx = i
         break
-
     if hit_min_idx != -1:
-      r_low = exp_r_vals[hit_min_idx]
-      r_high = exp_r_vals[hit_min_idx + 1]
-      # R_max の二分探索
+      r_low, r_high = exp_r_vals[hit_min_idx], exp_r_vals[hit_min_idx + 1]
       for _ in range(10):
         r_mid = (r_low + r_high) / 2
-        _, p_surv = evaluate_r(r_mid)
-        if p_surv <= p_surv_min + 1e-4:
+        if evaluate_r(r_mid)[1] <= p_surv_min + 1e-4:
           r_high = r_mid
         else:
           r_low = r_mid
-        # 確率の差が十分小さければ終了
-        if abs(p_surv - p_surv_min) < 0.0001:
-          break
-      r_max = r_high
+      r_max_p = r_high
     else:
-      # P_surv_min に到達しないか、最初から最小値
-      if p_surv_vals[-1] > p_surv_min + 1e-4:
-        r_max = exp_r_vals[-1]
-      else:
-        r_max = exp_r_vals[0]
+      r_max_p = exp_r_vals[-1] if p_surv_vals[
+          -1] > p_surv_min + 1e-4 else exp_r_vals[0]
 
-    # 論理的順序の保証
-    if r_min > r_max:
-      r_max = r_min
+    # R_max_A
+    a_hit_idx = -1
+    for i in range(a_drop_idx + 1, len(is_free_vals) - 1):
+      if not is_free_vals[i] and is_free_vals[i + 1]:
+        a_hit_idx = i
+        break
+    if a_hit_idx != -1:
+      r_low, r_high = exp_r_vals[a_hit_idx], exp_r_vals[a_hit_idx + 1]
+      for _ in range(10):
+        r_mid = (r_low + r_high) / 2
+        if is_free(r_mid):
+          r_high = r_mid
+        else:
+          r_low = r_mid
+      r_max_a = r_high
+    else:
+      r_max_a = exp_r_vals[-1]
 
-    # 3. 遷移領域のステップサーチ
-    num_steps = 30
-    if r_max > r_min:
-      # 対数スケールでサンプリングすることで、高確率（低R）領域の解像度を高める
-      step_r_vals = np.geomspace(r_min, r_max, num_steps)
+    if r_min_p > r_max_p:
+      r_max_p = r_min_p
+    if r_min_a > r_max_a:
+      r_max_a = r_min_a
+
+    r_min_sampling = min(r_min_p, r_min_a)
+    r_max_sampling = max(r_max_p, r_max_a)
+
+    # 3. 遷移領域のサンプリング
+    num_steps = 15
+    if r_max_sampling > r_min_sampling:
+      step_r_vals = np.geomspace(r_min_sampling, r_max_sampling, num_steps)
       for r in step_r_vals:
         evaluate_r(r)
+      for i in range(len(step_r_vals) - 1):
+        adaptive_sample(evaluate_r, step_r_vals[i], step_r_vals[i + 1])
 
-    # 評価結果をまとめてフィッティング
-    age_results = [{
-        "r": r,
-        "a_opt": a,
-        "p_survival": p
-    } for r, (a, p) in eval_cache.items()]
+    # 評価結果の集約
+    age_results = []
+    for r, (a, p, survivals, a_min, a_max) in eval_cache.items():
+      row_data = {
+          "r": r,
+          "a_opt": a,
+          "p_survival": p,
+          "a_opt_min": a_min,
+          "a_opt_max": a_max
+      }
+      for a_val, p_val in survivals.items():
+        row_data[f"{a_val:.2f}"] = p_val
+      age_results.append(row_data)
     df_age = pd.DataFrame(age_results).sort_values("r")
 
-    # P_surv が (P_min, P_max) の間にあるデータを抽出
-    mask_fit = (df_age["p_survival"] < p_surv_max -
-                1e-4) & (df_age["p_survival"] > p_surv_min + 1e-4)
+    # フィッティング用データ抽出
+    df_fit_p = df_age[(df_age["r"] >= r_min_p - 1e-9) &
+                      (df_age["r"] <= r_max_p + 1e-9)].copy()
+    df_fit_a = df_age[(df_age["r"] >= r_min_a - 1e-9) &
+                      (df_age["r"] <= r_max_a + 1e-9)].copy()
 
-    if mask_fit.sum() < 20:
-      mask_fit_loose = (df_age["p_survival"]
-                        <= p_surv_max) & (df_age["p_survival"] >= p_surv_min)
-      if mask_fit_loose.sum() < 20:
-        x_fit, a_fit, p_fit = df_age["r"].values, df_age[
-            "a_opt"].values, df_age["p_survival"].values
-      else:
-        x_fit, a_fit, p_fit = df_age[mask_fit_loose]["r"].values, df_age[
-            mask_fit_loose]["a_opt"].values, df_age[mask_fit_loose][
-                "p_survival"].values
-    else:
-      x_fit, a_fit, p_fit = df_age[mask_fit]["r"].values, df_age[mask_fit][
-          "a_opt"].values, df_age[mask_fit]["p_survival"].values
+    # P_surv モデル: Isotonic + PCHIP + Anchor Filtering
+    iso_reg = IsotonicRegression(y_min=p_surv_min,
+                                 y_max=p_surv_max,
+                                 increasing=False,
+                                 out_of_bounds='clip')
+    p_iso = iso_reg.fit_transform(df_fit_p["r"], df_fit_p["p_survival"])
+    unique_r_p, unique_idx_p = np.unique(df_fit_p["r"], return_index=True)
+    p_iso_unique = p_iso[unique_idx_p]
+    # Anchor point 削減 (1% threshold)
+    r_points_p, p_points = filter_anchors(unique_r_p,
+                                          p_iso_unique,
+                                          threshold=0.01)
 
-    x_fit_arr = np.array(x_fit, dtype=np.float64)
-    a_fit_arr = np.array(a_fit, dtype=np.float64)
-    p_fit_arr = np.array(p_fit, dtype=np.float64)
-
-    # モデル fitting
-    a_coef, _, a_r2, a_adj_r2, feat_names = fit_model(x_fit_arr, a_fit_arr)
-    logit_p_fit_arr = logit(p_fit_arr, p_surv_max, p_surv_min)
-    p_coef, _, p_r2, p_adj_r2, _ = fit_model(x_fit_arr, logit_p_fit_arr)
+    # A_opt モデル: PCHIP on a_max + Anchor Filtering
+    unique_r_a, unique_idx_a = np.unique(df_fit_a["r"], return_index=True)
+    a_max_unique = df_fit_a["a_opt_max"].values[unique_idx_a]
+    # Anchor point 削減 (5% threshold)
+    r_points_a, a_points = filter_anchors(unique_r_a,
+                                          a_max_unique,
+                                          threshold=0.05)
 
     if args.debug_age is not None and age == args.debug_age:
-      print(f"\n[DEBUG Age {age}] Transition Region Data (num_steps={num_steps}):")
-      print(f"R_min: {r_min:.6f}, R_max: {r_max:.6f}")
-      print(f"P_max: {p_surv_max:.6f}, P_min: {p_surv_min:.6f}")
-
-      # ステップサーチ結果の表示
-      step_r_vals = np.geomspace(r_min, r_max, num_steps)
-      print("index, R, P_obs, P_fit")
-      for i, r in enumerate(step_r_vals):
-        a_opt, p_obs = evaluate_r(r)
-
-        # フィッティングされた P を計算
-        base_feats = get_base_features(np.array([r]))
-        poly = PolynomialFeatures(degree=3, include_bias=True)
-        features = poly.fit_transform(base_feats)
-        logit_p_val = features @ np.array(p_coef)
-        p_fit = sigmoid_inv(logit_p_val, p_surv_max, p_surv_min)[0]
-
-        print(f"{i}, {r:.6f}, {p_obs:.6f}, {p_fit:.6f}")
-
-      print(f"Included in x_fit_arr: {len(x_fit_arr)} points total.")
+      print(
+          f"\n[DEBUG Age {age}] Anchor counts: P={len(r_points_p)}, A={len(r_points_a)}"
+      )
+      print("index, R, P_obs, P_fit, A_max, A_fit")
+      for i, (idx, age_row) in enumerate(df_age.iterrows()):
+        rv = float(age_row["r"])
+        p_fit = p_surv_max if rv < r_min_p else (
+            p_surv_min if rv > r_max_p else pchip_interpolate(
+                r_points_p, p_points, rv))
+        a_fit = 1.0 if (rv < r_min_a or rv > r_max_a) else pchip_interpolate(
+            r_points_a, a_points, rv)
+        print(
+            f"{i}, {rv:.6f}, {age_row['p_survival']:.6f}, {p_fit:.6f}, {age_row['a_opt_max']:.2f}, {a_fit:.2f}"
+        )
 
     # 結果表示
     print(
         f"  R range: {df_age['r'].min():.4f} to {df_age['r'].max():.4f} (Total {len(df_age)} points)"
     )
     print(f"  P_surv range: P_min={p_surv_min:.4f}, P_max={p_surv_max:.4f}")
-    print(f"  Detected Boundaries: R_min={r_min:.4f}, R_max={r_max:.4f}")
-    print(f"  A_opt model R2={a_r2:.4f}, AdjR2={a_adj_r2:.4f}")
-    print(f"  P_surv model R2={p_r2:.4f}, AdjR2={p_adj_r2:.4f}")
+    print(
+        f"  Detected Boundaries: R_min_P={r_min_p:.4f}, R_min_A={r_min_a:.4f}, R_max_P={r_max_p:.4f}, R_max_A={r_max_a:.4f}"
+    )
+    print(f"  A_opt model: PCHIP Spline ({len(r_points_a)} anchors)")
+    print(f"  P_surv model: PCHIP Spline ({len(r_points_p)} anchors)")
 
-    if debug:
-      if args.debug_level >= 2:
-        print(f"  [Level 2 Info] Model Fitting Details:")
-        print(f"    Num Features: {len(feat_names)}")
-        print(
-            f"    A_opt model coefs: {dict(zip(feat_names, [round(c, 5) for c in a_coef])) if feat_names else 'Constant'}"
-        )
+    # 詳細データを temp/ に保存
+    os.makedirs("temp", exist_ok=True)
+    dump_data = {
+        "age": int(age),
+        "config": {
+            "r_min_p": float(r_min_p),
+            "r_min_a": float(r_min_a),
+            "r_max_p": float(r_max_p),
+            "r_max_a": float(r_max_a),
+            "p_min": float(p_surv_min),
+            "p_max": float(p_surv_max)
+        },
+        "models": {
+            "p_survival": {
+                "r_points": [float(r) for r in r_points_p],
+                "p_points": [float(p) for p in p_points]
+            },
+            "a_optimal": {
+                "r_points": [float(r) for r in r_points_a],
+                "a_points": [float(a) for a in a_points]
+            }
+        },
+        "all_points": df_age.to_dict(orient="records"),
+        "training_points_p": df_fit_p.to_dict(orient="records"),
+        "training_points_a": df_fit_a.to_dict(orient="records")
+    }
+    with open(f"temp/age_{age}.json", "w") as f:
+      json.dump(dump_data, f, indent=2)
 
     # 結果保存
     dp_results[age] = {
         "y_withdraw": y_withdraw_n,
         "p_model": {
-            "coef": p_coef
+            "r_points": r_points_p,
+            "p_points": p_points
         },
-        "r_min": float(r_min),
-        "r_max": float(r_max),
-        "p_min": float(p_surv_min),
-        "p_max": float(p_surv_max)
+        "r_min_p": r_min_p,
+        "r_min_a": r_min_a,
+        "r_max_p": r_max_p,
+        "r_max_a": r_max_a,
+        "p_min": p_surv_min,
+        "p_max": p_surv_max
     }
     models[str(age)] = {
         "a_opt_model": {
-            "coef": a_coef,
-            "r2": a_r2,
-            "adj_r2": a_adj_r2
+            "r_points": [float(r) for r in r_points_a],
+            "a_points": [float(a) for a in a_points],
+            "r_min_a": float(r_min_a),
+            "r_max_a": float(r_max_a)
         },
         "p_survival_model": {
-            "coef": p_coef,
-            "r2": p_r2,
-            "adj_r2": p_adj_r2
+            "r_points": [float(r) for r in r_points_p],
+            "p_points": [float(p) for p in p_points],
+            "r_min_p": float(r_min_p),
+            "r_max_p": float(r_max_p)
         },
-        "r_min": float(r_min),
-        "r_max": float(r_max),
         "p_min": float(p_surv_min),
-        "p_max": float(p_surv_max),
-        "feature_names": feat_names
+        "p_max": float(p_surv_max)
     }
 
-  # 3. エクスポート
   if args.debug_level == 0:
     os.makedirs("data", exist_ok=True)
     output_path = "data/optimal_strategy_v2_models.json"
