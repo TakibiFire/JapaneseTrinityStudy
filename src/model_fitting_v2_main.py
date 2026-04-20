@@ -23,7 +23,7 @@ Optimal Strategy V2 のモデルフィッティングを行うスクリプト。
 import argparse
 import json
 import os
-from typing import Any, Dict, List, Tuple, Union, cast
+from typing import Any, Dict, List, Optional, Tuple, Union, cast
 
 import numpy as np
 import pandas as pd
@@ -71,10 +71,14 @@ def adaptive_sample(evaluate_fn: Any,
                     r_end: float,
                     threshold_a: float = 0.1,
                     threshold_p: float = 0.02,
-                    max_depth: int = 3) -> None:
+                    max_depth: int = 3,
+                    r_min_a: Optional[float] = None,
+                    r_max_a: Optional[float] = None) -> None:
   """
   R の範囲 [r_start, r_end] において、a_max または p が線形補間から大きく乖離する場合のみ
   再帰的に二分探索してサンプリング密度を高めます。
+
+  r_min_a, r_max_a が指定されている場合、その範囲外では a を固定してサンプリングを高速化します。
   """
   if max_depth <= 0:
     return
@@ -87,7 +91,20 @@ def adaptive_sample(evaluate_fn: Any,
   a_max_end, p_end = res_end[4], res_end[1]
 
   r_mid = (r_start + r_end) / 2
-  res_mid = evaluate_fn(r_mid)
+
+  # A のサンプリングを高速化するか判定
+  a_fixed = None
+  if r_min_a is not None and r_max_a is not None:
+    if r_mid < r_min_a:
+      # A_opt は 1.0 で安定しているはず
+      a_fixed = 1.0
+    elif r_mid > r_max_a:
+      # A_opt は境界での値（通常 0.0 または 1.0）で安定しているはず
+      # ここでは端点の a_max を参考にする
+      if abs(a_max_start - a_max_end) < 1e-4:
+        a_fixed = a_max_start
+
+  res_mid = evaluate_fn(r_mid, a_fixed=a_fixed)
   a_max_mid, p_mid = res_mid[4], res_mid[1]
 
   # 線形補間値との差分
@@ -98,9 +115,9 @@ def adaptive_sample(evaluate_fn: Any,
                                                         p_linear) > threshold_p:
     # 乖離が大きい場合のみ、さらに深く探索
     adaptive_sample(evaluate_fn, r_start, r_mid, threshold_a, threshold_p,
-                    max_depth - 1)
+                    max_depth - 1, r_min_a, r_max_a)
     adaptive_sample(evaluate_fn, r_mid, r_end, threshold_a, threshold_p,
-                    max_depth - 1)
+                    max_depth - 1, r_min_a, r_max_a)
 
 
 def filter_anchors(r: np.ndarray, y: np.ndarray,
@@ -126,7 +143,7 @@ def filter_anchors(r: np.ndarray, y: np.ndarray,
     max_dev_idx = np.argmax(deviations)
 
     if deviations[max_dev_idx] > threshold:
-      actual_idx = start_idx + max_dev_idx
+      actual_idx = int(start_idx + max_dev_idx)
       if actual_idx not in indices:
         indices.append(actual_idx)
         refine(start_idx, actual_idx)
@@ -303,7 +320,8 @@ def main():
                                   float]] = {}
 
     def evaluate_r(
-        r: float) -> Tuple[float, float, Dict[float, float], float, float]:
+        r: float,
+        a_fixed: Optional[float] = None) -> Tuple[float, float, Dict[float, float], float, float]:
       # キャッシュにあればそれを返す (浮動小数点の誤差を考慮して丸める)
       r_key = round(r, 6)
       if r_key in eval_cache:
@@ -314,7 +332,11 @@ def main():
       best_survival = -1.0
       best_a = 0.0
       survivals_per_a = {}
-      for a in a_grid:
+
+      # 探索する A のリストを決定
+      search_a_list = [a_fixed] if a_fixed is not None else a_grid
+
+      for a in search_a_list:
         # 12ヶ月のシミュレーション
         strategy = Strategy(
             name=f"DP_age{age}_r{r:.4f}_a{a:.2f}",
@@ -527,9 +549,21 @@ def main():
     if r_max_sampling > r_min_sampling:
       step_r_vals = np.geomspace(r_min_sampling, r_max_sampling, num_steps)
       for r in step_r_vals:
-        evaluate_r(r)
+        # A_opt が安定している領域ではサンプリングを高速化
+        a_fixed = None
+        if r < r_min_a:
+          a_fixed = 1.0
+        elif r > r_max_a:
+          # 境界での a_max を参考にする
+          res_boundary = evaluate_r(r_max_a)
+          a_fixed = res_boundary[4]
+        evaluate_r(r, a_fixed=a_fixed)
       for i in range(len(step_r_vals) - 1):
-        adaptive_sample(evaluate_r, step_r_vals[i], step_r_vals[i + 1])
+        adaptive_sample(evaluate_r,
+                        step_r_vals[i],
+                        step_r_vals[i + 1],
+                        r_min_a=r_min_a,
+                        r_max_a=r_max_a)
 
     # 評価結果の集約
     age_results = []
