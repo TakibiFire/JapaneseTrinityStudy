@@ -210,12 +210,12 @@ def main():
                                                  tax_rate=TAX_RATE,
                                                  inflation_rate=INFLATION_RATE)[0]
 
-        def dynamic_rebalance_fn(total_net, annual_spend, rem_years):
+        def dynamic_rebalance_fn(total_net, annual_spend, rem_years, post_tax_net):
           return {ORUKAN_NAME: fixed_ratio, ZERO_RISK_NAME: 1.0 - fixed_ratio}
 
       elif strat_name == "ダイナミック最適比率 (V1)":
 
-        def dynamic_rebalance_fn(total_net, annual_spend, rem_years):
+        def dynamic_rebalance_fn(total_net, annual_spend, rem_years, post_tax_net):
           s_rate = annual_spend / np.maximum(total_net, 1.0)
           ratio = calculate_optimal_strategy(s_rate=s_rate,
                                              remaining_years=rem_years,
@@ -226,9 +226,10 @@ def main():
 
       else:  # Dynamic Rebalance DP (V2)
 
-        def dynamic_rebalance_fn(total_net, annual_spend, rem_years):
+        def dynamic_rebalance_fn(total_net, annual_spend, rem_years, post_tax_net):
           current_age = START_AGE + int(YEARS - rem_years)
-          s_rate = annual_spend / np.maximum(total_net, 1.0)
+          # V2 DPモデルは「税引後純資産」をベースにRを計算する
+          s_rate = annual_spend / np.maximum(post_tax_net, 1.0)
           predict_age = min(current_age, 94)
           ratio = dp_predictor.predict_a_opt(predict_age, s_rate)
           return {ORUKAN_NAME: ratio, ZERO_RISK_NAME: 1.0 - ratio}
