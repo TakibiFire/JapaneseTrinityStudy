@@ -15,6 +15,7 @@ from scipy.interpolate import pchip_interpolate
 class AOptModel:
   """
   最適資産配分モデルのパラメータを保持するデータクラス。
+  PCHIP Spline 用のアンカーポイントを保持する。
   """
   r_points: np.ndarray
   a_points: np.ndarray
@@ -26,6 +27,7 @@ class AOptModel:
 class PSurvModel:
   """
   生存確率モデルのパラメータを保持するデータクラス。
+  PCHIP Spline 用のアンカーポイントを保持する。
   """
   r_points: np.ndarray
   p_points: np.ndarray
