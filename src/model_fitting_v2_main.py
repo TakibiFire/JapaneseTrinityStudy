@@ -645,10 +645,10 @@ def main():
     # A_opt モデル: PCHIP on a_max + Anchor Filtering
     unique_r_a, unique_idx_a = np.unique(df_fit_a["r"], return_index=True)
     a_max_unique = df_fit_a["a_opt_max"].values[unique_idx_a]
-    # Anchor point 削減 (5% threshold)
+    # Anchor point 削減 (0% threshold to disable reduction)
     r_points_a, a_points = filter_anchors(unique_r_a,
                                           a_max_unique,
-                                          threshold=0.05)
+                                          threshold=0.0)
 
     if args.debug_age is not None and age == args.debug_age:
       print(
