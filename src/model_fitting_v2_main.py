@@ -64,6 +64,7 @@ ZERO_RISK_YIELD = 0.04
 TAX_RATE = 0.20315
 CURRENT_YEAR = 2026
 MACRO_ECONOMIC_SLIDE_END_YEAR = 2057
+EFFECTIVE_ZERO_RISK_YIELD = ZERO_RISK_YIELD * (1.0 - TAX_RATE)
 
 
 def adaptive_sample(evaluate_fn: Any,
@@ -223,6 +224,24 @@ def main():
                                                  n_months=YEARS * 12,
                                                  seed=SEED)
 
+  # CPI の統計計算 (想定外のジャンプを計算するため)
+  # 年次 CPI 倍率の平均と標準偏差を計算
+  cpi_data = monthly_prices[CPI_NAME]
+  annual_cpi_jumps = []
+  for y in range(YEARS):
+    # 年始 (前年末) から年末への倍率
+    if y == 0:
+      jumps = cpi_data[:, 11] / 1.0  # 初期値は 1.0
+    else:
+      jumps = cpi_data[:, (y + 1) * 12 - 1] / cpi_data[:, y * 12 - 1]
+    annual_cpi_jumps.extend(jumps.tolist())
+  
+  cpi_annual_mu = float(np.mean(annual_cpi_jumps)) - 1.0
+  cpi_annual_sigma = float(np.std(annual_cpi_jumps))
+  # 99%ile (Z=2.326) の想定外ジャンプ倍率
+  unexpected_cpi_jump = (1.0 + cpi_annual_mu + 2.326 * cpi_annual_sigma) / (1.0 + cpi_annual_mu)
+  print(f"CPI Stats: mu={cpi_annual_mu:.4f}, sigma={cpi_annual_sigma:.4f}, unexpected_jump={unexpected_cpi_jump:.4f}")
+
   # キャッシュフロー設定 (一人世帯 H1, 年金60歳受給 P60相当)
   cf_configs: List[CashflowConfig] = []
   cf_rules: List[CashflowRule] = []
@@ -278,14 +297,20 @@ def main():
                                          n_months=YEARS * 12)
 
   # 2. Backward DP
-  models: Dict[str, Any] = {}
+  models: Dict[str, Any] = {
+      "cpi_annual_mu": cpi_annual_mu,
+      "cpi_annual_sigma": cpi_annual_sigma,
+  }
   # age -> { "y_withdraw": array, "p_model": {coef}, "r_min": float, "r_max": float, "p_min": float, "p_max": float }
   dp_results: Dict[int, Any] = {}
 
+  # 勝利しきい値 W_N の計算用 (PV of all future net spending)
+  last_w = 0.0
+
   # 年齢 95 から 40 まで逆算
-  ages_to_process = range(END_AGE - 1, START_AGE - 1, -1)
+  ages_to_process = list(range(END_AGE - 1, START_AGE - 1, -1))
   if args.debug_level > 0:
-    ages_to_process = range(END_AGE - 1, END_AGE - 6, -1)  # デバッグ時は直近5年分のみ
+    ages_to_process = list(range(END_AGE - 1, END_AGE - 6, -1))  # デバッグ時は直近5年分のみ
 
   for age in ages_to_process:
     print(f"\n--- Processing age {age} ---")
@@ -314,6 +339,19 @@ def main():
     # 各パスの年間合計正味支出 (Withdrawal amount)
     y_withdraw_n = np.sum(np.maximum(0, monthly_net_spend),
                           axis=1)  # shape (n_sim,)
+    # 全パスの平均支出額を記録（実験スクリプトでの投影に使用）
+    avg_y_withdraw_n = float(np.mean(y_withdraw_n))
+
+    # 勝利しきい値 W_N, M_N の計算
+    if age == END_AGE - 1:
+      # 最終年は 3ヶ月のバッファを載せて計算 (1.25倍)
+      w_n = avg_y_withdraw_n * 1.25 / (1.0 + EFFECTIVE_ZERO_RISK_YIELD)
+    else:
+      w_n = (avg_y_withdraw_n + last_w) / (1.0 + EFFECTIVE_ZERO_RISK_YIELD)
+    
+    last_w = w_n
+    m_winning_multiplier = w_n / avg_y_withdraw_n
+    print(f"  Winning Threshold: M_N={m_winning_multiplier:.4f} (W_N={w_n:.2f})")
 
     if args.debug_level >= 2:
       print(f"  [Level 2 Info] Cashflow:")
@@ -722,6 +760,8 @@ def main():
         "p_max": p_surv_max
     }
     models[str(age)] = {
+        "avg_y_withdraw": avg_y_withdraw_n,
+        "m_winning_multiplier": m_winning_multiplier,
         "a_opt_model": {
             "r_points": [float(r) for r in r_points_a],
             "a_points": [float(a) for a in a_points],

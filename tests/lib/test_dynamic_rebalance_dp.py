@@ -32,7 +32,19 @@ def mock_models_json(tmp_path):
   }
 
   models = {
+      "cpi_annual_mu": 0.01,
+      "cpi_annual_sigma": 0.04,
       "35": {
+          "avg_y_withdraw": 100.0,
+          "m_winning_multiplier": 10.0,
+          "a_opt_model": a_opt_model,
+          "p_survival_model": p_survival_model,
+          "p_min": 0.1,
+          "p_max": 0.9
+      },
+      "36": {
+          "avg_y_withdraw": 110.0,
+          "m_winning_multiplier": 9.0,
           "a_opt_model": a_opt_model,
           "p_survival_model": p_survival_model,
           "p_min": 0.1,
@@ -135,3 +147,55 @@ def test_error_handling(mock_models_json):
   with pytest.raises(
       ValueError, match="Survival probability model for age 40 is not found"):
     predictor.predict_p_surv(40, 0.05)
+
+
+def test_winning_threshold_calculation(mock_models_json):
+  """勝利しきい値の計算テスト。"""
+  predictor = DPOptimalStrategyPredictor(mock_models_json)
+
+  # age 36 をテスト。
+  # last_y_withdraw = 100.0 (age 35 の実績)
+  # expected_growth = avg_y_withdraw[36] / avg_y_withdraw[35] = 110.0 / 100.0 = 1.1
+  # mu = 0.01, sigma = 0.04
+  # z_score = 2.0 (テスト用)
+  # unexpected_cpi_jump = (1 + 0.01 + 2.0 * 0.04) / (1 + 0.01) = 1.09 / 1.01 = 1.07920792
+  # m_n = 9.0 (age 36)
+  # worst_case_y_n = 100.0 * 1.1 * 1.07920792 = 118.712871
+  # threshold = 9.0 * 118.712871 = 1068.4158
+  
+  threshold = predictor.calculate_winning_threshold(36, 100.0, z_score=2.0)
+  assert pytest.approx(threshold) == 1068.41583
+
+
+def test_get_a_opt_with_winning_threshold(mock_models_json):
+  """勝利しきい値を考慮した A の予測テスト。"""
+  predictor = DPOptimalStrategyPredictor(mock_models_json)
+
+  # z_score=2.0 のとき、しきい値 = 1068.41583
+  # ケース1: 資産がしきい値を超える場合 (initial_wealth = 2000.0)
+  # A = (2000 - 1068.41583) / 2000 = 931.58417 / 2000 = 0.465792
+  a1 = predictor.get_a_opt_with_winning_threshold(36, 2000.0, 100.0, z_score=2.0)
+  assert pytest.approx(a1) == 0.465792
+
+  # ケース2: 資産がしきい値を下回る場合 (initial_wealth = 1000.0)
+  # 通常の DP モデルを使用。
+  # expected_y_n = 100.0 * 1.1 = 110.0
+  # s_rate = 110 / 1000 = 0.11
+  # R=0.11 は境界 (0.10) 以上なので predict_a_opt は 1.0
+  a2 = predictor.get_a_opt_with_winning_threshold(36, 1000.0, 100.0, z_score=2.0)
+  assert a2 == 1.0
+
+
+def test_get_a_opt_with_winning_threshold_vectorized(mock_models_json):
+  """勝利しきい値を考慮した A の予測テスト（ベクトル化）。"""
+  predictor = DPOptimalStrategyPredictor(mock_models_json)
+
+  # z_score=2.0 のとき、しきい値 = 1068.41583
+  wealth = np.array([2000.0, 1000.0])
+  last_y = np.array([100.0, 100.0])
+
+  res = predictor.get_a_opt_with_winning_threshold(36, wealth, last_y, z_score=2.0)
+  assert isinstance(res, np.ndarray)
+  assert res.shape == (2,)
+  assert pytest.approx(res[0]) == 0.465792
+  assert res[1] == 1.0

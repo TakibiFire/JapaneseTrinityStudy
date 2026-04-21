@@ -58,9 +58,19 @@ class DPOptimalStrategyPredictor:
 
     self._a_opt_models: Dict[int, AOptModel] = {}
     self._p_surv_models: Dict[int, PSurvModel] = {}
+    self._avg_y_withdraws: Dict[int, float] = {}
+    self._winning_multipliers: Dict[int, float] = {}
+    self._cpi_annual_mu: float = raw_models.get("cpi_annual_mu", 0.0)
+    self._cpi_annual_sigma: float = raw_models.get("cpi_annual_sigma", 0.0)
 
     for age_str, data in raw_models.items():
+      if not age_str.isdigit():
+        continue
       age = int(age_str)
+      if "avg_y_withdraw" in data:
+        self._avg_y_withdraws[age] = float(data["avg_y_withdraw"])
+      if "m_winning_multiplier" in data:
+        self._winning_multipliers[age] = float(data["m_winning_multiplier"])
       if "a_opt_model" in data:
         a_data = data["a_opt_model"]
         self._a_opt_models[age] = AOptModel(
@@ -86,6 +96,110 @@ class DPOptimalStrategyPredictor:
       raise ValueError(f"Optimal A model for age {age} is not found.")
     return self._a_opt_models[age]
 
+  def get_unexpected_cpi_jump(self, z_score: float = 2.326) -> float:
+    """
+    CPI の想定外のジャンプ倍率（バッファ）を取得します。
+    unexpected_cpi_jump = (1 + mu + z_score * sigma) / (1 + mu)
+
+    Args:
+      z_score: 想定外のジャンプを計算するための Z スコア（デフォルト 2.326 は 99%ile）。
+
+    Returns:
+      float: 想定外のジャンプ倍率。
+    """
+    denom = 1.0 + self._cpi_annual_mu
+    if denom <= 0:
+      return 1.0
+    return (1.0 + self._cpi_annual_mu + z_score * self._cpi_annual_sigma) / denom
+
+  def get_winning_multiplier(self, age: int) -> float:
+    """
+    指定された年齢の勝利しきい値マルチプライヤー M_N を取得します。
+    """
+    return self._winning_multipliers.get(age, 0.0)
+
+  def calculate_winning_threshold(self,
+                                  age: int,
+                                  last_y_withdraw: Union[float, np.ndarray],
+                                  z_score: float = 2.326) -> Union[float, np.ndarray]:
+    """
+    現在の年齢と前年の支出額から、パス依存の勝利しきい値 W_N を計算します。
+    W_N = M_N * Y_{N-1} * (Avg_Y_N / Avg_Y_{N-1}) * unexpected_cpi_jump
+
+    Args:
+      age: 現在の年齢。
+      last_y_withdraw: 前年の実際の支出額（正味）。
+      z_score: 勝利しきい値の保守性を決める Z スコア（デフォルト 2.326 は 99%ile）。
+
+    Returns:
+      Union[float, np.ndarray]: パス依存の勝利しきい値（万円）。
+    """
+    m_n = self.get_winning_multiplier(age)
+    if m_n <= 0:
+      if isinstance(last_y_withdraw, np.ndarray):
+        return np.full_like(last_y_withdraw, float('inf'))
+      return float('inf')
+
+    # Y_{N-1} から Y_N (最悪ケース) を推定
+    expected_growth = self.get_spend_multiplier(age - 1, age)
+    worst_case_y_n = last_y_withdraw * expected_growth * self.get_unexpected_cpi_jump(
+        z_score)
+
+    return m_n * worst_case_y_n
+
+  def get_a_opt_with_winning_threshold(self,
+                                       age: int,
+                                       initial_wealth: Union[float, np.ndarray],
+                                       last_y_withdraw: Union[float, np.ndarray],
+                                       z_score: float = 2.326) -> Union[float, np.ndarray]:
+    """
+    勝利しきい値を考慮して、最適な資産配分 A を決定します。
+    もし X_N > W_N であれば、W_N を安全資産に割り当て、残りをオルカンに割り当てます。
+    そうでなければ、通常の DP モデルに従います。
+
+    Args:
+      age: 現在の年齢。
+      initial_wealth: 年始の総資産（税引き前、あるいは税引き後の保守的見積もり）。
+      last_y_withdraw: 前年の実際の支出額（正味）。
+      z_score: 勝利しきい値の保守性を決める Z スコア（デフォルト 2.326 は 99%ile）。
+
+    Returns:
+      Union[float, np.ndarray]: 最適な株式比率 [0.0, 1.0]。
+    """
+    w_n = self.calculate_winning_threshold(age, last_y_withdraw, z_score)
+
+    # スカラーの場合
+    if isinstance(initial_wealth, (float, int)):
+      if initial_wealth > w_n:
+        return (initial_wealth - w_n) / initial_wealth
+      
+      expected_growth = self.get_spend_multiplier(age - 1, age)
+      expected_y_n = last_y_withdraw * expected_growth
+      s_rate = expected_y_n / initial_wealth
+      return cast(float, self.predict_a_opt(age, s_rate))
+    
+    # 配列の場合
+    wealth_arr = np.asarray(initial_wealth, dtype=np.float64)
+    last_y_arr = np.asarray(last_y_withdraw, dtype=np.float64)
+    w_n_arr = np.asarray(w_n, dtype=np.float64)
+
+    # 勝利判定
+    won_mask = wealth_arr > w_n_arr
+    res = np.zeros_like(wealth_arr)
+
+    # 勝利した場合: A = (X_N - W_N) / X_N
+    res[won_mask] = (wealth_arr[won_mask] - w_n_arr[won_mask]) / wealth_arr[won_mask]
+
+    # 勝利していない場合: 通常の DP
+    not_won_mask = ~won_mask
+    if np.any(not_won_mask):
+      expected_growth = self.get_spend_multiplier(age - 1, age)
+      expected_y_n = last_y_arr[not_won_mask] * expected_growth
+      s_rate = expected_y_n / wealth_arr[not_won_mask]
+      res[not_won_mask] = self.predict_a_opt(age, s_rate)
+
+    return res
+
   def get_p_surv_model(self, age: int) -> PSurvModel:
     """
     指定された年齢の生存確率モデルを取得します。
@@ -94,6 +208,33 @@ class DPOptimalStrategyPredictor:
       raise ValueError(
           f"Survival probability model for age {age} is not found.")
     return self._p_surv_models[age]
+
+  def get_spend_multiplier(self, age_from: int, age_to: int) -> float:
+    """
+    指定された年齢間の平均支出（Withdrawal）の比率（倍率）を取得します。
+    投影に使用されます。
+    """
+    if age_from not in self._avg_y_withdraws or age_to not in self._avg_y_withdraws:
+      return 1.0
+
+    y_from = self._avg_y_withdraws[age_from]
+    y_to = self._avg_y_withdraws[age_to]
+
+    if y_from <= 0 or y_to <= 0:
+      raise ValueError(
+          f"Average withdrawal must be positive for multiplier calculation. Age {age_from}: {y_from}, Age {age_to}: {y_to}"
+      )
+
+    return y_to / y_from
+
+  def project_s_rate(self, age_from: int, s_rate_from: Union[float, np.ndarray],
+                     age_to: int) -> Union[float, np.ndarray]:
+    """
+    age_from における支出率 s_rate_from を、age_to における支出率に投影します。
+    S_to = S_from * (Avg_Y_to / Avg_Y_from) として計算されます。
+    """
+    multiplier = self.get_spend_multiplier(age_from, age_to)
+    return s_rate_from * multiplier
 
   def predict_a_opt(
       self, age: int, s_rate: Union[float,

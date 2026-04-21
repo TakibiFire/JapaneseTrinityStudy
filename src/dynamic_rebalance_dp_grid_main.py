@@ -141,7 +141,7 @@ def main():
                    cashflow_type=CashflowType.REGULAR))
 
   # 年金受給: 60歳から (20年後 = 240ヶ月目から)
-  receipt_start_month = (PENSION_START_AGE - START_AGE) * 12
+  receipt_start_month = max((PENSION_START_AGE - START_AGE) * 12, 0)
   cf_configs.append(
       PensionConfig(name="Pension_Receipt_Kousei",
                     amount=KOUSEI_ANNUAL / 12.0,
@@ -231,10 +231,17 @@ def main():
 
         def dynamic_rebalance_fn(total_net, annual_spend, rem_years,
                                  post_tax_net):
-          current_age = START_AGE + int(YEARS - rem_years)
-          s_rate = annual_spend / np.maximum(post_tax_net, 1.0)
-          predict_age = min(current_age, 94)
-          ratio = dp_predictor.predict_a_opt(predict_age, s_rate)
+          # 年齢の補正: core.py で rem_years に足されているバッファ (0.25) を引き、
+          # 経過年数 (elapsed_years) を正確に算出する。
+          # リバランスは年始に行われるため、これから始まる年度の年齢を使用する。
+          elapsed_years = int(round(YEARS - (rem_years - 0.25)))
+          predict_age = START_AGE + elapsed_years
+
+          # 勝利しきい値を考慮した最適な株式比率を予測
+          # annual_spend は前月の支出を12倍したもの（Y_{N-1} の近似）
+          ratio = dp_predictor.get_a_opt_with_winning_threshold(
+              predict_age, post_tax_net, annual_spend)
+
           return {ORUKAN_NAME: ratio, ZERO_RISK_NAME: 1.0 - ratio}
 
       strategy = Strategy(name=f"{strat_name}_Rule{rule}",

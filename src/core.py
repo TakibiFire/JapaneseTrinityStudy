@@ -493,7 +493,7 @@ def simulate_strategy(
               if idx < len(reb_paths) and reb_paths[idx]:
                 mask_idx = np.sum(reb_paths[:idx])
                 debug_results[idx].append(
-                    f"[Debug Path {idx}] Month {m} Rebalance: rem_years={rem_years:.4f}, total_net={total_net[mask_idx]:.2f}, target_ratios={ {k: (v if isinstance(v, float) else v[mask_idx]) for k, v in target_ratios.items()} }"
+                    f"[Debug Path {idx}] Month {m} Rebalance: cur_ann_spend={cur_ann_spend[mask_idx]:.2f}, rem_years={rem_years:.4f}, total_net={total_net[mask_idx]:.2f}, post_tax_net={post_tax_net[mask_idx]:.2f}, target_ratios={ {k: (v if isinstance(v, float) else v[mask_idx]) for k, v in target_ratios.items()} }"
                 )
           # -------------
         else:
