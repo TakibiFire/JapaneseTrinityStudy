@@ -80,7 +80,7 @@ def test_predict_a_opt_scalar(mock_models_json):
   assert predictor.predict_a_opt(35, 0.10) == 1.0
   assert predictor.predict_a_opt(35, 0.11) == 1.0
 
-  # 中間値: R=0.06 -> (1.0 + 0.5) / 2 = 0.75 ? 
+  # 中間値: R=0.06 -> (1.0 + 0.5) / 2 = 0.75 ?
   # PCHIP だが 2点間は線形
   val = predictor.predict_a_opt(35, 0.06)
   assert isinstance(val, float)
@@ -162,7 +162,7 @@ def test_winning_threshold_calculation(mock_models_json):
   # m_n = 9.0 (age 36)
   # worst_case_y_n = 100.0 * 1.1 * 1.07920792 = 118.712871
   # threshold = 9.0 * 118.712871 = 1068.4158
-  
+
   threshold = predictor.calculate_winning_threshold(36, 100.0, z_score=2.0)
   assert pytest.approx(threshold) == 1068.41583
 
@@ -174,7 +174,10 @@ def test_get_a_opt_with_winning_threshold(mock_models_json):
   # z_score=2.0 のとき、しきい値 = 1068.41583
   # ケース1: 資産がしきい値を超える場合 (initial_wealth = 2000.0)
   # A = (2000 - 1068.41583) / 2000 = 931.58417 / 2000 = 0.465792
-  a1 = predictor.get_a_opt_with_winning_threshold(36, 2000.0, 100.0, z_score=2.0)
+  a1 = predictor.get_a_opt_with_winning_threshold(36,
+                                                  2000.0,
+                                                  100.0,
+                                                  z_score_for_winning=2.0)
   assert pytest.approx(a1) == 0.465792
 
   # ケース2: 資産がしきい値を下回る場合 (initial_wealth = 1000.0)
@@ -182,7 +185,10 @@ def test_get_a_opt_with_winning_threshold(mock_models_json):
   # expected_y_n = 100.0 * 1.1 = 110.0
   # s_rate = 110 / 1000 = 0.11
   # R=0.11 は境界 (0.10) 以上なので predict_a_opt は 1.0
-  a2 = predictor.get_a_opt_with_winning_threshold(36, 1000.0, 100.0, z_score=2.0)
+  a2 = predictor.get_a_opt_with_winning_threshold(36,
+                                                  1000.0,
+                                                  100.0,
+                                                  z_score_for_winning=2.0)
   assert a2 == 1.0
 
 
@@ -194,7 +200,10 @@ def test_get_a_opt_with_winning_threshold_vectorized(mock_models_json):
   wealth = np.array([2000.0, 1000.0])
   last_y = np.array([100.0, 100.0])
 
-  res = predictor.get_a_opt_with_winning_threshold(36, wealth, last_y, z_score=2.0)
+  res = predictor.get_a_opt_with_winning_threshold(36,
+                                                   wealth,
+                                                   last_y,
+                                                   z_score_for_winning=2.0)
   assert isinstance(res, np.ndarray)
   assert res.shape == (2,)
   assert pytest.approx(res[0]) == 0.465792

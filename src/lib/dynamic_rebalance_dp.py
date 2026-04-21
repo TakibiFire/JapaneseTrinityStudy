@@ -110,7 +110,8 @@ class DPOptimalStrategyPredictor:
     denom = 1.0 + self._cpi_annual_mu
     if denom <= 0:
       return 1.0
-    return (1.0 + self._cpi_annual_mu + z_score * self._cpi_annual_sigma) / denom
+    return (1.0 + self._cpi_annual_mu +
+            z_score * self._cpi_annual_sigma) / denom
 
   def get_winning_multiplier(self, age: int) -> float:
     """
@@ -118,10 +119,11 @@ class DPOptimalStrategyPredictor:
     """
     return self._winning_multipliers.get(age, 0.0)
 
-  def calculate_winning_threshold(self,
-                                  age: int,
-                                  last_y_withdraw: Union[float, np.ndarray],
-                                  z_score: float = 2.326) -> Union[float, np.ndarray]:
+  def calculate_winning_threshold(
+      self,
+      age: int,
+      last_y_withdraw: Union[float, np.ndarray],
+      z_score: float = 2.326) -> Union[float, np.ndarray]:
     """
     現在の年齢と前年の支出額から、パス依存の勝利しきい値 W_N を計算します。
     W_N = M_N * Y_{N-1} * (Avg_Y_N / Avg_Y_{N-1}) * unexpected_cpi_jump
@@ -147,11 +149,13 @@ class DPOptimalStrategyPredictor:
 
     return m_n * worst_case_y_n
 
-  def get_a_opt_with_winning_threshold(self,
-                                       age: int,
-                                       initial_wealth: Union[float, np.ndarray],
-                                       last_y_withdraw: Union[float, np.ndarray],
-                                       z_score: float = 2.326) -> Union[float, np.ndarray]:
+  def get_a_opt_with_winning_threshold(
+      self,
+      age: int,
+      initial_wealth: Union[float, np.ndarray],
+      last_y_withdraw: Union[float, np.ndarray],
+      z_score_for_winning: float = 2.326,
+      z_score_for_next_spend: float = 2.326) -> Union[float, np.ndarray]:
     """
     勝利しきい値を考慮して、最適な資産配分 A を決定します。
     もし X_N > W_N であれば、W_N を安全資産に割り当て、残りをオルカンに割り当てます。
@@ -161,23 +165,26 @@ class DPOptimalStrategyPredictor:
       age: 現在の年齢。
       initial_wealth: 年始の総資産（税引き前、あるいは税引き後の保守的見積もり）。
       last_y_withdraw: 前年の実際の支出額（正味）。
-      z_score: 勝利しきい値の保守性を決める Z スコア（デフォルト 2.326 は 99%ile）。
-
+      z_score_for_winning: 勝利しきい値の保守性を決める Z スコア
+        （デフォルト 2.326 は 99%ile）。
+      z_score_for_next_spend: 来年の支出の保守性を決める Z スコア
+        （デフォルト 2.326 は 99%ile）。
     Returns:
       Union[float, np.ndarray]: 最適な株式比率 [0.0, 1.0]。
     """
-    w_n = self.calculate_winning_threshold(age, last_y_withdraw, z_score)
+    w_n = self.calculate_winning_threshold(age, last_y_withdraw,
+                                           z_score_for_winning)
 
     # スカラーの場合
     if isinstance(initial_wealth, (float, int)):
       if initial_wealth > w_n:
         return (initial_wealth - w_n) / initial_wealth
-      
+
       expected_growth = self.get_spend_multiplier(age - 1, age)
       expected_y_n = last_y_withdraw * expected_growth
       s_rate = expected_y_n / initial_wealth
       return cast(float, self.predict_a_opt(age, s_rate))
-    
+
     # 配列の場合
     wealth_arr = np.asarray(initial_wealth, dtype=np.float64)
     last_y_arr = np.asarray(last_y_withdraw, dtype=np.float64)
@@ -188,12 +195,14 @@ class DPOptimalStrategyPredictor:
     res = np.zeros_like(wealth_arr)
 
     # 勝利した場合: A = (X_N - W_N) / X_N
-    res[won_mask] = (wealth_arr[won_mask] - w_n_arr[won_mask]) / wealth_arr[won_mask]
+    res[won_mask] = (wealth_arr[won_mask] -
+                     w_n_arr[won_mask]) / wealth_arr[won_mask]
 
     # 勝利していない場合: 通常の DP
     not_won_mask = ~won_mask
     if np.any(not_won_mask):
-      expected_growth = self.get_spend_multiplier(age - 1, age)
+      expected_growth = self.get_spend_multiplier(
+          age - 1, age) * self.get_unexpected_cpi_jump(z_score_for_next_spend)
       expected_y_n = last_y_arr[not_won_mask] * expected_growth
       s_rate = expected_y_n / wealth_arr[not_won_mask]
       res[not_won_mask] = self.predict_a_opt(age, s_rate)
