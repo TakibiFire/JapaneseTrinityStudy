@@ -458,14 +458,28 @@ def main():
           # (以前の「未来予知」実装から、不確実性を考慮した確率的 DP に移行)
 
           # 7点離散近似（標準正規分布）
+          # 各点は z=-3, -2, -1, 0, 1, 2, 3 を代表値とし、
+          # 境界は -2.5, -1.5, -0.5, 0.5, 1.5, 2.5 とした時の確率密度
           z_scores = np.array([-3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0])
-          weights = np.array(
-              [0.0062, 0.0606, 0.2417, 0.3829, 0.2417, 0.0606, 0.0062])
+          weights = np.array([
+              0.00620967, 0.06059754, 0.24173034, 0.38292490, 0.24173034,
+              0.06059754, 0.00620967
+          ])
 
           # 今年の支出 Y_N から来年の支出 Y_{N+1} の分布を推定
-          cpi_jumps = 1.0 + cpi_annual_mu + z_scores * cpi_annual_sigma
+          # 期待される成長率 (加齢による統計的な支出変化 + 平均インフレ)
+          avg_y_next = float(np.mean(dp_results[age + 1]["y_withdraw"]))
+          avg_y_curr = float(np.mean(y_withdraw_n))
+          expected_growth = avg_y_next / avg_y_curr
+
+          # CPI のブレ (残差)
+          # unexpected_cpi_jump = (1 + mu + z*sigma) / (1 + mu)
+          relative_cpi_jumps = (1.0 + cpi_annual_mu +
+                                z_scores * cpi_annual_sigma) / (1.0 +
+                                                                cpi_annual_mu)
+
           # y_next_dist shape: (n_sim, 7)
-          y_next_dist = y_withdraw_n[:, np.newaxis] * cpi_jumps
+          y_next_dist = y_withdraw_n[:, np.newaxis] * expected_growth * relative_cpi_jumps
 
           # 7つの R_next シナリオを計算
           # x_next shape: (n_sim,) -> (n_sim, 7)
