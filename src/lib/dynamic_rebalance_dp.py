@@ -155,7 +155,7 @@ class DPOptimalStrategyPredictor:
       initial_wealth: Union[float, np.ndarray],
       last_y_withdraw: Union[float, np.ndarray],
       z_score_for_winning: float = 2.326,
-      z_score_for_next_spend: float = 2.326) -> Union[float, np.ndarray]:
+      z_score_for_next_spend: float = 0.0) -> Union[float, np.ndarray]:
     """
     勝利しきい値を考慮して、最適な資産配分 A を決定します。
     もし X_N > W_N であれば、W_N を安全資産に割り当て、残りをオルカンに割り当てます。
@@ -168,7 +168,7 @@ class DPOptimalStrategyPredictor:
       z_score_for_winning: 勝利しきい値の保守性を決める Z スコア
         （デフォルト 2.326 は 99%ile）。
       z_score_for_next_spend: 来年の支出の保守性を決める Z スコア
-        （デフォルト 2.326 は 99%ile）。
+        （デフォルト 0.0 は期待値。DPモデルが不確実性を内包するため、期待値を使用する）。
     Returns:
       Union[float, np.ndarray]: 最適な株式比率 [0.0, 1.0]。
     """
@@ -181,6 +181,8 @@ class DPOptimalStrategyPredictor:
         return (initial_wealth - w_n) / initial_wealth
 
       expected_growth = self.get_spend_multiplier(age - 1, age)
+      if z_score_for_next_spend != 0:
+        expected_growth *= self.get_unexpected_cpi_jump(z_score_for_next_spend)
       expected_y_n = last_y_withdraw * expected_growth
       s_rate = expected_y_n / initial_wealth
       return cast(float, self.predict_a_opt(age, s_rate))
@@ -201,8 +203,9 @@ class DPOptimalStrategyPredictor:
     # 勝利していない場合: 通常の DP
     not_won_mask = ~won_mask
     if np.any(not_won_mask):
-      expected_growth = self.get_spend_multiplier(
-          age - 1, age) * self.get_unexpected_cpi_jump(z_score_for_next_spend)
+      expected_growth = self.get_spend_multiplier(age - 1, age)
+      if z_score_for_next_spend != 0:
+        expected_growth *= self.get_unexpected_cpi_jump(z_score_for_next_spend)
       expected_y_n = last_y_arr[not_won_mask] * expected_growth
       s_rate = expected_y_n / wealth_arr[not_won_mask]
       res[not_won_mask] = self.predict_a_opt(age, s_rate)

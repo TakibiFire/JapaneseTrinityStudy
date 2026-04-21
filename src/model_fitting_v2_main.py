@@ -454,9 +454,22 @@ def main():
           # 最終年 (95歳) は今年生存していれば P=1.0
           survival = (~bankrupt_this_year).astype(float)
         else:
-          # 次年度の R = Y_withdraw_{N+1} / X_{N+1}
-          next_y_withdraw = cast(np.ndarray, dp_results[age + 1]["y_withdraw"])
-          r_next = next_y_withdraw / np.maximum(x_next, 1e-7)
+          # 次年度の生存確率を CPI 分布に基づいて期待値として計算
+          # (以前の「未来予知」実装から、不確実性を考慮した確率的 DP に移行)
+
+          # 7点離散近似（標準正規分布）
+          z_scores = np.array([-3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0])
+          weights = np.array(
+              [0.0062, 0.0606, 0.2417, 0.3829, 0.2417, 0.0606, 0.0062])
+
+          # 今年の支出 Y_N から来年の支出 Y_{N+1} の分布を推定
+          cpi_jumps = 1.0 + cpi_annual_mu + z_scores * cpi_annual_sigma
+          # y_next_dist shape: (n_sim, 7)
+          y_next_dist = y_withdraw_n[:, np.newaxis] * cpi_jumps
+
+          # 7つの R_next シナリオを計算
+          # x_next shape: (n_sim,) -> (n_sim, 7)
+          r_next_scenarios = y_next_dist / np.maximum(x_next[:, np.newaxis], 1e-7)
 
           # 次年度の生存確率モデルを取得
           next_model = dp_results[age + 1]["p_model"]
@@ -465,30 +478,39 @@ def main():
           next_p_max = cast(float, dp_results[age + 1].get("p_max", 1.0))
           next_p_min = cast(float, dp_results[age + 1].get("p_min", 0.0))
 
-          p_next = np.zeros(n_sim)
+          # 2D配列で生存確率を計算 (n_sim, 7)
+          p_next_scenarios = np.zeros((n_sim, 7))
 
-          # 今年生きていて、かつ来年の R が R_min 以下なら P_max
-          p_next[(~bankrupt_this_year) & (r_next <= next_r_min)] = next_p_max
-          # 今年生きていて、かつ来年の R が R_max 以上なら P_min
-          p_next[(~bankrupt_this_year) & (r_next >= next_r_max)] = next_p_min
+          # マスクの作成
+          bankrupt_mask = bankrupt_this_year[:, np.newaxis]
+          # ブロードキャストされる
+          p_next_scenarios[~bankrupt_mask & (r_next_scenarios <= next_r_min)] = next_p_max
+          p_next_scenarios[~bankrupt_mask & (r_next_scenarios >= next_r_max)] = next_p_min
 
-          # モデル適用範囲内
-          in_range = (~bankrupt_this_year) & (r_next > next_r_min) & (
-              r_next < next_r_max)
+          in_range = ~bankrupt_mask & (r_next_scenarios > next_r_min) & (
+              r_next_scenarios < next_r_max)
           if np.any(in_range):
-            p_next[in_range] = pchip_interpolate(next_model["r_points"],
-                                                 next_model["p_points"],
-                                                 r_next[in_range])
+            # pchip_interpolate は 1D 配列を期待するため、flatten して適用
+            p_next_scenarios[in_range] = pchip_interpolate(
+                next_model["r_points"], next_model["p_points"],
+                r_next_scenarios[in_range])
 
-          survival = p_next
+          # 期待値を計算 (各シナリオの重み付き平均)
+          survival = np.sum(p_next_scenarios * weights, axis=1)  # shape: (n_sim,)
 
         # デバッグ情報の表示
         if age == args.debug_age and debug_paths:
           print(f"      [Path Debug] R={r:.4f}, A={a:.2f}")
           for p_idx in debug_paths:
             if p_idx < n_sim:
+              # Y_next, R_next は 期待値（z=0, index 3）を表示
+              y_next_expected = 0.0
+              r_next_expected = 0.0
+              if age < END_AGE - 1:
+                y_next_expected = float(y_next_dist[p_idx, 3])
+                r_next_expected = float(r_next_scenarios[p_idx, 3])
               print(
-                  f"        Path {p_idx}: X_next={x_next[p_idx]:.2f}, Y_next={cast(np.ndarray, next_y_withdraw)[p_idx] if age < END_AGE-1 else 0:.2f}, R_next={cast(np.ndarray, r_next)[p_idx] if age < END_AGE-1 else 0:.4f}, P_surv={survival[p_idx]:.4f}"
+                  f"        Path {p_idx}: X_next={x_next[p_idx]:.2f}, Y_next(exp)={y_next_expected:.2f}, R_next(exp)={r_next_expected:.4f}, P_surv={survival[p_idx]:.4f}"
               )
 
         # 全パス의 平均生存確率

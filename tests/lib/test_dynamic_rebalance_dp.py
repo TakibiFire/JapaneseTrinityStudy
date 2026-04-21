@@ -182,6 +182,7 @@ def test_get_a_opt_with_winning_threshold(mock_models_json):
 
   # ケース2: 資産がしきい値を下回る場合 (initial_wealth = 1000.0)
   # 通常の DP モデルを使用。
+  # z_score_for_next_spend=0.0 (デフォルト)
   # expected_y_n = 100.0 * 1.1 = 110.0
   # s_rate = 110 / 1000 = 0.11
   # R=0.11 は境界 (0.10) 以上なので predict_a_opt は 1.0
@@ -190,6 +191,26 @@ def test_get_a_opt_with_winning_threshold(mock_models_json):
                                                   100.0,
                                                   z_score_for_winning=2.0)
   assert a2 == 1.0
+
+  # ケース3: z_score_for_next_spend の効果を確認
+  # wealth = 2000.0, last_y = 100.0 (w_n = 1068.41583 なので勝利条件は満たすが、
+  # 比較のために内部の DP ロジックを直接テストしたい)
+  # 勝利条件を回避するために w_n を大きくする (z_score_for_winning を大きくする)
+  # s_rate (z=0) = 0.055 -> A = 0.78125
+  a3 = predictor.get_a_opt_with_winning_threshold(36,
+                                                  2000.0,
+                                                  100.0,
+                                                  z_score_for_winning=100.0,
+                                                  z_score_for_next_spend=0.0)
+  assert pytest.approx(a3) == 0.78125
+
+  # s_rate (z=2.0) = 0.059356 -> A = 0.754022...
+  a4 = predictor.get_a_opt_with_winning_threshold(36,
+                                                  2000.0,
+                                                  100.0,
+                                                  z_score_for_winning=100.0,
+                                                  z_score_for_next_spend=2.0)
+  assert pytest.approx(a4) == 0.754022277
 
 
 def test_get_a_opt_with_winning_threshold_vectorized(mock_models_json):
