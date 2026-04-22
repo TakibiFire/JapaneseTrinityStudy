@@ -13,17 +13,18 @@ Optimal Strategy V2 モデルデバッグツール。
 5. 指定したパスインデックス（--trace）について、指定年齢から95歳までの推移を追跡。
 
 使用例:
-  # 35歳で支出率 0.04, 0.05, 0.10 をテスト
-  python src/model_fitting_v2_debug.py --age 35 --test_r 0.04,0.05,0.10
+  # 40歳で支出率 0.04, 0.05, 0.10 をテスト
+  python src/model_fitting_v2_debug.py --age 40 --test_r 0.04,0.05,0.10
 
   # 60歳で詳細なシミュレーション（n_sim=5000）を実行
   python src/model_fitting_v2_debug.py --age 60 --test_r 0.04 --n_sim 5000
 
-  # パス 0 の 35歳から 95歳までの推移を表示
-  python src/model_fitting_v2_debug.py --age 35 --test_r 0.04 --trace 0
+  # パス 0 の 40歳から 95歳までの推移を表示
+  python src/model_fitting_v2_debug.py --age 40 --test_r 0.04 --trace 0
 """
 
 import argparse
+from typing import Any, List, Union, cast
 
 import numpy as np
 
@@ -33,7 +34,8 @@ from src.lib.asset_generator import (DerivedAsset, ForexAsset,
                                      SlideAdjustedCpiAsset,
                                      YearlyLogNormalArithmetic,
                                      generate_monthly_asset_prices)
-from src.lib.cashflow_generator import PensionConfig, generate_cashflows
+from src.lib.cashflow_generator import (CashflowConfig, PensionConfig,
+                                        generate_cashflows)
 from src.lib.dynamic_rebalance_dp import DPOptimalStrategyPredictor
 from src.lib.retired_spending import (SpendingType,
                                       get_retired_spending_multipliers)
@@ -42,7 +44,7 @@ from src.lib.simulation_defaults import (AcwiModelKey,
                                          get_cpi_ar12_config)
 
 # 共通定数
-START_AGE = 35
+START_AGE = 40
 END_AGE = 96  # 95歳の終わりまで
 YEARS = END_AGE - START_AGE
 SEED = 42
@@ -64,7 +66,7 @@ MACRO_ECONOMIC_SLIDE_END_YEAR = 2057
 
 def main():
   parser = argparse.ArgumentParser(description="Optimal Strategy V2 モデルデバッグツール")
-  parser.add_argument("--age", type=int, default=35, help="デバッグ対象の年齢")
+  parser.add_argument("--age", type=int, default=40, help="デバッグ対象の年齢")
   parser.add_argument("--test_r",
                       type=str,
                       default="0.04,0.05,0.10",
@@ -106,9 +108,9 @@ def main():
                                                  n_months=YEARS * 12,
                                                  seed=SEED)
 
-  cf_configs = []
+  cf_configs: List[CashflowConfig] = []
   cf_configs.append(
-      PensionConfig(name="Pension_Premium",
+      PensionConfig(name="Pension_Premium_Kiso",
                     amount=-20.4 / 12.0,
                     start_month=0,
                     end_month=(60 - START_AGE) * 12,
@@ -116,7 +118,7 @@ def main():
   reduction_rate = 0.76
   cf_configs.append(
       PensionConfig(name="Pension_Receipt_Kousei",
-                    amount=(76.6 * reduction_rate) / 12.0,
+                    amount=(49.2 * reduction_rate) / 12.0,
                     start_month=(60 - START_AGE) * 12,
                     cpi_name=CPI_NAME))
   cf_configs.append(
@@ -160,7 +162,7 @@ def main():
       cp = monthly_prices[CPI_NAME][p_idx, sm:em]
       msb = spending_monthly_values[y_idx] / 10000.0
       mns = msb * cp
-      pp = monthly_cashflows["Pension_Premium"][p_idx, sm:em]
+      pp = monthly_cashflows["Pension_Premium_Kiso"][p_idx, sm:em]
       pk = monthly_cashflows["Pension_Receipt_Kousei"][p_idx, sm:em]
       pi = monthly_cashflows["Pension_Receipt_Kiso"][p_idx, sm:em]
       mns -= (pp + pk + pi)
@@ -176,8 +178,8 @@ def main():
 
       # 予測器を使用して A と P を取得
       # モデルが存在しない場合は例外が発生しプログラムが終了する
-      pred_a = predictor.predict_a_opt(cur_age, r_n)
-      p_n = predictor.predict_p_surv(cur_age, r_n)
+      pred_a = cast(float, predictor.predict_a_opt(cur_age, r_n))
+      p_n = cast(float, predictor.predict_p_surv(cur_age, r_n))
 
       # 1年シミュレーション
       y_idx = cur_age - START_AGE
@@ -194,7 +196,7 @@ def main():
       cp = monthly_prices[CPI_NAME][path_idx, sm:em]
       msb = spending_monthly_values[y_idx] / 10000.0
       mns = msb * cp
-      pp = monthly_cashflows["Pension_Premium"][path_idx, sm:em]
+      pp = monthly_cashflows["Pension_Premium_Kiso"][path_idx, sm:em]
       pk = monthly_cashflows["Pension_Receipt_Kousei"][path_idx, sm:em]
       pi = monthly_cashflows["Pension_Receipt_Kiso"][path_idx, sm:em]
       mns -= (pp + pk + pi)
@@ -222,9 +224,11 @@ def main():
       res = simulate_strategy(strategy,
                               year_prices,
                               monthly_cashflows=year_cf,
-                              fallback_total_months=12)
+                              fallback_total_months=12,
+                              calculate_post_tax=True)
 
-      x_next = res.net_values[0]
+      assert res.post_tax_net_values is not None
+      x_next = float(res.post_tax_net_values[0])
 
       # P(N+1)
       p_next_str = "N/A"
@@ -261,11 +265,21 @@ def main():
   monthly_spend_base = spending_monthly_values[year_idx] / 10000.0
   monthly_net_spend += monthly_spend_base * cpi_path
 
-  p_premium = monthly_cashflows["Pension_Premium"][:, start_m:end_m]
+  p_premium = monthly_cashflows["Pension_Premium_Kiso"][:, start_m:end_m]
   p_kousei = monthly_cashflows["Pension_Receipt_Kousei"][:, start_m:end_m]
   p_kiso = monthly_cashflows["Pension_Receipt_Kiso"][:, start_m:end_m]
   monthly_net_spend -= (p_premium + p_kousei + p_kiso)
   y_withdraw_n = np.sum(np.maximum(0, monthly_net_spend), axis=1)
+
+  # デバッグログ: 支出のの内訳を表示
+  avg_cpi = np.mean(cpi_path)
+  avg_spend_base = monthly_spend_base * avg_cpi
+  avg_p_premium = -np.mean(p_premium) # 支払額なので正負反転
+  print(f"\n[DEBUG] Withdrawal (Y_{age}) Breakdown (Mean):")
+  print(f"  - Base Spend (Consumption + Non-Consumption Excl. Pension) * CPI: {avg_spend_base * 12:.2f} 万円/年")
+  print(f"  - Pension Premium (国民年金): {avg_p_premium * 12:.2f} 万円/年")
+  print(f"  - Total Withdrawal: {np.mean(y_withdraw_n):.2f} 万円/年")
+  print(f"  (Note: Statistics for working households at age 40 show ~504万/year, but that includes ~46万 of 厚生年金保険料 which is removed here because you are retired.)")
 
   # 翌年の情報
   next_age = age + 1
@@ -276,7 +290,7 @@ def main():
   next_end_m = (next_year_idx + 1) * 12
   next_cpi_path = monthly_prices[CPI_NAME][:, next_start_m:next_end_m]
   next_monthly_spend_base = spending_monthly_values[next_year_idx] / 10000.0
-  next_p_premium = monthly_cashflows["Pension_Premium"][:,
+  next_p_premium = monthly_cashflows["Pension_Premium_Kiso"][:,
                                                         next_start_m:next_end_m]
   next_p_kousei = monthly_cashflows[
       "Pension_Receipt_Kousei"][:, next_start_m:next_end_m]
@@ -330,7 +344,7 @@ def main():
       continue
 
     # 1. 予測された A の計算
-    predicted_a = predictor.predict_a_opt(age, r)
+    predicted_a = cast(float, predictor.predict_a_opt(age, r))
 
     # 2. テストする A の集合を決定
     # 0.0, 1.0, および Predicted A に最も近い 0.1 の倍数 2 つ
@@ -363,11 +377,12 @@ def main():
       res = simulate_strategy(strategy,
                               year_prices_all,
                               monthly_cashflows=year_cf,
-                              fallback_total_months=12)
-      x_next = res.net_values
+                              fallback_total_months=12,
+                              calculate_post_tax=True)
+      x_next_arr = cast(np.ndarray, res.post_tax_net_values)
       bankrupt_this_year = res.sustained_months < 12
 
-      r_next = next_y_withdraw / np.maximum(x_next, 1e-7)
+      r_next = next_y_withdraw / np.maximum(x_next_arr, 1e-7)
 
       # ベクトル化された生存確率予測
       p_next = predictor.predict_p_surv(next_age, r_next)
@@ -377,27 +392,36 @@ def main():
         p_next[bankrupt_this_year] = next_model.p_min
 
       avg_surv = np.mean(p_next)
-      results_for_analysis[a] = (res, x_next, r_next, p_next, avg_surv)
+      results_for_analysis[a] = (res, x_next_arr, r_next, p_next, float(avg_surv))
 
     # 4. 出力
+    # results_for_analysis[a] の型を Mypy に教える
+    def get_analysis_result(a_val: float) -> Any:
+      return results_for_analysis[a_val]
+
+    res_pred = get_analysis_result(predicted_a)
     print(
-        f"  Model Predicted A_opt: {predicted_a:.4f} -> Survival: {results_for_analysis[predicted_a][4]:.4f}"
+        f"  Model Predicted A_opt: {predicted_a:.4f} -> Survival: {res_pred[4]:.4f}"
     )
     for a in sorted_a_tests:
       if a == predicted_a:
         continue
-      print(f"  A={a:.1f}: Avg Survival={results_for_analysis[a][4]:.4f}")
+      res_a = get_analysis_result(a)
+      print(f"  A={a:.1f}: Avg Survival={res_a[4]:.4f}")
 
     # 詳細分析 (Predicted A に対して)
-    _, x_next_pred, r_next_pred, p_next_pred, _ = results_for_analysis[
-        predicted_a]
+    _, x_next_pred_arr, r_next_pred_arr, p_next_pred_arr, _ = res_pred
+    x_next_pred = cast(np.ndarray, x_next_pred_arr)
+    r_next_pred = cast(np.ndarray, r_next_pred_arr)
+    p_next_pred = cast(np.ndarray, p_next_pred_arr)
+
     print(
         f"  [Analysis for predicted A={predicted_a:.4f}] State at Start of Age {age+1}:"
     )
     percentiles = [25, 50, 75]
     for p in percentiles:
       val = np.percentile(x_next_pred, p)
-      idx = np.abs(x_next_pred - val).argmin()
+      idx = int(np.abs(x_next_pred - val).argmin())
       print(
           f"    [X-Percentile {p}%] Path {idx}: X_{age+1}={x_next_pred[idx]:.2f}, Y_{age+1}={next_y_withdraw[idx]:.2f}, R_{age+1}={r_next_pred[idx]:.4f}, P_surv={p_next_pred[idx]:.4f}"
       )
@@ -405,7 +429,7 @@ def main():
     print("")
     for p in percentiles:
       val = np.percentile(r_next_pred, p)
-      idx = np.abs(r_next_pred - val).argmin()
+      idx = int(np.abs(r_next_pred - val).argmin())
       print(
           f"    [R-Percentile {p}%] Path {idx}: X_{age+1}={x_next_pred[idx]:.2f}, Y_{age+1}={next_y_withdraw[idx]:.2f}, R_{age+1}={r_next_pred[idx]:.4f}, P_surv={p_next_pred[idx]:.4f}"
       )
