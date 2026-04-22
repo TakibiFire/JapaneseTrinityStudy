@@ -8,9 +8,11 @@
 - 資産構成: FX, ACWI (fat tail), CPI, Pension CPI (slide_rate=0.005)
 - 世帯設定: 1人世帯, 年金受給開始60歳 (H1_P60)
 - 比較戦略:
-    1. 固定最適比率 (Fixed Optimal Ratio)
-    2. ダイナミック最適比率 (V1)
-    3. Dynamic Rebalance DP (V2)
+    1. オルカン100%
+    2. 無リスク100%
+    3. 固定最適比率 (Fixed Optimal Ratio)
+    4. 一般的な最適リバランス (Previous V1)
+    5. 支出に合わせた最適リバランス (Previous V2/DP)
 """
 
 import argparse
@@ -171,7 +173,7 @@ def main():
   # 3. グリッドループ
   spending_rules = [3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 7.0]
   strategies_to_compare = [
-      "固定最適比率", "ダイナミック最適比率 (V1)", "Dynamic Rebalance DP (V2)"
+      "オルカン100%", "無リスク100%", "固定最適比率", "一般的な最適リバランス", "支出に合わせた最適リバランス"
   ]
 
   results: List[Dict[str, Any]] = []
@@ -203,19 +205,32 @@ def main():
       it += 1
 
       # 戦略に応じた動的リバランス関数の定義
-      if strat_name == "固定最適比率":
+      if strat_name == "オルカン100%":
+
+        def dynamic_rebalance_fn(total_net, annual_spend, rem_years,
+                                 post_tax_net):
+          return {ORUKAN_NAME: 1.0, ZERO_RISK_NAME: 0.0}
+
+      elif strat_name == "無リスク100%":
+
+        def dynamic_rebalance_fn(total_net, annual_spend, rem_years,
+                                 post_tax_net):
+          return {ORUKAN_NAME: 0.0, ZERO_RISK_NAME: 1.0}
+
+      elif strat_name == "固定最適比率":
         fixed_ratio = calculate_optimal_strategy(
             s_rate=np.array([rule / 100.0]),
             remaining_years=YEARS,
             base_yield=ZERO_RISK_YIELD,
             tax_rate=TAX_RATE,
             inflation_rate=INFLATION_RATE)[0]
+        print(f"Rule {rule}%: 固定最適比率 = {fixed_ratio:.4f}")
 
         def dynamic_rebalance_fn(total_net, annual_spend, rem_years,
                                  post_tax_net):
           return {ORUKAN_NAME: fixed_ratio, ZERO_RISK_NAME: 1.0 - fixed_ratio}
 
-      elif strat_name == "ダイナミック最適比率 (V1)":
+      elif strat_name == "一般的な最適リバランス":
 
         def dynamic_rebalance_fn(total_net, annual_spend, rem_years,
                                  post_tax_net):
@@ -227,7 +242,7 @@ def main():
                                              inflation_rate=INFLATION_RATE)
           return {ORUKAN_NAME: ratio, ZERO_RISK_NAME: 1.0 - ratio}
 
-      else:  # Dynamic Rebalance DP (V2)
+      else:  # 支出に合わせた最適リバランス
 
         def dynamic_rebalance_fn(total_net, annual_spend, rem_years,
                                  post_tax_net):
@@ -284,7 +299,7 @@ def main():
       results.append(row_survival)
 
       # 2. 支出額のパーセンタイル (特定の条件のみ)
-      if rule == 4.0 and strat_name == "Dynamic Rebalance DP (V2)":
+      if rule == 4.0 and strat_name == "支出に合わせた最適リバランス":
         if res.annual_spends is not None:
           p25 = np.percentile(res.annual_spends, 25, axis=0)
           p50 = np.percentile(res.annual_spends, 50, axis=0)

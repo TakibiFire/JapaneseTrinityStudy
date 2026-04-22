@@ -2,8 +2,8 @@
 data/dynamic_rebalance_dp/dp_comp.csv の結果を分析・可視化するスクリプト。
 
 内容:
-1. 支出額のパーセンタイル推移可視化 (25p, 50p, 75p)
-2. 各支出率 (Spending Rule) における生存確率の比較 (Fixed Ratio, V1 Dynamic, V2 DP)
+1. 取り崩し額のパーセンタイル推移可視化 (25p, 50p, 75p)
+2. 各支出率 (Spending Rule) における生存確率の比較 (オルカン100%, 固定最適, 一般的, 支出に合わせた)
 
 Example:
   python src/analyze_dynamic_rebalance_dp_grid_main.py
@@ -21,12 +21,14 @@ from src.lib.visualize_all_yr import create_spend_percentile_chart
 # 設定
 DATA_PATH = "data/dynamic_rebalance_dp/dp_comp.csv"
 IMG_DIR = "docs/imgs/dynamic_rebalance_dp"
+START_AGE = 40
+NUM_YEARS = 55
 
 
 def run_survival_analysis(df_survival: pd.DataFrame):
   """
   生存確率グラフの生成。
-  各支出率 (spending_rule) ごとに、3つの戦略を比較するグラフを作成する。
+  各支出率 (spending_rule) ごとに、複数の戦略を比較するグラフを作成する。
   """
   print(f"\n\n{'='*20} 生存確率グラフを生成中... {'='*20}")
 
@@ -45,33 +47,43 @@ def run_survival_analysis(df_survival: pd.DataFrame):
     # あるいは簡易的な描画関数をここで作成する。
     # ここでは Altair で直接描画する。
 
-    year_cols = [str(i) for i in range(1, 56) if str(i) in df_plot.columns]
+    year_cols = [str(i) for i in range(1, NUM_YEARS + 1) if str(i) in df_plot.columns]
     id_vars = ["strategy", "spending_rule"]
-    
+
     df_long = df_plot.melt(id_vars=id_vars,
                            value_vars=year_cols,
                            var_name="Year",
                            value_name="Survival Probability (%)")
     df_long["Year"] = df_long["Year"].astype(int)
+    df_long["Age"] = df_long["Year"] + START_AGE
     df_long["Survival Probability (%)"] *= 100.0
 
     # 戦略名の順序を固定
-    strategy_order = ["固定最適比率", "ダイナミック最適比率 (V1)", "Dynamic Rebalance DP (V2)"]
+    strategy_order = [
+        "オルカン100%", "無リスク100%", "固定最適比率", "一般的な最適リバランス", "支出に合わせた最適リバランス"
+    ]
+
+    # y軸の下限を、最小値の10の倍数（切り捨て）に設定
+    min_val = df_long['Survival Probability (%)'].min()
+    y_min = (min_val // 10) * 10
+    y_max = 100
+
+    title = f"生存確率の比較: 初期支出率 {rule:g}%"
+    if y_min > 0:
+      title += f"（生存確率 {y_min:.0f}%以下は描画を省略）"
 
     chart = alt.Chart(df_long).mark_line(point=True).encode(
-        x=alt.X('Year:Q', title='経過年数 (年)'),
+        x=alt.X('Age:Q', title='年齢'),
         y=alt.Y('Survival Probability (%):Q',
                 title='生存確率 (%)',
-                scale=alt.Scale(domain=[0, 100])),
+                scale=alt.Scale(domain=[y_min, y_max])),
         color=alt.Color('strategy:N',
                         sort=strategy_order,
                         legend=alt.Legend(title="戦略", orient='top')),
-        tooltip=['Year', 'strategy', alt.Tooltip('Survival Probability (%):Q', format='.1f')]
-    ).properties(
-        title=f"生存確率の比較: 初期支出率 {rule:g}%",
-        width=600,
-        height=300
-    )
+        tooltip=[
+            'Age', 'strategy',
+            alt.Tooltip('Survival Probability (%):Q', format='.1f')
+        ]).properties(title=title, width=600, height=300)
 
     output_name = f"survival_comp_rule_{rule:g}.svg"
     output_path = os.path.join(IMG_DIR, output_name)
@@ -82,9 +94,9 @@ def run_survival_analysis(df_survival: pd.DataFrame):
 
 def run_percentile_analysis(df_all: pd.DataFrame):
   """
-  支出額パーセンタイル推移の生成。
+  取り崩し額パーセンタイル推移の生成。
   """
-  print(f"\n\n{'='*20} 支出額パーセンタイル推移グラフを生成中... {'='*20}")
+  print(f"\n\n{'='*20} 取り崩し額パーセンタイル推移グラフを生成中... {'='*20}")
 
   # data/dynamic_rebalance_dp/dp_comp.csv には rule=4.0 & V2 DP のみ支出データが含まれている
   mask = (df_all["value_type"].isin(["spend25p", "spend50p", "spend75p"]))
@@ -100,19 +112,28 @@ def run_percentile_analysis(df_all: pd.DataFrame):
     strat_df = df_plot[df_plot["strategy"] == strat]
     rule = strat_df["spending_rule"].iloc[0]
     
-    title = f"年間支出額推移: {strat}, 初期支出率 {rule:g}%"
-    output_name = f"spend_percentiles_{strat}_rule_{rule:g}.svg"
+    title = f"年間取り崩し額推移: 初期支出率 {rule:g}%"
+    # ファイル名用のスラグ作成 (日本語を避ける)
+    strat_slug = {
+        "オルカン100%": "acwi_100",
+        "無リスク100%": "zero_risk_100",
+        "固定最適比率": "fixed_optimal",
+        "一般的な最適リバランス": "v1_dynamic",
+        "支出に合わせた最適リバランス": "v2_dp"
+    }.get(strat, strat)
+
+    output_name = f"spend_percentiles_{strat_slug}_rule_{rule:g}.svg"
     # ファイル名に使用できない文字を置換
-    output_name = output_name.replace(" ", "_").replace("(", "").replace(")", "")
+    output_name = output_name.replace(" ", "_").replace("(", "").replace(")", "").replace("%", "pct")
     output_path = os.path.join(IMG_DIR, output_name)
 
     # create_spend_percentile_chart を呼び出す
-    # start_age は src/dynamic_rebalance_dp_grid_main.py に合わせ 40 としている
     create_spend_percentile_chart(strat_df,
                                   title,
                                   output_path,
-                                  start_age=40,
-                                  num_years=55)
+                                  start_age=START_AGE,
+                                  num_years=NUM_YEARS,
+                                  show_legend=False)
 
 
 def main():
@@ -121,7 +142,7 @@ def main():
     return
 
   df_all = pd.read_csv(DATA_PATH)
-  
+
   # 1. 生存確率分析
   df_survival = df_all[df_all["value_type"] == "survival"].copy()
   run_survival_analysis(df_survival)
