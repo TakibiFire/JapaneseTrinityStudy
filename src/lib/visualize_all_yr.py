@@ -350,7 +350,8 @@ def create_spend_percentile_chart(df: pd.DataFrame,
                                   start_age: int,
                                   num_years: int,
                                   width: int = 600,
-                                  height: int = 400):
+                                  height: int = 400,
+                                  show_legend: bool = True):
   """
   支出額のパーセンタイル推移(25p, 50p, 75p)を可視化する。
   Dynamic SpendingのON/OFF比較をサポートする。
@@ -412,17 +413,20 @@ def create_spend_percentile_chart(df: pd.DataFrame,
   base = alt.Chart(pivot_df).encode(x=alt.X("age:Q", title="年齢"))
 
   # Area (25p-75p)
-  area = base.mark_area(opacity=0.3).encode(
-      y=alt.Y("spend25p:Q", title="年間支出額 (万円)"),
-      y2="spend75p:Q",
-      color=alt.Color("group_label:N",
-                      scale=color_scale,
-                      title=legend_title,
-                      legend=alt.Legend(orient='top')))
+  legend_option = alt.Legend(orient='top') if show_legend else None
+  area = base.mark_area(opacity=0.3).encode(y=alt.Y("spend25p:Q",
+                                                    title="年間取り崩し額 (万円)"),
+                                            y2="spend75p:Q",
+                                            color=alt.Color(
+                                                "group_label:N",
+                                                scale=color_scale,
+                                                title=legend_title,
+                                                legend=legend_option))
 
   # Line (50p)
   line = base.mark_line().encode(y="spend50p:Q",
-                                 color=alt.Color("group_label:N"))
+                                 color=alt.Color("group_label:N",
+                                                 legend=legend_option))
 
   chart = (area + line).properties(title=title, width=width, height=height)
 
