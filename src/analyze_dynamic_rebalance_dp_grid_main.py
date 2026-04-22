@@ -20,6 +20,7 @@ from src.lib.visualize_all_yr import create_spend_percentile_chart
 
 # 設定
 DATA_PATH = "data/dynamic_rebalance_dp/dp_comp.csv"
+WITHDRAW_DATA_PATH = "data/dynamic_rebalance_dp/dump_withdraw.csv"
 IMG_DIR = "docs/imgs/dynamic_rebalance_dp"
 START_AGE = 40
 NUM_YEARS = 55
@@ -98,7 +99,7 @@ def run_percentile_analysis(df_all: pd.DataFrame):
   """
   print(f"\n\n{'='*20} 取り崩し額パーセンタイル推移グラフを生成中... {'='*20}")
 
-  # data/dynamic_rebalance_dp/dp_comp.csv には rule=4.0 & V2 DP のみ支出データが含まれている
+  # 支出データ (25p, 50p, 75p) を抽出
   mask = (df_all["value_type"].isin(["spend25p", "spend50p", "spend75p"]))
   df_plot = df_all[mask]
 
@@ -106,49 +107,32 @@ def run_percentile_analysis(df_all: pd.DataFrame):
     print("支出データが見つかりませんでした。")
     return
 
-  # 戦略ごとにグラフを作成（現状は V2 DP のみ）
-  strategies = df_plot["strategy"].unique()
-  for strat in strategies:
-    strat_df = df_plot[df_plot["strategy"] == strat]
-    rule = strat_df["spending_rule"].iloc[0]
-    
-    title = f"年間取り崩し額推移: 初期支出率 {rule:g}%"
-    # ファイル名用のスラグ作成 (日本語を避ける)
-    strat_slug = {
-        "オルカン100%": "acwi_100",
-        "無リスク100%": "zero_risk_100",
-        "固定最適比率": "fixed_optimal",
-        "一般的な最適リバランス": "v1_dynamic",
-        "支出に合わせた最適リバランス": "v2_dp"
-    }.get(strat, strat)
+  title = "年間取り崩し額推移"
+  output_name = "spend_percentiles_dump_withdraw.svg"
+  output_path = os.path.join(IMG_DIR, output_name)
 
-    output_name = f"spend_percentiles_{strat_slug}_rule_{rule:g}.svg"
-    # ファイル名に使用できない文字を置換
-    output_name = output_name.replace(" ", "_").replace("(", "").replace(")", "").replace("%", "pct")
-    output_path = os.path.join(IMG_DIR, output_name)
-
-    # create_spend_percentile_chart を呼び出す
-    create_spend_percentile_chart(strat_df,
-                                  title,
-                                  output_path,
-                                  start_age=START_AGE,
-                                  num_years=NUM_YEARS,
-                                  show_legend=False)
+  # create_spend_percentile_chart を呼び出す
+  create_spend_percentile_chart(df_plot,
+                                title,
+                                output_path,
+                                start_age=START_AGE,
+                                num_years=NUM_YEARS,
+                                show_legend=False)
 
 
 def main():
-  if not os.path.exists(DATA_PATH):
-    print(f"Error: {DATA_PATH} が見つかりません。")
-    return
+  # 1. dp_comp.csv の分析 (生存確率など)
+  if os.path.exists(DATA_PATH):
+    df_all = pd.read_csv(DATA_PATH)
+    df_survival = df_all[df_all["value_type"] == "survival"].copy()
+    #run_survival_analysis(df_survival)
+    # 元のファイルに支出データが含まれている場合の互換性維持
+    #run_percentile_analysis(df_all)
 
-  df_all = pd.read_csv(DATA_PATH)
-
-  # 1. 生存確率分析
-  df_survival = df_all[df_all["value_type"] == "survival"].copy()
-  run_survival_analysis(df_survival)
-
-  # 2. 支出額パーセンタイル分析
-  run_percentile_analysis(df_all)
+  # 2. dump_withdraw.csv の分析
+  if os.path.exists(WITHDRAW_DATA_PATH):
+    df_dump = pd.read_csv(WITHDRAW_DATA_PATH)
+    run_percentile_analysis(df_dump)
 
 
 if __name__ == "__main__":

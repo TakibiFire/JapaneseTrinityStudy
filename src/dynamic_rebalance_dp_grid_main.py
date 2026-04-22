@@ -167,6 +167,62 @@ def main():
                                          n_sim=N_SIM,
                                          n_months=YEARS * 12)
 
+  # dump_withdraw モードの処理
+  if EXP_NAME == "dump_withdraw":
+    print("dump_withdraw モード: キャッシュフローを解析して支出額をダンプします。")
+    # 月次の基本支出 (名目額)
+    # spending_multipliers_by_age は月額（円）。これを 12倍して 10000 で割り、CPIを掛ける。
+    # shape: (n_sim, YEARS * 12)
+    total_months = YEARS * 12
+    base_spend_m = np.zeros((N_SIM, total_months), dtype=np.float64)
+    cpi_paths = monthly_prices[CPI_NAME][:, :total_months]
+    
+    for m in range(total_months):
+      # 実質月額(万円)
+      monthly_real_spend_man = spending_multipliers_by_age[m // 12] / 10000.0
+      # 名目月額(万円) = 実質月額 * CPI
+      base_spend_m[:, m] = monthly_real_spend_man * cpi_paths[:, m]
+
+    # キャッシュフローの合算 (名目、万円)
+    total_cf_m = np.zeros((N_SIM, total_months), dtype=np.float64)
+    for cf_arr in monthly_cashflows.values():
+      if cf_arr.ndim == 1:
+        total_cf_m += cf_arr
+      else:
+        total_cf_m += cf_arr
+
+    # 取り崩し額 = 支出 - 純キャッシュフロー (収入は正、支出は負なので引くと支出が増える)
+    withdraw_m = base_spend_m - total_cf_m
+    
+    # 年次集計 (万円/年)
+    withdraw_y = np.zeros((N_SIM, YEARS), dtype=np.float64)
+    for y in range(YEARS):
+      withdraw_y[:, y] = withdraw_m[:, y*12:(y+1)*12].sum(axis=1)
+      
+    # パーセンタイル
+    p25 = np.percentile(withdraw_y, 25, axis=0)
+    p50 = np.percentile(withdraw_y, 50, axis=0)
+    p75 = np.percentile(withdraw_y, 75, axis=0)
+    
+    results_dump = []
+    for name, p_values in [("spend25p", p25), ("spend50p", p50), ("spend75p", p75)]:
+      row = {
+          "spend_multiplier": 1.0,
+          "strategy": "dump_withdraw",
+          "spending_rule": 0.0,
+          "initial_money": 0.0,
+          "initial_annual_cost": 0.0,
+          "value_type": name
+      }
+      for y in range(YEARS):
+        row[str(y + 1)] = p_values[y]
+      results_dump.append(row)
+      
+    df_dump = pd.DataFrame(results_dump)
+    df_dump.to_csv(CSV_PATH, index=False, encoding="utf-8-sig")
+    print(f"完了。結果を {CSV_PATH} に保存しました。")
+    return
+
   # DP予測器の準備
   dp_predictor = DPOptimalStrategyPredictor(MODELS_PATH)
 
@@ -297,21 +353,6 @@ def main():
         survival_rate = 1.0 - (bankrupt_count / N_SIM)
         row_survival[str(year)] = survival_rate
       results.append(row_survival)
-
-      # 2. 支出額のパーセンタイル (特定の条件のみ)
-      if rule == 4.0 and strat_name == "支出に合わせた最適リバランス":
-        if res.annual_spends is not None:
-          p25 = np.percentile(res.annual_spends, 25, axis=0)
-          p50 = np.percentile(res.annual_spends, 50, axis=0)
-          p75 = np.percentile(res.annual_spends, 75, axis=0)
-
-          for name, p_values in [("spend25p", p25), ("spend50p", p50),
-                                 ("spend75p", p75)]:
-            row_p = base_row.copy()
-            row_p["value_type"] = name
-            for year in range(1, YEARS + 1):
-              row_p[str(year)] = p_values[year - 1]
-            results.append(row_p)
 
   # CSV保存
   df = pd.DataFrame(results)
