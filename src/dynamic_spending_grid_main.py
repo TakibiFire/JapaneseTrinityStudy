@@ -79,7 +79,8 @@ def main():
 
   # ダイナミック最適比率用のコールバック
   def dynamic_optimal_fn(net_value: np.ndarray, annual_spend: np.ndarray,
-                         remaining_years: float) -> Dict[str, Union[float, np.ndarray]]:
+                         remaining_years: float,
+                         post_tax_net: np.ndarray) -> Dict[str, Union[float, np.ndarray]]:
     safe_net_value = np.maximum(net_value, 1e-10)
     s_rate = annual_spend / safe_net_value
     # calculate_optimal_strategyはインフレ率0.0177を前提にチューニングされているため、

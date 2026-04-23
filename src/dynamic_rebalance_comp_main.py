@@ -98,7 +98,8 @@ def main():
 
   # ダイナミック最適比率用のコールバック
   def dynamic_optimal_fn(net_value: np.ndarray, annual_spend: np.ndarray,
-                         remaining_years: float) -> Dict[str, Union[float, np.ndarray]]:
+                         remaining_years: float,
+                         post_tax_net: np.ndarray) -> Dict[str, Union[float, np.ndarray]]:
     # 純資産が0以下になる場合のゼロ除算を防ぐ
     safe_net_value = np.maximum(net_value, 1e-10)
     s_rate = annual_spend / safe_net_value
@@ -111,7 +112,8 @@ def main():
   # (110 - 年齢) ルール用のコールバック
   def make_age_rule_fn(start_age: int, total_years: int):
     def fn(net_value: np.ndarray, annual_spend: np.ndarray,
-           remaining_years: float) -> Dict[str, Union[float, np.ndarray]]:
+           remaining_years: float,
+           post_tax_net: np.ndarray) -> Dict[str, Union[float, np.ndarray]]:
       elapsed_years = total_years - remaining_years
       current_age = start_age + elapsed_years
       ratio = max(0.0, min(1.0, (110 - current_age) / 100.0))
