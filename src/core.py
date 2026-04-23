@@ -74,7 +74,7 @@ class Strategy:
     if len(rule_names) != len(set(rule_names)):
       raise ValueError("Duplicate source_name found in cashflow_rules.")
 
-    if isinstance(self.annual_cost, (DynamicSpending, SpendAwareDynamicSpending)) and self.inflation_rate and self.inflation_rate != 0.0:
+    if isinstance(self.annual_cost, (DynamicSpending, SpendAwareDynamicSpending)) and isinstance(self.inflation_rate, float) and self.inflation_rate != 0.0:
       raise ValueError("inflation_rate must be 0.0 or None when using DynamicSpending or SpendAwareDynamicSpending, as they handle limits nominally.")
 
     valid_names = set()
@@ -257,6 +257,9 @@ def simulate_strategy(
     n_years = (total_months + 11) // 12
     annual_spends_record = np.zeros((n_sim, n_years), dtype=np.float64)
 
+  # 年次税金の支払額
+  tax_cost_m = np.zeros(n_sim, dtype=np.float64)
+
   # === 追加キャッシュフローの準備 ===
   # (rule, processed_cf) のリストを保持
   prepared_cashflows: List[tuple[CashflowRule, np.ndarray]] = []
@@ -295,7 +298,15 @@ def simulate_strategy(
                                         12.0) * (1.0 - strategy.tax_rate)
       cash[active_paths] += yield_payment[active_paths]
 
-    # 2. 支出額の決定
+    # 2. 税金の支払額の決定 (年初のみ). SpendAwareDynamicSpending は Net Worth
+    # を求めるため、tax_cost_m は先に決定する必要がある。
+    if m > 0 and m % 12 == 0:
+      tax_cost_m = tax_to_pay.copy()
+      tax_to_pay.fill(0.0)
+    else:
+      tax_cost_m.fill(0.0)
+
+    # 3. Base の支出額の決定
     # 純資産の計算（動的支出または条件付きキャッシュフローがある場合のみ、年1回実行）
     if m % 12 == 0:
       # 年間支出トラッカーのリセット (全パスで実行)
@@ -346,9 +357,11 @@ def simulate_strategy(
           cpi_m = np.ones(n_sim, dtype=np.float64)
           cpi_m_minus_12 = np.ones(n_sim, dtype=np.float64)
           if isinstance(strategy.inflation_rate, str):
-            cpi_m = cpi_multiplier_path[:, m]
+            cpi_path = cpi_multiplier_path
+            assert cpi_path is not None
+            cpi_m = cpi_path[:, m]
             if m >= 12:
-              cpi_m_minus_12 = cpi_multiplier_path[:, m - 12]
+              cpi_m_minus_12 = cpi_path[:, m - 12]
           elif isinstance(strategy.inflation_rate, float):
             cpi_m = np.full(
                 n_sim, (1.0 + strategy.inflation_rate)**(m / 12.0))
@@ -359,6 +372,15 @@ def simulate_strategy(
           target_annual_spend[active_paths] = strategy.annual_cost.calculate_nominal_spend(
               m, eff_nw, prev_base_spend_y, cpi_m, cpi_m_minus_12,
               other_net_m_val, active_paths)[active_paths]
+
+          # --- DEBUG ---
+          if debug_indices is not None and debug_results is not None:
+            for d_idx in debug_indices:
+              if d_idx < len(active_paths) and active_paths[d_idx]:
+                debug_results[d_idx].append(
+                    f"[Debug Path {d_idx}] Year {m//12} SpendAware: NW={eff_nw[d_idx]:.2f}, target_annual_spend={target_annual_spend[d_idx]:.2f}, prev_base_spend={prev_base_spend_y[d_idx]:.2f}"
+                )
+          # -------------
 
         elif isinstance(strategy.annual_cost, DynamicSpending):
           if m > 0:
@@ -407,7 +429,7 @@ def simulate_strategy(
     else:
       raise ValueError(f"Unsupported annual_cost type: {type(strategy.annual_cost)}")
 
-    # 3. 収支の計算
+    # 4. 収支の計算
     # 定常的な支出（reg_spend_m）と収入（reg_income_m）を別々に集計
     reg_spend_m = base_spend_m.copy()
     reg_income_m = np.zeros(n_sim, dtype=np.float64)
@@ -433,10 +455,6 @@ def simulate_strategy(
     # 金融コスト（利息・税金）
     interest_cost_m = strategy.initial_loan * (strategy.yearly_loan_interest /
                                                12.0)
-    tax_cost_m = np.zeros(n_sim, dtype=np.float64)
-    if m > 0 and m % 12 == 0:
-      tax_cost_m = tax_to_pay.copy()
-      tax_to_pay.fill(0.0)
 
     # 定常的な正味の支出 (DRやDynamicSpendingの基準となる)
     # 収入は支出を減らす方向に働く
@@ -453,7 +471,7 @@ def simulate_strategy(
         iso_spend_m - iso_income_m) + interest_cost_m + tax_cost_m
     cash[active_paths] -= total_withdrawal_m[active_paths]
 
-    # 4. 資産売却 (現金不足時)
+    # 5. 資産売却 (現金不足時)
     shortage_paths = active_paths & (cash < 0)
     if np.any(shortage_paths):
       # --- DEBUG ---
@@ -488,7 +506,7 @@ def simulate_strategy(
         units[asset_name][still_short] -= units_to_sell
         cash[still_short] += sell_amount
 
-    # 5. リバランス
+    # 6. リバランス
     if strategy.rebalance_interval > 0 and (
         m + 1) % strategy.rebalance_interval == 0:
       reb_paths = active_paths
@@ -590,7 +608,7 @@ def simulate_strategy(
             current_units[buy_idx] += u_buy
             cash[buy_idx] -= amt
 
-    # 6. 破産判定と年末記録
+    # 7. 破産判定と年末記録
     total_val = cash.copy()
     for name, u in units.items():
       total_val[active_paths] += u[active_paths] * local_monthly_asset_prices[

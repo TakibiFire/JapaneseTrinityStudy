@@ -12,12 +12,12 @@ from src.lib.dp_predictor import DPOptimalStrategyPredictor
 @dataclasses.dataclass
 class SpendAwareDynamicSpending:
   """
-    生存確率（P）ベースのガードレール戦略。
-    
-    ライフプランに合わせた支出曲線を維持しつつ、資産状況と支出額から
-    計算される生存確率が一定範囲（p_low, p_high）に収まるように、
-    基本支出額を動的に増減させる。
-    """
+  生存確率（P）ベースのガードレール戦略。
+  
+  ライフプランに合わせた支出曲線を維持しつつ、資産状況と支出額から
+  計算される生存確率が一定範囲（p_low, p_high）に収まるように、
+  基本支出額を動的に増減させる。
+  """
   initial_age: int
   p_low: float
   p_high: float
@@ -32,20 +32,20 @@ class SpendAwareDynamicSpending:
                               other_net_m: np.ndarray,
                               active_paths: np.ndarray) -> np.ndarray:
     """
-        ベクトル化されたガードレールアルゴリズムを用いて、新しい名目基本支出額を算出する。
-        
-        Args:
-            m: シミュレーション開始からの経過月数
-            net_worth: 実効純資産（税引前純資産 - 前年確定分の未払税金）
-            prev_base_spend_y: 前年の名目基本支出額
-            cpi_m: 現在の累積CPIマルチプライヤー
-            cpi_m_minus_12: 12ヶ月前の累積CPIマルチプライヤー
-            other_net_m: 基本支出以外の月次正味キャッシュフロー（名目）
-            active_paths: 現在生存しているパスのマスク
-            
-        Returns:
-            np.ndarray: 新しい年間名目基本支出額
-        """
+    ベクトル化されたガードレールアルゴリズムを用いて、新しい名目基本支出額を算出する。
+    
+    Args:
+      m: シミュレーション開始からの経過月数
+      net_worth: 実効純資産（税引前純資産 - 前年確定分の未払税金）
+      prev_base_spend_y: 前年の名目基本支出額
+      cpi_m: 現在の累積CPIマルチプライヤー
+      cpi_m_minus_12: 12ヶ月前の累積CPIマルチプライヤー
+      other_net_m: 基本支出以外の月次正味キャッシュフロー（名目）
+      active_paths: 現在生存しているパスのマスク
+
+    Returns:
+      np.ndarray: 新しい年間名目基本支出額
+    """
     n_sim = len(active_paths)
     new_base_nom = np.zeros(n_sim, dtype=np.float64)
 
@@ -69,10 +69,12 @@ class SpendAwareDynamicSpending:
 
     # Step 3: S_Rate 関数 (annual withdrawal rate based on nominal base spend Y)
     # S_Rate(Y) = ((Y / 12.0 + other_net_m) * 12.0) / NW
-    def get_s_rate(y: np.ndarray) -> np.ndarray:
+    def get_s_rate(y: np.ndarray, mask: np.ndarray = None) -> np.ndarray:
       # ゼロ除算を避けるための処理
-      safe_nw = np.maximum(nw_active, 1.0)
-      return ((y / 12.0 + other_net_active) * 12.0) / safe_nw
+      nw = nw_active[mask] if mask is not None else nw_active
+      other_net = other_net_active[mask] if mask is not None else other_net_active
+      safe_nw = np.maximum(nw, 1.0)
+      return ((y / 12.0 + other_net) * 12.0) / safe_nw
 
     # Step 4: ガードレール判定
     s_rate_tgt = get_s_rate(target_active)
@@ -86,7 +88,7 @@ class SpendAwareDynamicSpending:
     # 1. Low Probability Handling (支出削減が必要な場合)
     low_mask = p_tgt < self.p_low
     if np.any(low_mask):
-      s_rate_min = get_s_rate(y_min[low_mask])
+      s_rate_min = get_s_rate(y_min[low_mask], low_mask)
       p_min = self.dp_predictor.predict_p_surv(age, s_rate_min)
 
       # 最大限削減しても p_low に届かない場合
@@ -101,9 +103,16 @@ class SpendAwareDynamicSpending:
         y_low = y_min[low_mask][bisect_mask]
         y_high = target_active[idx]
 
+        # bisection 用の NW と other_net を抽出
+        nw_bisect = nw_active[idx]
+        other_net_bisect = other_net_active[idx]
+
         for _ in range(15):
           mid = (y_low + y_high) / 2.0
-          p_mid = self.dp_predictor.predict_p_surv(age, get_s_rate(mid))
+          # get_s_rate を使わず直接計算（効率のため）
+          s_mid = ((mid / 12.0 + other_net_bisect) * 12.0) / np.maximum(
+              nw_bisect, 1.0)
+          p_mid = self.dp_predictor.predict_p_surv(age, s_mid)
           # p_surv は支出 Y に対して広義単調減少
           go_lower = p_mid < self.p_low
           y_high[go_lower] = mid[go_lower]
@@ -114,7 +123,7 @@ class SpendAwareDynamicSpending:
     # 2. High Probability Handling (支出増加が可能な場合)
     high_mask = p_tgt > self.p_high
     if np.any(high_mask):
-      s_rate_max = get_s_rate(y_max[high_mask])
+      s_rate_max = get_s_rate(y_max[high_mask], high_mask)
       p_max = self.dp_predictor.predict_p_surv(age, s_rate_max)
 
       # 最大限増やしても p_high を超える場合
@@ -129,9 +138,15 @@ class SpendAwareDynamicSpending:
         y_low = target_active[idx]
         y_high = y_max[high_mask][bisect_mask]
 
+        # bisection 用の NW と other_net を抽出
+        nw_bisect = nw_active[idx]
+        other_net_bisect = other_net_active[idx]
+
         for _ in range(15):
           mid = (y_low + y_high) / 2.0
-          p_mid = self.dp_predictor.predict_p_surv(age, get_s_rate(mid))
+          s_mid = ((mid / 12.0 + other_net_bisect) * 12.0) / np.maximum(
+              nw_bisect, 1.0)
+          p_mid = self.dp_predictor.predict_p_surv(age, s_mid)
           go_higher = p_mid > self.p_high
           y_low[go_higher] = mid[go_higher]
           y_high[~go_higher] = mid[~go_higher]
