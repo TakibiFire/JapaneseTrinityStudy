@@ -36,7 +36,7 @@ from src.lib.asset_generator import (DerivedAsset, ForexAsset,
                                      generate_monthly_asset_prices)
 from src.lib.cashflow_generator import (CashflowConfig, PensionConfig,
                                         generate_cashflows)
-from src.lib.dynamic_rebalance_dp import DPOptimalStrategyPredictor
+from src.lib.dp_predictor import DPOptimalStrategyPredictor
 from src.lib.retired_spending import (SpendingType,
                                       get_retired_spending_multipliers)
 from src.lib.simulation_defaults import (AcwiModelKey,

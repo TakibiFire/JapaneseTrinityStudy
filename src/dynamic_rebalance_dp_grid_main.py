@@ -30,8 +30,9 @@ from src.lib.asset_generator import (AssetConfigType, DerivedAsset, ForexAsset,
 from src.lib.cashflow_generator import (CashflowConfig, CashflowRule,
                                         CashflowType, PensionConfig,
                                         generate_cashflows)
+from src.lib.dp_predictor import DPOptimalStrategyPredictor
 from src.lib.dynamic_rebalance import calculate_optimal_strategy
-from src.lib.dynamic_rebalance_dp import DPOptimalStrategyPredictor
+from src.lib.dynamic_rebalance_dp import calculate_optimal_strategy_dp
 from src.lib.retired_spending import (SpendingType,
                                       get_retired_spending_multipliers,
                                       get_retired_spending_values)
@@ -310,6 +311,7 @@ def main():
 
           # 勝利しきい値を考慮した最適な株式比率を予測
           # annual_spend は前月の支出を12倍したもの（Y_{N-1} の近似）
+          predict_age = int(round(START_AGE + (YEARS - (rem_years - 0.25))))
           ratio = dp_predictor.get_a_opt_with_winning_threshold(
               predict_age, post_tax_net, annual_spend)
 
