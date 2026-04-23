@@ -312,6 +312,15 @@ def simulate_strategy(
               active_paths] * local_monthly_asset_prices[name][active_paths, m]
         current_net_worth[active_paths] -= strategy.initial_loan
 
+        # 追加キャッシュフロー倍率の更新
+        for rule in strategy.cashflow_rules:
+          if rule.multiplier_fn is not None:
+            extra_cf_multipliers[
+                rule.source_name][active_paths] = rule.multiplier_fn(
+                    m, current_net_worth[active_paths],
+                    prev_net_reg_spend_y[active_paths],
+                    prev_gross_reg_spend_y[active_paths])
+
         if isinstance(strategy.annual_cost, DynamicSpending):
           if m > 0:
             # ダイナミックスペンディングの目標額（名目）
@@ -334,15 +343,6 @@ def simulate_strategy(
                   )
             # -------------
           # else (m=0) の時は初期化時に設定済み
-
-        # 追加キャッシュフロー倍率の更新
-        for rule in strategy.cashflow_rules:
-          if rule.multiplier_fn is not None:
-            extra_cf_multipliers[
-                rule.source_name][active_paths] = rule.multiplier_fn(
-                    m, current_net_worth[active_paths],
-                    prev_net_reg_spend_y[active_paths],
-                    prev_gross_reg_spend_y[active_paths])
 
     # インフレ調整
     cpi_multiplier: Union[float, np.ndarray] = 1.0
