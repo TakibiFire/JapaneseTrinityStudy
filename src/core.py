@@ -12,6 +12,7 @@ import numpy as np
 
 from src.lib.cashflow_generator import (CashflowRule, CashflowType,
                                         ExtraCashflowMultiplierFn)
+from src.lib.spend_aware_dynamic_spending import SpendAwareDynamicSpending
 
 # ---------------------------------------------------------------------------
 # 1. データ構造 (Dataclasses)
@@ -57,7 +58,8 @@ class Strategy:
   initial_loan: float  # 万円
   yearly_loan_interest: float
   initial_asset_ratio: Dict[Union[str, ZeroRiskAsset], float]
-  annual_cost: Union[float, List[float], DynamicSpending]
+  annual_cost: Union[float, List[float], DynamicSpending,
+                     SpendAwareDynamicSpending]
   inflation_rate: Union[float, str, None]
   selling_priority: List[str]
   tax_rate: float = 0.20315
@@ -72,8 +74,8 @@ class Strategy:
     if len(rule_names) != len(set(rule_names)):
       raise ValueError("Duplicate source_name found in cashflow_rules.")
 
-    if isinstance(self.annual_cost, DynamicSpending) and self.inflation_rate and self.inflation_rate != 0.0:
-      raise ValueError("inflation_rate must be 0.0 or None when using DynamicSpending, as it handles limits nominally.")
+    if isinstance(self.annual_cost, (DynamicSpending, SpendAwareDynamicSpending)) and self.inflation_rate and self.inflation_rate != 0.0:
+      raise ValueError("inflation_rate must be 0.0 or None when using DynamicSpending or SpendAwareDynamicSpending, as they handle limits nominally.")
 
     valid_names = set()
     for key in self.initial_asset_ratio.keys():
@@ -219,8 +221,11 @@ def simulate_strategy(
   annual_gross_reg_spend_tracker = np.zeros(n_sim, dtype=np.float64)
   annual_base_spend_tracker = np.zeros(n_sim, dtype=np.float64)
 
-  if isinstance(strategy.annual_cost, DynamicSpending):
-    init_val = strategy.annual_cost.initial_annual_spend
+  if isinstance(strategy.annual_cost, (DynamicSpending, SpendAwareDynamicSpending)):
+    if isinstance(strategy.annual_cost, SpendAwareDynamicSpending):
+      init_val = strategy.annual_cost.annual_cost_real[0]
+    else:
+      init_val = strategy.annual_cost.initial_annual_spend
     target_annual_spend.fill(init_val)
     prev_net_reg_spend_y.fill(init_val)
     prev_gross_reg_spend_y.fill(init_val)
@@ -305,14 +310,14 @@ def simulate_strategy(
         annual_gross_reg_spend_tracker.fill(0.0)
         annual_base_spend_tracker.fill(0.0)
 
-      if isinstance(strategy.annual_cost, DynamicSpending) or has_dynamic_cf:
+      if isinstance(strategy.annual_cost, (DynamicSpending, SpendAwareDynamicSpending)) or has_dynamic_cf:
         current_net_worth = cash.copy()
         for name, u in units.items():
           current_net_worth[active_paths] += u[
               active_paths] * local_monthly_asset_prices[name][active_paths, m]
         current_net_worth[active_paths] -= strategy.initial_loan
 
-        # 追加キャッシュフロー倍率の更新
+        # 1. 追加キャッシュフロー倍率の更新 (支出決定の前に実行)
         for rule in strategy.cashflow_rules:
           if rule.multiplier_fn is not None:
             extra_cf_multipliers[
@@ -321,7 +326,41 @@ def simulate_strategy(
                     prev_net_reg_spend_y[active_paths],
                     prev_gross_reg_spend_y[active_paths])
 
-        if isinstance(strategy.annual_cost, DynamicSpending):
+        # 2. 基本支出の更新
+        if isinstance(strategy.annual_cost, SpendAwareDynamicSpending):
+          # Effective NW = current_net_worth - tax_cost_m
+          eff_nw = current_net_worth.copy()
+          eff_nw[active_paths] -= tax_cost_m[active_paths]
+
+          # Other_Net_m の算出 (名目)
+          # その月の REGULAR キャッシュフローを集計する
+          other_net_m_val = np.zeros(n_sim, dtype=np.float64)
+          for rule, cf_path in prepared_cashflows:
+            if rule.cashflow_type == CashflowType.REGULAR:
+              source = rule.source_name
+              multiplier = extra_cf_multipliers.get(source, 1.0)
+              impact = cf_path[:, m] * multiplier
+              other_net_m_val -= impact  # 収入(正)なら引き出しを減らすのでマイナス
+
+          # 前年のCPI（12ヶ月前）
+          cpi_m = np.ones(n_sim, dtype=np.float64)
+          cpi_m_minus_12 = np.ones(n_sim, dtype=np.float64)
+          if isinstance(strategy.inflation_rate, str):
+            cpi_m = cpi_multiplier_path[:, m]
+            if m >= 12:
+              cpi_m_minus_12 = cpi_multiplier_path[:, m - 12]
+          elif isinstance(strategy.inflation_rate, float):
+            cpi_m = np.full(
+                n_sim, (1.0 + strategy.inflation_rate)**(m / 12.0))
+            if m >= 12:
+              cpi_m_minus_12 = np.full(
+                  n_sim, (1.0 + strategy.inflation_rate)**((m - 12) / 12.0))
+
+          target_annual_spend[active_paths] = strategy.annual_cost.calculate_nominal_spend(
+              m, eff_nw, prev_base_spend_y, cpi_m, cpi_m_minus_12,
+              other_net_m_val, active_paths)[active_paths]
+
+        elif isinstance(strategy.annual_cost, DynamicSpending):
           if m > 0:
             # ダイナミックスペンディングの目標額（名目）
             target_spending_nominal = np.maximum(
@@ -354,17 +393,19 @@ def simulate_strategy(
       cpi_multiplier = cpi_multiplier_path[:, m]  # type: ignore
 
     # 基本支出の決定 (annual_base_spend_nominal: 万円/年)
-    if isinstance(strategy.annual_cost, DynamicSpending):
+    if isinstance(strategy.annual_cost, (DynamicSpending, SpendAwareDynamicSpending)):
       annual_base_spend_nominal = target_annual_spend
       base_spend_m = annual_base_spend_nominal / 12.0
     elif isinstance(strategy.annual_cost, list):
       annual_base_spend_nominal = np.full(
           n_sim, (strategy.annual_cost[m // 12]) * cpi_multiplier)
       base_spend_m = annual_base_spend_nominal / 12.0
-    else:
-      annual_base_spend_nominal = np.full(n_sim,
-                                          strategy.annual_cost * cpi_multiplier)
+    elif isinstance(strategy.annual_cost, (float, int)):
+      annual_base_spend_nominal = np.full(
+          n_sim, strategy.annual_cost * cpi_multiplier)
       base_spend_m = annual_base_spend_nominal / 12.0
+    else:
+      raise ValueError(f"Unsupported annual_cost type: {type(strategy.annual_cost)}")
 
     # 3. 収支の計算
     # 定常的な支出（reg_spend_m）と収入（reg_income_m）を別々に集計
