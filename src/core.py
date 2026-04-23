@@ -42,6 +42,64 @@ class DynamicSpending:
   upper_limit: float           # 前年比の最大上昇率 (0.03 = +3%)
   lower_limit: float           # 前年比の最大下降率 (-0.005 = -0.5%)
 
+  def calculate_nominal_spend(self, m: int, net_worth: np.ndarray,
+                              prev_base_spend_y: np.ndarray, cpi_m: np.ndarray,
+                              cpi_m_minus_12: np.ndarray,
+                              other_net_m: np.ndarray,
+                              active_paths: np.ndarray) -> np.ndarray:
+    """
+    Vanguard のダイナミックスペンディング規則に基づき、新しい名目基本支出額を算出する。
+    
+    Args:
+      m: シミュレーション開始からの経過月数
+      net_worth: 実効純資産（税引前純資産 - 前年確定分の未払税金）
+      prev_base_spend_y: 前年の名目基本支出額
+      cpi_m: 現在の累積CPIマルチプライヤー
+      cpi_m_minus_12: 12ヶ月前の累積CPIマルチプライヤー
+      other_net_m: 基本支出以外の月次正味キャッシュフロー（名目）
+      active_paths: 現在生存しているパスのマスク
+
+    Returns:
+      np.ndarray: 新しい年間名目基本支出額
+    """
+    n_sim = len(active_paths)
+    new_base_nom = np.zeros(n_sim, dtype=np.float64)
+
+    if m == 0:
+      new_base_nom.fill(self.initial_annual_spend)
+      return new_base_nom
+
+    # 有効なパスのみ計算対象とする
+    nw_active = net_worth[active_paths]
+    prev_base_active = prev_base_spend_y[active_paths]
+    other_net_active = other_net_m[active_paths]
+    cpi_m_active = cpi_m[active_paths]
+    cpi_m_minus_12_active = cpi_m_minus_12[active_paths]
+
+    # 1. 目標支出額 (Target Withdrawal)
+    # ポートフォリオ残高に対する一定割合を目指す。
+    target_withdrawal = np.maximum(0.0, nw_active * self.target_ratio)
+    # 目標支出額から他のキャッシュフロー（年金等）を引いたものが、基本支出の目標となる。
+    # other_net_m は 支出 - 収入 なので、目標引き出し額から other_net_m*12 を引けば
+    # 基本支出で賄うべき額が出る。
+    y_target = np.maximum(0.0, target_withdrawal - (other_net_active * 12.0))
+
+    # 2. 前年の支出をインフレ調整 (Inflation-adjusted previous spend)
+    # Vanguard ルールでは、前年の支出額にインフレ率を乗じたものを基準にする。
+    cpi_ratio = cpi_m_active / cpi_m_minus_12_active
+    y_prev_adjusted = prev_base_active * cpi_ratio
+
+    # 3. 上限と下限の算出 (Calculate Limits)
+    # 上限・下限はインフレ調整後の前年支出額に対して適用される。
+    y_max = y_prev_adjusted * (1.0 + self.upper_limit)
+    y_min = y_prev_adjusted * (1.0 + self.lower_limit)
+
+    # 4. 範囲内に制限 (Apply Limits)
+    res_active = np.clip(y_target, y_min, y_max)
+
+    new_base_nom[active_paths] = res_active
+    return new_base_nom
+
 
 # ダイナミックリバランス用のコールバック関数
 DynamicRebalanceFn = Callable[[np.ndarray, np.ndarray, float, np.ndarray],
@@ -74,8 +132,8 @@ class Strategy:
     if len(rule_names) != len(set(rule_names)):
       raise ValueError("Duplicate source_name found in cashflow_rules.")
 
-    if isinstance(self.annual_cost, (DynamicSpending, SpendAwareDynamicSpending)) and isinstance(self.inflation_rate, float) and self.inflation_rate != 0.0:
-      raise ValueError("inflation_rate must be 0.0 or None when using DynamicSpending or SpendAwareDynamicSpending, as they handle limits nominally.")
+    if isinstance(self.annual_cost, SpendAwareDynamicSpending) and isinstance(self.inflation_rate, float) and self.inflation_rate != 0.0:
+      raise ValueError("inflation_rate must be 0.0 or None when using SpendAwareDynamicSpending, as it handles limits nominally.")
 
     valid_names = set()
     for key in self.initial_asset_ratio.keys():
@@ -338,7 +396,7 @@ def simulate_strategy(
                     prev_gross_reg_spend_y[active_paths])
 
         # 2. 基本支出の更新
-        if isinstance(strategy.annual_cost, SpendAwareDynamicSpending):
+        if isinstance(strategy.annual_cost, (DynamicSpending, SpendAwareDynamicSpending)):
           # Effective NW = current_net_worth - tax_cost_m
           eff_nw = current_net_worth.copy()
           eff_nw[active_paths] -= tax_cost_m[active_paths]
@@ -369,6 +427,8 @@ def simulate_strategy(
               cpi_m_minus_12 = np.full(
                   n_sim, (1.0 + strategy.inflation_rate)**((m - 12) / 12.0))
 
+          # calculate_nominal_spend はDynamicSpending と
+          # SpendAwareDynamicSpendingで別々に定義されている。
           target_annual_spend[active_paths] = strategy.annual_cost.calculate_nominal_spend(
               m, eff_nw, prev_base_spend_y, cpi_m, cpi_m_minus_12,
               other_net_m_val, active_paths)[active_paths]
@@ -377,33 +437,15 @@ def simulate_strategy(
           if debug_indices is not None and debug_results is not None:
             for d_idx in debug_indices:
               if d_idx < len(active_paths) and active_paths[d_idx]:
-                debug_results[d_idx].append(
-                    f"[Debug Path {d_idx}] Year {m//12} SpendAware: NW={eff_nw[d_idx]:.2f}, target_annual_spend={target_annual_spend[d_idx]:.2f}, prev_base_spend={prev_base_spend_y[d_idx]:.2f}"
-                )
-          # -------------
-
-        elif isinstance(strategy.annual_cost, DynamicSpending):
-          if m > 0:
-            # ダイナミックスペンディングの目標額（名目）
-            target_spending_nominal = np.maximum(
-                0.0, current_net_worth * strategy.annual_cost.target_ratio)
-            # 前年の基本支出に基づく上下限
-            ceiling = prev_base_spend_y * (1.0 +
-                                           strategy.annual_cost.upper_limit)
-            floor = prev_base_spend_y * (1.0 + strategy.annual_cost.lower_limit)
-            target_annual_spend[active_paths] = np.clip(
-                target_spending_nominal[active_paths], floor[active_paths],
-                ceiling[active_paths])
-
-            # --- DEBUG ---
-            if debug_indices is not None and debug_results is not None:
-              for d_idx in debug_indices:
-                if d_idx < len(active_paths) and active_paths[d_idx]:
+                if isinstance(strategy.annual_cost, SpendAwareDynamicSpending):
                   debug_results[d_idx].append(
-                      f"[Debug Path {d_idx}] Year {m//12}: NW={current_net_worth[d_idx]:.2f}, target_spend_nominal={target_spending_nominal[d_idx]:.2f}, prev_base_spend={prev_base_spend_y[d_idx]:.2f}, prev_net_reg_spend={prev_net_reg_spend_y[d_idx]:.2f}, new_target_spend={target_annual_spend[d_idx]:.2f}, floor={floor[d_idx]:.2f}"
+                      f"[Debug Path {d_idx}] Year {m//12} SpendAware: NW={eff_nw[d_idx]:.2f}, target_annual_spend={target_annual_spend[d_idx]:.2f}, prev_base_spend={prev_base_spend_y[d_idx]:.2f}"
                   )
-            # -------------
-          # else (m=0) の時は初期化時に設定済み
+                elif isinstance(strategy.annual_cost, DynamicSpending):
+                  debug_results[d_idx].append(
+                      f"[Debug Path {d_idx}] Year {m//12} DynamicV1: NW={eff_nw[d_idx]:.2f}, target_annual_spend={target_annual_spend[d_idx]:.2f}, prev_base_spend={prev_base_spend_y[d_idx]:.2f}"
+                  )
+          # -------------
 
     # インフレ調整
     cpi_multiplier: Union[float, np.ndarray] = 1.0
