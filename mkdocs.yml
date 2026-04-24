@@ -113,13 +113,15 @@ nav:
     - 現金リバランスの効果: cash_rebalance.md
     - 無リスク資産保有の効果: zero_risk.md
     - 無リスク資産リバランスの効果: zero_risk_rebalance.md
-    - 最適配分を繰り返す (ダイナミックリバランス): dynamic_rebalance.md
-    - ダイナミックスペンディング(支出制限): dynamic_spending.md
+    - 最適配分を繰り返す<br>(ダイナミックリバランス): dynamic_rebalance.md
+    - 支出制限<br>(ダイナミックスペンディングと<br>ガードレール): dynamic_spending.md
     - 高齢になると支出が減る: retired_spending.md
     - 年金支払いと受給の効果: pension.md
     - サイドFIREの効果: side_fire.md
     - 死亡率を考慮する: mortality.md
-    - ライフプランに基づく動的資産配分（進化版ダイナミックリバランス）: spend_aware_dynamic_rebalance.md
+  - ライフプランに基づく戦略:
+    - 最適配分を繰り返す<br>（進化版ダイナミックリバランス）: spend_aware_dynamic_rebalance.md
+    - 支出制限<br>(進化版ダイナミックスペンディング): spend_aware_dynamic_spending.md
   - 年齢別の最適戦略:
     - 60歳の最適戦略: all_60yr.md
     - 50歳の最適戦略: all_50yr.md
