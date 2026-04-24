@@ -8,8 +8,51 @@ import numpy as np
 import pandas as pd
 
 from src.lib.retired_spending import (BASE_AGES, CONSUMPTION_DATA,
-                                      NON_CONSUMPTION_DATA, SpendingType,
+                                      NON_CONSUMPTION_DATA,
+                                      SINGLE_2019_BASE_AGES,
+                                      SINGLE_2019_CONSUMPTION_DATA,
+                                      SpendingType,
                                       get_retired_spending_values)
+
+
+def analyze_single_spending():
+  """
+  単身世帯の2019年データに基づく支出推移を可視化する。
+  """
+  target_ages = np.arange(20, 101)
+  target_con = get_retired_spending_values([SpendingType.SINGLE_2019_CONSUMPTION],
+                                           target_ages)
+
+  df_actual = pd.DataFrame({
+      "Age": SINGLE_2019_BASE_AGES,
+      "Value": SINGLE_2019_CONSUMPTION_DATA,
+      "支出種別": "消費支出 (2019年単身世帯)",
+      "データ": "実績"
+  })
+
+  df_spline = pd.DataFrame({
+      "Age": target_ages,
+      "Value": target_con,
+      "支出種別": "消費支出 (2019年単身世帯)",
+      "データ": "推計"
+  })
+
+  chart_actual = alt.Chart(df_actual).mark_point(size=60, filled=True).encode(
+      x=alt.X("Age:Q", title="年齢", scale=alt.Scale(domain=[20, 100])),
+      y=alt.Y("Value:Q", title="支出(円)"),
+      color=alt.value("#1f77b4"))
+
+  chart_spline = alt.Chart(df_spline).mark_line().encode(
+      x=alt.X("Age:Q", title="年齢", scale=alt.Scale(domain=[20, 100])),
+      y=alt.Y("Value:Q", title="支出(円)"),
+      color=alt.value("#1f77b4"))
+
+  chart = (chart_actual + chart_spline).properties(
+      width=600, height=350, title="単身世帯の年齢別消費支出推移（2019年全国家計構造調査）")
+
+  output_path = "docs/imgs/retired_spending/cost_by_age_single.svg"
+  chart.save(output_path)
+  print(f"単身世帯のグラフを保存しました: {output_path}")
 
 
 def main():
@@ -82,7 +125,8 @@ def main():
                                           range=[
                                               "#1f77b4", "#ff7f0e", "#2ca02c",
                                               "#ff7f0e"
-                                          ]))
+                                          ]),
+                          legend=alt.Legend(orient='top'))
 
   chart_actual = alt.Chart(df_actual).mark_point(size=60, filled=True).encode(
       x=alt.X("Age:Q", title="年齢", scale=alt.Scale(domain=[30, 100])),
@@ -106,6 +150,9 @@ def main():
   os.makedirs(os.path.dirname(output_path), exist_ok=True)
   chart.save(output_path)
   print(f"グラフを保存しました: {output_path}")
+
+  # 単身世帯の分析を追加
+  analyze_single_spending()
 
 
 if __name__ == '__main__':

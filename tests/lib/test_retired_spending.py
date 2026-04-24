@@ -39,6 +39,13 @@ def test_multipliers():
                                               num_years=5)
   assert m_ex != m_non_30
 
+  # SINGLE_2019_CONSUMPTION
+  m_single = get_retired_spending_multipliers([SpendingType.SINGLE_2019_CONSUMPTION],
+                                              start_age=30,
+                                              num_years=5)
+  assert len(m_single) == 5
+  assert m_single[0] == 1.0
+
   # Multiple types (replacing BOTH)
   m_both = get_retired_spending_multipliers(
       [SpendingType.CONSUMPTION, SpendingType.NON_CONSUMPTION],
@@ -69,3 +76,24 @@ def test_non_normalized_values():
   # 375,000 / month = 4,500,000 / year くらい
   # 実際には 330,000 ~ 380,000 程度
   assert 330000 < vals_35[0] < 380000
+
+def test_single_2019_values():
+  # 2019年単身世帯データポイントの検証
+  # 年齢 25歳: 168,552
+  # 年齢 55歳: 283,725
+  vals = get_retired_spending_multipliers(
+      [SpendingType.SINGLE_2019_CONSUMPTION],
+      start_age=25,
+      num_years=31,  # 25から55まで
+      normalize=False)
+  
+  assert vals[0] == pytest.approx(168552)
+  assert vals[30] == pytest.approx(283725)
+  
+  # 30代 (35歳) の値
+  vals_35 = get_retired_spending_multipliers(
+      [SpendingType.SINGLE_2019_CONSUMPTION],
+      start_age=35,
+      num_years=1,
+      normalize=False)
+  assert vals_35[0] == pytest.approx(222432)
