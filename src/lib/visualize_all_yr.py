@@ -356,13 +356,18 @@ def create_spend_percentile_chart(df: pd.DataFrame,
   支出額のパーセンタイル推移(25p, 50p, 75p)を可視化する。
   Dynamic SpendingのON/OFF比較をサポートする。
 
-  NOW: use_dynamic_spending というコラムによる挙動の変化を詳細に記す
+  注:
+  - `use_dynamic_spending` カラムが存在する場合、値を ON/OFF にマッピングして色分けします。
+  - `strategy` カラムが存在する場合、その値をそのまま凡例ラベルとして使用します。
+  - ラベル内に '@' を含めると、凡例表示時にそこで改行されます。
 
   Args:
     df: 分析対象のデータフレーム。
-        Required columns:
-        - value_type: 値の種類 ('spend25p', 'spend50p', 'spend75p')
-        - "1" から str(num_years) までの数字の列: 各経過年の支出額
+      Required columns:
+      - value_type: 値の種類 ('spend25p', 'spend50p', 'spend75p')
+      - "1" から str(num_years) までの数字の列: 各経過年の支出額
+      - group_label (または use_dynamic_spending, strategy): 凡例に表示するラベル。
+        ラベル内に '@' を含めると改行されます。
     title: グラフのタイトル
     output_path: 保存先のパス
     start_age: シミュレーション開始時の年齢 (x軸の計算に使用)
@@ -412,8 +417,8 @@ def create_spend_percentile_chart(df: pd.DataFrame,
   # Altairでプロット
   base = alt.Chart(pivot_df).encode(x=alt.X("age:Q", title="年齢"))
 
-  # Area (25p-75p)
-  legend_option = alt.Legend(orient='top') if show_legend else None
+  # 凡例の改行(split)対応
+  legend_option = alt.Legend(orient='top', labelExpr="split(datum.label, '@')") if show_legend else None
   area = base.mark_area(opacity=0.3).encode(y=alt.Y("spend25p:Q",
                                                     title="年間取り崩し額 (万円)"),
                                             y2="spend75p:Q",
