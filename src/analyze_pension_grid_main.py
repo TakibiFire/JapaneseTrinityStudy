@@ -41,20 +41,22 @@ def create_heatmap(df: pd.DataFrame, initial_age: int, target_age: int, output_p
   def get_x_label(row):
     scenario = row['scenario']
     amount_monthly = row['initial_pension_nominal_annual'] / 12.0
-    amount_str = f" ({amount_monthly:.1f}万/月)"
+    amount_str = f"({amount_monthly:.0f}万)"
     
     mapping = {
-        "A": "A:制度なし",
-        "B": "B:受給しない",
-        "C": "C:60歳受給",
-        "D": "D:65歳受給",
-        "E": "E:免除-60",
-        "F": "F:免除-65",
-        "G": "G:未納-65"
+        "NoPensionWorld": "年金制度なし",
+        "PayNoReceive": "受給なし",
+        "Pay_60": "継続-60歳受給",
+        "Pay_65": "継続-65歳受給",
+        "Pay_70": "継続-70歳受給",
+        "Pay_75": "継続-75歳受給",
+        "Exempt_60": "免除-60歳受給",
+        "Exempt_65": "免除-65歳受給",
+        "Unpaid_65": "未納-65歳受給"
     }
     label = mapping.get(scenario, scenario)
-    if scenario not in ["A", "B"]:
-      label += amount_str
+    if scenario not in ["NoPensionWorld", "PayNoReceive"]:
+      label += f"\n{amount_str}"
     return label
 
   def get_y_label(row):
@@ -66,7 +68,10 @@ def create_heatmap(df: pd.DataFrame, initial_age: int, target_age: int, output_p
   plot_df["survival_rate_pct"] = plot_df["survival_rate"] * 100
 
   # X軸の順序定義 (ラベルが動的なので、scenario でソートした後のラベルのリストを取得する)
-  scenario_order = ["A", "B", "C", "D", "E", "F", "G"]
+  scenario_order = [
+      "NoPensionWorld", "PayNoReceive", "Pay_60", "Pay_65", "Pay_70", "Pay_75",
+      "Exempt_60", "Exempt_65", "Unpaid_65"
+  ]
   x_order = []
   for s in scenario_order:
     matched = plot_df[plot_df["scenario"] == s]["scenario_label"].unique()
@@ -104,7 +109,7 @@ def create_heatmap(df: pd.DataFrame, initial_age: int, target_age: int, output_p
 
   chart = (heatmap + text).properties(
       title=f'{initial_age}歳開始 - {target_age}歳時点の生存確率 (%)',
-      width=300,
+      width=450,
       height=200
   )
 
@@ -120,7 +125,7 @@ def create_heatmap(df: pd.DataFrame, initial_age: int, target_age: int, output_p
 
 
 def main():
-  csv_path = "data/pension_grid_comp.csv"
+  csv_path = "data/pension/exp1.csv"
   if not os.path.exists(csv_path):
     print(f"Error: {csv_path} not found.")
     return

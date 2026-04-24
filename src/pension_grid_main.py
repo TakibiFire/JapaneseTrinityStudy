@@ -26,6 +26,7 @@
 - 国民年金保険料: 年額 21.5万 (CPI連動) とし、60歳の誕生日前まで支払う。
 """
 
+import argparse
 import os
 from itertools import product
 from typing import Any, Dict, List
@@ -44,10 +45,24 @@ from src.lib.cashflow_generator import (CashflowConfig, CashflowRule,
 from src.lib.simulation_defaults import get_cpi_ar12_config
 
 # 設定
-DATA_DIR = "data/"
-CSV_PATH = os.path.join(DATA_DIR, "pension_grid_comp.csv")
+DATA_DIR = "data/pension"
 
 def main():
+  # 引数の処理
+  parser = argparse.ArgumentParser(description="年金受給のグリッドシミュレーションを実行する")
+  parser.add_argument("--exp_name",
+                      type=str,
+                      default="exp1",
+                      help="実験名 (exp1)。カンマ区切りで複数指定可能")
+  args = parser.parse_args()
+
+  exp_names = [name.strip() for name in args.exp_name.split(",")]
+
+  for exp_name in exp_names:
+    run_experiment(exp_name)
+
+
+def run_experiment(exp_name: str):
   # 共通設定
   CURRENT_YEAR = 2026
   MACRO_ECONOMIC_SLIDE_END_YEAR = 2057
@@ -58,6 +73,7 @@ def main():
   PENSION_CPI_NAME = "Pension_CPI"
 
   os.makedirs(DATA_DIR, exist_ok=True)
+  csv_path = os.path.join(DATA_DIR, f"{exp_name}.csv")
 
   # 1. アセット生成
   # オルカン (7%, 15%)
@@ -76,7 +92,7 @@ def main():
 
   configs: List[AssetConfigType] = [orukan, base_cpi, pension_cpi]
   
-  print(f"価格推移を生成中... (試行回数: {N_SIM}, 期間: {YEARS}年)")
+  print(f"価格推移を生成中... (実験: {exp_name}, 試行回数: {N_SIM}, 期間: {YEARS}年)")
   monthly_prices = generate_monthly_asset_prices(configs,
                                                  n_paths=N_SIM,
                                                  n_months=YEARS * 12,
@@ -85,7 +101,15 @@ def main():
   # グリッドパラメータ
   initial_money_annual_cost_list = [(5000, 200), (10000, 400), (20000, 800)]
   initial_age_list = [30, 40, 50, 60]
-  scenarios = ["A", "B", "C", "D", "E", "F", "G"]
+  
+  if exp_name == "exp1":
+    scenarios = [
+        "NoPensionWorld", "PayNoReceive", "Pay_60", "Pay_65", "Pay_70", "Pay_75",
+        "Exempt_60", "Exempt_65", "Unpaid_65"
+    ]
+  else:
+    print(f"Skipping unknown exp_name: {exp_name}")
+    return
 
   all_combinations = list(product(
       initial_money_annual_cost_list,
@@ -115,15 +139,15 @@ def main():
     kiso_annual_nominal = 0.0
 
     # シナリオ別の設定
-    if scenario == "A":
+    if scenario == "NoPensionWorld":
       # 年金制度なし
       pass
     else:
-      # B~Gは共通で、生活費支出を 21.5万(保険料分) 減らす
+      # 他のシナリオは生活費支出を 21.5万(保険料分) 減らす
       current_annual_cost -= PREMIUM_ANNUAL
 
-      # 国民年金保険料 (B, C, D のみ支払い)
-      if scenario in ["B", "C", "D"]:
+      # 国民年金保険料 (Pay シナリオのみ支払い)
+      if "Pay" in scenario:
         months_to_60 = max(0, (60 - init_age) * 12)
         if months_to_60 > 0:
           cf_name = f"Premium_{i}"
@@ -136,11 +160,30 @@ def main():
           ))
           extra_cf_names.append(cf_name)
 
-      # 年金受給 (C~G)
-      if scenario in ["C", "D", "E", "F", "G"]:
-        pension_start_age = 60 if scenario in ["C", "E"] else 65
+      # 年金受給 (PayNoReceive 以外)
+      if scenario != "PayNoReceive":
+        # 受給開始年齢の判定
+        if "_60" in scenario:
+          pension_start_age = 60
+        elif "_65" in scenario:
+          pension_start_age = 65
+        elif "_70" in scenario:
+          pension_start_age = 70
+        elif "_75" in scenario:
+          pension_start_age = 75
+        else:
+          # ここには来ないはずだがデフォルト
+          pension_start_age = 65
+
         start_month = max(0, (pension_start_age - init_age) * 12)
-        reduction_rate = 0.76 if pension_start_age == 60 else 1.0
+
+        # 受給額倍率の計算
+        if pension_start_age < 65:
+          # 繰り上げ (0.4% / 月 減額)
+          reduction_rate = 1.0 - 0.004 * (65 - pension_start_age) * 12
+        else:
+          # 繰り下げ (0.7% / 月 増額)
+          reduction_rate = 1.0 + 0.007 * (pension_start_age - 65) * 12
         
         # 厚生年金 (22歳からリタイア開始年齢 N まで加入と想定)
         kousei_annual_nominal = KOUSEI_UNIT_ANNUAL * (init_age - 22) * reduction_rate
@@ -155,14 +198,14 @@ def main():
           extra_cf_names.append(cf_name)
 
         # 基礎年金
-        if scenario in ["C", "D"]:
+        if "Pay" in scenario:
           # 満額受給
           kiso_annual_nominal = KISO_FULL_ANNUAL * reduction_rate
-        elif scenario in ["E", "F"]:
+        elif "Exempt" in scenario:
           # 全額免除期間あり (Nから60歳まで免除)
           kiso_annual_nominal = (KISO_FULL_ANNUAL * (init_age - 22) / 40.0 +
                                  KISO_FULL_ANNUAL * (60 - init_age) / 40.0 * 0.5) * reduction_rate
-        elif scenario == "G":
+        elif "Unpaid" in scenario:
           # 未納 (Nから60歳まで未納)
           kiso_annual_nominal = (KISO_FULL_ANNUAL * (init_age - 22) / 40.0) * reduction_rate
         else:
@@ -224,8 +267,8 @@ def main():
 
   # CSV保存
   df = pd.DataFrame(results)
-  df.to_csv(CSV_PATH, index=False, encoding="utf-8-sig")
-  print(f"完了。結果を {CSV_PATH} に保存しました。")
+  df.to_csv(csv_path, index=False, encoding="utf-8-sig")
+  print(f"完了。結果を {csv_path} に保存しました。")
 
 if __name__ == "__main__":
   main()
