@@ -7,7 +7,7 @@
 - 投資先: オルカン (年率 7%, リスク 15%) + 為替リスク (0%, 10.53%)
 - 信託報酬: 0.05775%
 - 無リスク資産: 利回り 4% (ダイナミックリバランス有効時に使用)
-- インフレ率: 0.0 (DynamicSpendingの仕様上考慮しないため)
+- インフレ率: AR(12)モデルによる動的変動 (Japan_CPI)
 - 税率: 20.315%
 - 試行回数: 5000回
 - シミュレーション期間: 50年
@@ -35,6 +35,7 @@ from src.lib.asset_generator import (Asset, CpiAsset, ForexAsset,
                                      YearlyLogNormalArithmetic,
                                      generate_monthly_asset_prices)
 from src.lib.dynamic_rebalance import calculate_optimal_strategy
+from src.lib.simulation_defaults import get_cpi_ar12_config
 
 
 def main():
@@ -51,6 +52,7 @@ def main():
   fx_name = "USDJPY_0_10.53"
   acwi_name = "オルカン"
   zr_name = "無リスク資産(4%)"
+  cpi_name = "Japan_CPI"
 
   # 1. 価格推移の生成
   assets: List[Union[Asset, ForexAsset, CpiAsset]] = [
@@ -59,7 +61,8 @@ def main():
       Asset(name=acwi_name,
             dist=YearlyLogNormalArithmetic(mu=0.07, sigma=0.15),
             trust_fee=fee_acwi,
-            forex=fx_name)
+            forex=fx_name),
+      get_cpi_ar12_config(name=cpi_name)
   ]
 
   print(f"月次価格の推移を生成中... (試行回数: {n_sim}, 期間: {years}年)")
@@ -71,16 +74,14 @@ def main():
   zr_asset = ZeroRiskAsset(name=zr_name, yield_rate=zero_risk_yield)
 
   # 変数: 上限、下限、ダイナミックリバランスの有無
-  upper_limits = [0.02, 0.03, 0.04, 0.05, 0.06]
-  lower_limits = [
-      0.02, 0.015, 0.01, 0.005, 0.0, -0.005, -0.01, -0.015, -0.02
-  ]
+  upper_limits = [0.00, 0.01, 0.02, 0.03, 0.04, 0.05]
+  lower_limits = [-0.03, -0.025, -0.02, -0.015, -0.01, -0.005, -0.0]
   dynamic_rebalance_options = [0, 1]
 
   # ダイナミック最適比率用のコールバック
-  def dynamic_optimal_fn(net_value: np.ndarray, annual_spend: np.ndarray,
-                         remaining_years: float,
-                         post_tax_net: np.ndarray) -> Dict[str, Union[float, np.ndarray]]:
+  def dynamic_optimal_fn(
+      net_value: np.ndarray, annual_spend: np.ndarray, remaining_years: float,
+      post_tax_net: np.ndarray) -> Dict[str, Union[float, np.ndarray]]:
     safe_net_value = np.maximum(net_value, 1e-10)
     s_rate = annual_spend / safe_net_value
     # calculate_optimal_strategyはインフレ率0.0177を前提にチューニングされているため、
@@ -116,25 +117,28 @@ def main():
           selling_priority = [zr_name, acwi_name]
           # 初期比率は100%オルカン (期待値)
           initial_r = 1.0
-          initial_ratio = {acwi_name: float(initial_r), zr_asset: 1.0 - float(initial_r)}
+          initial_ratio = {
+              acwi_name: float(initial_r),
+              zr_asset: 1.0 - float(initial_r)
+          }
 
         # DynamicSpendingの仕様上、インフレ調整は名目前年支出額に対して行われるため、
-        # Strategy内部の共通インフレ調整機能は無効(0.0)にする必要がある。
-        strategy = Strategy(
-            name=f"DR{is_dyn}/U{upper:.1%}/L{lower:.1%}",
-            initial_money=initial_money,
-            initial_loan=0,
-            yearly_loan_interest=0,
-            initial_asset_ratio=initial_ratio,
-            annual_cost=DynamicSpending(initial_annual_spend=400.0,
-                                        target_ratio=0.04,
-                                        upper_limit=upper,
-                                        lower_limit=lower),
-            inflation_rate=0.0,
-            tax_rate=tax_rate,
-            selling_priority=selling_priority,
-            rebalance_interval=12,
-            dynamic_rebalance_fn=dynamic_fn)
+        # Strategyにcpi_nameを渡すことで、Vanguardルールのインフレ調整が有効になる。
+        strategy = Strategy(name=f"DR{is_dyn}/U{upper:.1%}/L{lower:.1%}",
+                            initial_money=initial_money,
+                            initial_loan=0,
+                            yearly_loan_interest=0,
+                            initial_asset_ratio=initial_ratio,
+                            annual_cost=DynamicSpending(
+                                initial_annual_spend=400.0,
+                                target_ratio=0.04,
+                                upper_limit=upper,
+                                lower_limit=lower),
+                            inflation_rate=cpi_name,
+                            tax_rate=tax_rate,
+                            selling_priority=selling_priority,
+                            rebalance_interval=12,
+                            dynamic_rebalance_fn=dynamic_fn)
 
         res = simulate_strategy(strategy, monthly_asset_prices)
 
