@@ -40,15 +40,17 @@ def main():
   df_spends = pd.read_csv(spends_path)
 
   # 1. 生存確率の推移比較 (Survival Probability Time-series)
-  # 3.0% 〜 4.5% の範囲に限定
-  df_surv_plot = df_survival[df_survival["rule"].isin([3.0, 3.5, 4.0,
-                                                       4.5])].copy()
+  # 3.0% 〜 4.5% の範囲に限定、かつ FixedSpend は除外
+  df_surv_plot = df_survival[
+      df_survival["rule"].isin([3.0, 3.5, 4.0, 4.5]) &
+      (df_survival["strategy"] != "FixedSpend")
+  ].copy()
 
   # 日本語ラベルへの変換 (Altairでの改行用にセパレータ '@' を使用)
   strat_map = {
       "DRv2_DSv1": "支出率を目標にする@ダイナミックスペンディング",
       "DRv2_DSv2": "生存確率を目標にする@ダイナミックスペンディング",
-      "FixedSpend": "定額取り崩し"
+      "FixedSpend": "定額取り崩し（ベースライン）"
   }
   df_surv_plot["strategy_jp"] = df_surv_plot["strategy"].map(strat_map)
   df_surv_plot["rule_label"] = df_surv_plot["rule"].apply(
@@ -65,7 +67,6 @@ def main():
     display_survival_title += f"（生存確率 {y_min:.0f}%以下は描画を省略）"
 
   # strokeDash の設定
-  # 指定されたラベルに対して点線を割り当てる
   chart_surv = alt.Chart(df_surv_plot).mark_line().encode(
       x=alt.X('year:Q', title='経過年数 (年)'),
       y=alt.Y('Survival Probability (%):Q',
@@ -77,7 +78,10 @@ def main():
           title='戦略',
           legend=alt.Legend(labelExpr="split(datum.label, '@')"),
           scale=alt.Scale(
-              domain=["支出率を目標にする@ダイナミックスペンディング", "生存確率を目標にする@ダイナミックスペンディング"],
+              domain=[
+                  "支出率を目標にする@ダイナミックスペンディング",
+                  "生存確率を目標にする@ダイナミックスペンディング"
+              ],
               range=[[4, 4], [0, 0]])),
       tooltip=[
           'year', 'rule', 'strategy_jp',
@@ -118,12 +122,47 @@ def main():
     file_name = f"{args.exp_name}_real_spend_comparison_{rule}p.svg"
     chart_path = os.path.join(output_dir, file_name)
 
+    # カラー設定: DSv1=red, DSv2=blue, Baseline=green
+    color_domain = [
+        "支出率を目標にする@ダイナミックスペンディング",
+        "生存確率を目標にする@ダイナミックスペンディング",
+        "定額取り崩し（ベースライン）"
+    ]
+    color_range = ["red", "blue", "green"]
+
     create_spend_percentile_chart(
         df_visualize,
         title=f'実質支出額の推移比較 (初期支出率: {rule}%, 共通生存パスのみ)',
         output_path=chart_path,
         start_age=40,
-        num_years=55)
+        num_years=55,
+        color_domain=color_domain,
+        color_range=color_range)
+
+  # 3. 数値データの表示 (Metrics to STDOUT)
+  print("\n=== Key Metrics Summary ===")
+
+  print("\n[Survival Rates]")
+  surv_years = [30, 50]
+  for year in surv_years:
+    print(f"--- Year {year} ---")
+    df_surv_year = df_survival[(df_survival["year"] == year) & (df_survival["strategy"] != "FixedSpend")]
+    for rule in sorted(df_surv_year["rule"].unique()):
+      df_rule = df_surv_year[df_surv_year["rule"] == rule]
+      print(f"Rule {rule}%:")
+      for _, row in df_rule.iterrows():
+        print(f"  {row['strategy']}: {row['survival_rate'] * 100:.1f}%")
+
+  print("\n[Real Spend (p25, p50)]")
+  spend_years = [10, 20, 30, 50]
+  for year in spend_years:
+    print(f"--- Year {year} ---")
+    df_spend_year = df_spends[df_spends["year"] == year]
+    for rule in sorted(df_spend_year["rule"].unique()):
+      df_rule = df_spend_year[df_spend_year["rule"] == rule]
+      print(f"Rule {rule}%:")
+      for _, row in df_rule.iterrows():
+        print(f"  {row['strategy']}: p25={row['p25']:.1f}, p50={row['p50']:.1f}")
 
 
 if __name__ == "__main__":

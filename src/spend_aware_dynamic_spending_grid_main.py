@@ -10,13 +10,13 @@ Spend-Aware Dynamic Spending のグリッドシミュレーション実行スク
 
 import argparse
 import os
-from typing import List, Union
+from typing import Dict, List, Union
 
 import numpy as np
 import pandas as pd
 
-from src.core import (DynamicSpending, Strategy, ZeroRiskAsset,
-                      simulate_strategy)
+from src.core import (DynamicSpending, SimulationResult, Strategy,
+                      ZeroRiskAsset, simulate_strategy)
 from src.lib.asset_generator import (AssetConfigType, DerivedAsset, ForexAsset,
                                      SlideAdjustedCpiAsset,
                                      YearlyLogNormalArithmetic,
@@ -174,20 +174,24 @@ def main():
     strategies = ["FixedSpend", "SpendAware"]
   else:
     rules = [3.0, 3.5, 4.0, 4.5, 5.0]
-    strategies = ["DRv2_DSv1", "DRv2_DSv2"]
+    strategies = ["DRv2_DSv1", "DRv2_DSv2", "FixedSpend"]
 
   for rule in rules:
     print(f"\n--- Rule {rule}% ---")
     base_spend_annual_init = BASE_SPEND_ANNUAL_WO_PENSION + PENSION_PREMIUM_ANNUAL
     init_money = base_spend_annual_init / (rule / 100.0)
 
-    res_v1 = None
-    res_v2 = None
+    res_dict: Dict[str, SimulationResult] = {}
 
     for strat_name in strategies:
       # 戦略の設定
       annual_cost: Union[List[float], DynamicSpending, SpendAwareDynamicSpending]
       inflation_rate: Union[float, str, None] = CPI_NAME
+      
+      # FixedSpend (Baseline) の場合は潤沢な資産で実行する
+      current_init_money = init_money
+      if strat_name == "FixedSpend":
+        current_init_money = 100 * 10000 # 100億円
 
       if strat_name == "FixedSpend":
         annual_cost = annual_cost_setting
@@ -196,9 +200,9 @@ def main():
         annual_cost = SpendAwareDynamicSpending(
             initial_age=START_AGE,
             p_low=0.85,
-            p_high=0.95,
-            lower_mult=0.985,  # -1.5%
-            upper_mult=1.01,   # +1.0%
+            p_high=0.97,
+            lower_mult=0.99,  # -1%
+            upper_mult=1.02,   # +2.0%
             annual_cost_real=annual_cost_setting,
             dp_predictor=dp_predictor)
         inflation_rate = 0.0  # SpendAware は名目ベースで計算するため 0 に設定
@@ -212,7 +216,7 @@ def main():
         )
 
       strategy = Strategy(name=strat_name,
-                          initial_money=float(init_money),
+                          initial_money=float(current_init_money),
                           initial_loan=0.0,
                           yearly_loan_interest=0.0,
                           initial_asset_ratio={
@@ -230,51 +234,57 @@ def main():
 
       print(f"{strat_name} 実行中...")
       res = simulate_strategy(strategy,
-                             monthly_prices,
+                             monthly_asset_prices=monthly_prices,
                              monthly_cashflows=monthly_cashflows)
       
-      if strat_name == "DRv2_DSv1": res_v1 = res
-      if strat_name == "DRv2_DSv2": res_v2 = res
+      res_dict[strat_name] = res
 
       # 1. 生存確率データの蓄積 (visualize.py 用)
-      for y in range(YEARS + 1):
-        survival_rate = np.mean(res.sustained_months >= y * 12)
-        results_survival_probs.append({
+      # FixedSpend は生存確率の比較には含めない（巨大資金のため）
+      if strat_name != "FixedSpend":
+        for y in range(YEARS + 1):
+          survival_rate = np.mean(res.sustained_months >= y * 12)
+          results_survival_probs.append({
+              "rule": rule,
+              "strategy": strat_name,
+              "year": y,
+              "survival_rate": survival_rate
+          })
+
+        # 2. 最終生存確率サマリー
+        surv_rate = np.mean(res.sustained_months == YEARS * 12)
+        results_summary.append({
             "rule": rule,
             "strategy": strat_name,
-            "year": y,
-            "survival_rate": survival_rate
+            "survival_rate": surv_rate
         })
 
-      # 2. 最終生存確率サマリー
-      surv_rate = np.mean(res.sustained_months == YEARS * 12)
-      results_summary.append({
-          "rule": rule,
-          "strategy": strat_name,
-          "survival_rate": surv_rate
-      })
-
-    # 3. 支出データの集計 (両方の戦略が生存しているパスのみ)
-    if args.exp_name == "v1_v2_comp" and res_v1 is not None and res_v2 is not None:
-      prices_cpi = monthly_prices[CPI_NAME]
-      for y in range(YEARS):
-        # 両戦略が年末時点で生存しているパス
-        active_mask = (res_v1.sustained_months >= (y + 1) * 12) & (res_v2.sustained_months >= (y + 1) * 12)
-        
-        if np.any(active_mask):
-          # 実質支出額の計算
-          real_v1 = res_v1.annual_spends[active_mask, y] / prices_cpi[active_mask, y * 12]
-          real_v2 = res_v2.annual_spends[active_mask, y] / prices_cpi[active_mask, y * 12]
+    # 3. 支出データの集計 (DSv1, DSv2 両方が生存しているパスのみ)
+    if args.exp_name == "v1_v2_comp":
+      rv1 = res_dict.get("DRv2_DSv1")
+      rv2 = res_dict.get("DRv2_DSv2")
+      rfx = res_dict.get("FixedSpend")
+      
+      if rv1 is not None and rv2 is not None and rfx is not None:
+        prices_cpi = monthly_prices[CPI_NAME]
+        for y in range(YEARS):
+          # DSv1, DSv2 両戦略が年末時点で生存しているパス
+          active_mask = (rv1.sustained_months >= (y + 1) * 12) & \
+                        (rv2.sustained_months >= (y + 1) * 12)
           
-          for strat, vals in [("DRv2_DSv1", real_v1), ("DRv2_DSv2", real_v2)]:
-            results_spends.append({
-                "rule": rule,
-                "strategy": strat,
-                "year": y + 1,
-                "p25": np.percentile(vals, 25),
-                "p50": np.percentile(vals, 50),
-                "p75": np.percentile(vals, 75)
-            })
+          if np.any(active_mask):
+            for strat_name in strategies:
+              res_obj = res_dict[strat_name]
+              if res_obj.annual_spends is not None:
+                real_vals = res_obj.annual_spends[active_mask, y] / prices_cpi[active_mask, y * 12]
+                results_spends.append({
+                    "rule": rule,
+                    "strategy": strat_name,
+                    "year": y + 1,
+                    "p25": np.percentile(real_vals, 25),
+                    "p50": np.percentile(real_vals, 50),
+                    "p75": np.percentile(real_vals, 75)
+                })
 
   # 結果の保存
   data_dir = f"data/spend_aware_dynamic_spending"

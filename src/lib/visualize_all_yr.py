@@ -351,7 +351,9 @@ def create_spend_percentile_chart(df: pd.DataFrame,
                                   num_years: int,
                                   width: int = 600,
                                   height: int = 400,
-                                  show_legend: bool = True):
+                                  show_legend: bool = True,
+                                  color_domain: Optional[List[str]] = None,
+                                  color_range: Optional[List[str]] = None):
   """
   支出額のパーセンタイル推移(25p, 50p, 75p)を可視化する。
   Dynamic SpendingのON/OFF比較をサポートする。
@@ -374,6 +376,9 @@ def create_spend_percentile_chart(df: pd.DataFrame,
     num_years: シミュレーション期間（年数）
     width: グラフの幅
     height: グラフの高さ
+    show_legend: 凡例を表示するかどうか
+    color_domain: 色を適用する値のリスト（任意）
+    color_range: 適用する色のリスト（任意）
   """
   # 1からnum_yearsまでの列を年度列として扱う
   year_cols = [str(i) for i in range(1, num_years + 1) if str(i) in df.columns]
@@ -409,6 +414,10 @@ def create_spend_percentile_chart(df: pd.DataFrame,
     color_scale = alt.Scale()
     legend_title = "グループ"
 
+  # カラー設定の上書き
+  if color_domain is not None and color_range is not None:
+    color_scale = alt.Scale(domain=color_domain, range=color_range)
+
   # p25, p50, p75 を列に展開
   pivot_df = df_long.pivot_table(index=["group_label", "age"],
                                  columns="value_type",
@@ -418,7 +427,9 @@ def create_spend_percentile_chart(df: pd.DataFrame,
   base = alt.Chart(pivot_df).encode(x=alt.X("age:Q", title="年齢"))
 
   # 凡例の改行(split)対応
-  legend_option = alt.Legend(orient='top', labelExpr="split(datum.label, '@')") if show_legend else None
+  legend_option = alt.Legend(
+      orient='top',
+      labelExpr="split(datum.label, '@')") if show_legend else None
   area = base.mark_area(opacity=0.3).encode(y=alt.Y("spend25p:Q",
                                                     title="年間取り崩し額 (万円)"),
                                             y2="spend75p:Q",
