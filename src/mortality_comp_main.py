@@ -47,9 +47,9 @@ from src.core import Strategy, simulate_strategy
 from src.lib.asset_generator import (Asset, CpiAsset, ForexAsset,
                                      YearlyLogNormalArithmetic,
                                      generate_monthly_asset_prices)
-from src.lib.cashflow_generator import (CashflowConfig, CashflowRule,
-                                        CashflowType, MortalityConfig,
-                                        generate_cashflows)
+from src.lib.cashflow_generator import (BaseSpendConfig, CashflowConfig,
+                                        CashflowRule, CashflowType,
+                                        MortalityConfig, generate_cashflows)
 from src.lib.life_table import FEMALE_MORTALITY_RATES, MALE_MORTALITY_RATES
 from src.lib.visualize import (create_styled_summary,
                                create_survival_probability_chart)
@@ -75,24 +75,38 @@ def run_simulation_for_gender(gender: str, mortality_rates: List[float],
   for age in start_ages:
     print(f"[{gender}] 開始年齢 {age} 歳のシミュレーションを実行中...")
 
-    cf_configs: List[CashflowConfig] = [
-        MortalityConfig(name=f"Mortality_{gender}_{age}",
-                        mortality_rates=mortality_rates,
-                        initial_age=age,
-                        payout=1000000.0)
-    ]
-    monthly_cashflows = generate_cashflows(cf_configs,
+    # 1. キャッシュフロールールの定義
+    spend_config = BaseSpendConfig(
+        name="生活費",
+        amount=ANNUAL_COST,
+        cpi_name=CPI_NAME
+    )
+    mortality_config = MortalityConfig(name=f"Mortality_{gender}_{age}",
+                                       mortality_rates=mortality_rates,
+                                       initial_age=age,
+                                       payout=1000000.0)
+    
+    monthly_cashflows = generate_cashflows([spend_config, mortality_config],
                                            monthly_prices,
                                            n_sim=N_SIM,
                                            n_months=YEARS * 12)
+
+    # 2. 戦略(Plan)の定義
+    base_rules = [
+        CashflowRule(source_name=spend_config.name,
+                     cashflow_type=CashflowType.REGULAR)
+    ]
+    mortality_rules = base_rules + [
+        CashflowRule(source_name=mortality_config.name,
+                     cashflow_type=CashflowType.EXTRAORDINARY)
+    ]
 
     s_off = Strategy(name=f"{gender}_Age{age}_OFF",
                      initial_money=INITIAL_MONEY,
                      initial_loan=0.0,
                      yearly_loan_interest=0.0,
                      initial_asset_ratio={ACWI_NAME: 1.0},
-                     annual_cost=ANNUAL_COST,
-                     inflation_rate=CPI_NAME,
+                     cashflow_rules=base_rules,
                      tax_rate=TAX_RATE,
                      selling_priority=[ACWI_NAME],
                      rebalance_interval=12)
@@ -102,20 +116,15 @@ def run_simulation_for_gender(gender: str, mortality_rates: List[float],
                     initial_loan=0.0,
                     yearly_loan_interest=0.0,
                     initial_asset_ratio={ACWI_NAME: 1.0},
-                    annual_cost=ANNUAL_COST,
-                    inflation_rate=CPI_NAME,
+                    cashflow_rules=mortality_rules,
                     tax_rate=TAX_RATE,
                     selling_priority=[ACWI_NAME],
-                    rebalance_interval=12,
-                    cashflow_rules=[
-                        CashflowRule(source_name=f"Mortality_{gender}_{age}",
-                                     cashflow_type=CashflowType.EXTRAORDINARY)
-                    ])
+                    rebalance_interval=12)
 
-    results[s_off.name] = simulate_strategy(s_off, monthly_prices)
-    results[s_on.name] = simulate_strategy(s_on,
-                                           monthly_prices,
-                                           monthly_cashflows=monthly_cashflows)
+    results[s_off.name] = simulate_strategy(
+        s_off, monthly_prices, monthly_cashflows=monthly_cashflows)
+    results[s_on.name] = simulate_strategy(
+        s_on, monthly_prices, monthly_cashflows=monthly_cashflows)
 
   return results
 
