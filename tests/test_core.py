@@ -529,11 +529,12 @@ def test_extra_cashflow_multiplier():
   assert np.allclose(res.net_values[0], 760.0)
 
 
-def test_cashflow_type_include_in_annual_spend():
+def test_cashflow_type_isolated_from_dynamic_base():
   """
-  CashflowType.REGULAR として設定された支出が、翌年の動的支出計算
-  のベースとなる「前年実績支出」に含まれることを検証する。
-  1年目の臨時支出(REGULAR) 100 が、2年目の動的支出に引き継がれることを確認。
+  CashflowType.REGULAR として設定された支出（保険料など）が、
+  動的支出（DynamicSpending）の「前年実績支出」に混入しないことを検証する。
+  混入すると、other_net との二重カウントで支出が爆発するバグが発生するため。
+  1年目の臨時支出(REGULAR) 100 は、2年目の動的支出のベースには引き継がれないことを確認。
   """
   n_sim = 1
   n_months = 24
@@ -565,8 +566,9 @@ def test_cashflow_type_include_in_annual_spend():
     monthly_asset_prices=prices,
     monthly_cashflows=monthly_cf
   )
-  # 1年目: 100 支出。2年目: DynamicSpending が 100 を引き継ぐ。
-  assert np.allclose(res.net_values[0], 4800.0) # 5000 - 100 - 100
+  # 1年目: Dynamic=0, Extra=100。合計支出=100。残高=4900
+  # 2年目: Dynamicは自分自身の前年実績(0)をベースにするため、0。Extraは無し。残高=4900のまま。
+  assert np.allclose(res.net_values[0], 4900.0)  # 5000 - 100
 
 
 def test_dynamic_spending_inflation_fix():

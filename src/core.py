@@ -401,12 +401,11 @@ def simulate_strategy(
           cf_m = np.abs(cf_path[:, m])
           cf_prev = np.abs(cf_path[:, m-12]) if m >= 12 else cf_m
 
-          # 定常的な支出ルールの場合、前年の総定常支出をベースとして渡す。
-          # これにより、複数の定常支出ルールを合算した動的調整が可能になる。
-          if rule.cashflow_type == CashflowType.REGULAR:
-            prev_amt = prev_gross_reg_spend_y
-          else:
-            prev_amt = prev_annual_spend_y[rule.source_name]
+          # 注意: ここで prev_gross_reg_spend_y を渡すと、DynamicSpending や SpendAware が
+          # 自らの出力実績以外の現金流出（年金保険料など）も前年実績として取り込んでしまい、
+          # さらに other_net_m でも二重カウントされることで、支出が指数関数的に膨張する致命的なバグに繋がります。
+          # そのため、各ハンドラには必ず「そのルール自身による前年の出力実績」のみを渡します。
+          prev_amt = prev_annual_spend_y[rule.source_name]
 
           dynamic_annual_amount[rule.source_name][active_paths] = rule.dynamic_handler.evaluate(
               m=m, active_paths=active_paths, current_net_worth=current_net_worth,
