@@ -209,7 +209,7 @@ def main():
       elif strat_name == "DRv2_DSv1":
         # DSv1: core.py の DynamicSpending (Vanguard型) をそのまま使用
         annual_cost = DynamicSpending(
-            initial_annual_spend=base_spend_annual_init,
+            initial_annual_spend=BASE_SPEND_ANNUAL_WO_PENSION,
             target_ratio=rule / 100.0,
             upper_limit=0.01,   # +1.0%
             lower_limit=-0.015  # -1.5%
