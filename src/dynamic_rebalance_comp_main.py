@@ -36,6 +36,8 @@ from src.core import Strategy, ZeroRiskAsset, simulate_strategy
 from src.lib.asset_generator import (Asset, CpiAsset, ForexAsset,
                                      YearlyLogNormalArithmetic,
                                      generate_monthly_asset_prices)
+from src.lib.cashflow_generator import (BaseSpendConfig, CashflowRule,
+                                        CashflowType, generate_cashflows)
 from src.lib.dynamic_rebalance import calculate_optimal_strategy
 
 
@@ -144,6 +146,22 @@ def main():
       ]
 
       print(f"  - 支出率: {spending_label}")
+
+      # 1. キャッシュフロールールの定義
+      spend_config = BaseSpendConfig(
+          name="生活費",
+          amount=annual_cost,
+          cpi_name=cpi_name
+      )
+      cashflow_rules = [
+          CashflowRule(source_name=spend_config.name,
+                       cashflow_type=CashflowType.REGULAR)
+      ]
+      # target_n 年分だけスライスして渡す
+      sliced_prices = {k: v[:, :target_n * 12 + 1] for k, v in monthly_asset_prices.items()}
+      monthly_cashflows = generate_cashflows(
+          [spend_config], sliced_prices, n_sim, target_n * 12)
+
       for strategy_name, dynamic_fn, fixed_ratio in test_cases:
         # 初期資産配分の設定
         initial_ratio: Dict[Union[str, ZeroRiskAsset], float] = {}
@@ -176,24 +194,17 @@ def main():
             initial_loan=0.0,
             yearly_loan_interest=0.0,
             initial_asset_ratio=initial_ratio,
-            annual_cost=annual_cost,
-            inflation_rate=cpi_name,
+            cashflow_rules=cashflow_rules,
             tax_rate=tax_rate,
             selling_priority=[zr_name, acwi_name],
             rebalance_interval=12,
             dynamic_rebalance_fn=dynamic_fn
         )
 
-        # target_n 年分だけスライスして渡す
-        # 注意: monthly_asset_prices をそのまま渡すと、simulate_strategy 内で
-        # total_months が 50 年 (600ヶ月) と解釈されてしまい、
-        # ダイナミックリバランスの残り年数計算 (rem_years = (total_months - m) / 12) が
-        # 狂ってしまう (30年目標なのに 50年残っていると判定されて過剰にリスクを取る)。
-        # これを防ぐため、シミュレーション対象の target_n 年分だけをスライスして渡す。
-        sliced_prices = {k: v[:, :target_n * 12 + 1] for k, v in monthly_asset_prices.items()}
-
         # シミュレーション実行
-        res = simulate_strategy(strategy, sliced_prices)
+        res = simulate_strategy(strategy,
+                                sliced_prices,
+                                monthly_cashflows=monthly_cashflows)
         
         # target_n 年時点での生存確率を計算
         bankrupt_count = (res.sustained_months < target_n * 12).sum()
