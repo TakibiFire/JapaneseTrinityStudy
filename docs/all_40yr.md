@@ -3,7 +3,7 @@
 <!--
 DO NOT DELETE:
 python3 src/all_40yr_grid_main.py --exp_type P-D-RANGE
-python3 src/all_40yr_grid_main.py --exp_type P60-D
+python3 src/all_40yr_grid_main.py --exp_type P60-D1
 python3 src/analyze_all_40yr_grid_main.py 
 -->
 

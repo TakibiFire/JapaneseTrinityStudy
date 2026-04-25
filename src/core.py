@@ -80,9 +80,9 @@ class DynamicSpending:
     # ポートフォリオ残高に対する一定割合を目指す。
     target_withdrawal = np.maximum(0.0, nw_active * self.target_ratio)
     # 目標支出額から他のキャッシュフロー（年金等）を引いたものが、基本支出の目標となる。
-    # other_net_m は 支出 - 収入 なので、目標引き出し額から other_net_m*12 を引けば
+    # other_net_m は 支出 - 収入 なので、目標引き出し額から other_net_m*12 を足せば
     # 基本支出で賄うべき額が出る。
-    y_target = np.maximum(0.0, target_withdrawal - (other_net_active * 12.0))
+    y_target = np.maximum(0.0, target_withdrawal + (other_net_active * 12.0))
 
     # 2. 前年の支出をインフレ調整 (Inflation-adjusted previous spend)
     # Vanguard ルールでは、前年の支出額にインフレ率を乗じたものを基準にする。

@@ -7,7 +7,7 @@ DO NOT DELETE.
 - python3 src/side_fire_comp_main.py
 
 実験3 (少し時間がかかる)
-- python3 src/src/side_fire_cond_grid_main.py
+- python3 src/side_fire_cond_grid_main.py
 - python3 src/analyze_side_fire_cond_main.py
 -->
 
