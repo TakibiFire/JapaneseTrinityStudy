@@ -420,8 +420,6 @@ def main():
                 ORUKAN_NAME: a,
                 zr_asset_obj: 1.0 - a
             },
-            annual_cost=0.0,  # すべて monthly_cashflows で制御
-            inflation_rate=None,
             selling_priority=[ORUKAN_NAME, ZERO_RISK_NAME],
             tax_rate=TAX_RATE,
             rebalance_interval=0  # 1年なのでリバランスなし

@@ -7,9 +7,38 @@
 import dataclasses
 from abc import ABC, abstractmethod
 from enum import Enum, auto
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, List, Optional, Protocol, Union
 
 import numpy as np
+
+
+class CashflowDynamicHandler(Protocol):
+  """
+  キャッシュフローを動的に調整するためのインターフェース。
+  """
+
+  def evaluate(self, m: int, active_paths: np.ndarray,
+               current_net_worth: np.ndarray, tax_cost_m: np.ndarray,
+               prev_actual_amount: np.ndarray, other_net_m: np.ndarray,
+               precomputed_cf_m: np.ndarray,
+               precomputed_cf_prev_m: np.ndarray) -> np.ndarray:
+    """
+    動的なキャッシュフロー（支出額）を算出する。
+
+    Args:
+      m: シミュレーション開始からの経過月数
+      active_paths: 現在生存しているパスのマスク (n_sim,)
+      current_net_worth: 現在の純資産 (n_sim,)
+      tax_cost_m: 今月支払う税金 (n_sim,)
+      prev_actual_amount: 前年のこのルールによる実際の年間支出実績 (n_sim,)
+      other_net_m: 他の REGULAR キャッシュフローによる正味収支（正は支出、負は収入） (n_sim,)
+      precomputed_cf_m: 事前計算された今月のキャッシュフロー額（正の絶対値） (n_sim,)
+      precomputed_cf_prev_m: 事前計算された12ヶ月前のキャッシュフロー額（正の絶対値） (n_sim,)
+
+    Returns:
+      np.ndarray: 新しい年間名目支出額 (n_sim,)。正の値が支出を表す。
+    """
+    ...
 
 
 class CashflowType(Enum):
@@ -67,6 +96,7 @@ class CashflowRule:
   source_name: str
   cashflow_type: CashflowType
   multiplier_fn: Optional[ExtraCashflowMultiplierFn] = None
+  dynamic_handler: Optional[CashflowDynamicHandler] = None
 
 
 class CashflowConfig(ABC):
@@ -200,6 +230,55 @@ class SuddenSpendConfig(CashflowConfig):
     cf = np.zeros(n_months, dtype=np.float64)
     if 0 <= self.month < n_months:
       cf[self.month] = self.amount
+    return cf
+
+
+class BaseSpendConfig(CashflowConfig):
+  """
+  基本支出のキャッシュフロー設定。
+  指定した名目金額（または年齢別のリスト）と CPI パスに基づいてキャッシュフローを生成する。
+  支出として扱われるため、生成される値は負数となる。
+  """
+
+  def __init__(self,
+               name: str,
+               amount: Union[float, List[float]],
+               cpi_name: Optional[str] = None):
+    """
+    Args:
+      name: このキャッシュフローの名前
+      amount: 年間の基本支出額 (万円/年)。数値または年齢別のリスト。
+      cpi_name: (オプション) 物価連動させるための CPI パスの名前。
+    """
+    super().__init__(name)
+    self.amount = amount
+    self.cpi_name = cpi_name
+
+  def generate(self, n_sim: int, n_months: int,
+               monthly_prices: Dict[str, np.ndarray]) -> np.ndarray:
+    cf = np.zeros((n_sim, n_months), dtype=np.float64)
+    
+    # 年齢別の名目支出額を配列にする
+    if isinstance(self.amount, list):
+      annual_amounts = np.array(self.amount)
+    else:
+      # 単一の数値の場合は十分な長さの配列にする
+      annual_amounts = np.full(n_months // 12 + 1, float(self.amount))
+
+    for m in range(n_months):
+      year_idx = m // 12
+      if year_idx < len(annual_amounts):
+        cf[:, m] = -annual_amounts[year_idx] / 12.0
+      else:
+        cf[:, m] = -annual_amounts[-1] / 12.0
+
+    if self.cpi_name:
+      if self.cpi_name not in monthly_prices:
+        raise ValueError(f"CPI path '{self.cpi_name}' not found in monthly_prices.")
+      # monthly_prices[cpi_name] is shape (n_sim, n_months + 1)
+      cpi_array = monthly_prices[self.cpi_name][:, :n_months]
+      cf *= cpi_array
+
     return cf
 
 
