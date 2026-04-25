@@ -22,9 +22,9 @@ from src.core import (ExtraCashflowMultiplierFn, Strategy, ZeroRiskAsset,
 from src.lib.asset_generator import (Asset, CpiAsset, ForexAsset,
                                      YearlyLogNormalArithmetic,
                                      generate_monthly_asset_prices)
-from src.lib.cashflow_generator import (CashflowConfig, CashflowRule,
-                                        CashflowType, PensionConfig,
-                                        generate_cashflows)
+from src.lib.cashflow_generator import (BaseSpendConfig, CashflowConfig,
+                                        CashflowRule, CashflowType,
+                                        PensionConfig, generate_cashflows)
 from src.lib.dynamic_rebalance import calculate_optimal_strategy
 from src.lib.visualize import create_styled_summary, visualize_and_save
 
@@ -94,7 +94,11 @@ def main():
       "75%": 300.0 / 12.0
   }
 
-  exp1_cf_configs: List[CashflowConfig] = []
+  spend_config = BaseSpendConfig(name="生活費",
+                                 amount=ANNUAL_COST,
+                                 cpi_name=CPI_NAME)
+
+  exp1_cf_configs: List[CashflowConfig] = [spend_config]
   for label, monthly_amount in exp1_income_levels.items():
     if monthly_amount > 0:
       exp1_cf_configs.append(
@@ -112,9 +116,13 @@ def main():
   exp1_strategies = []
   for label in exp1_income_levels.keys():
     rules = [
-        CashflowRule(source_name=f"Income_{label}",
-                     cashflow_type=CashflowType.EXTRAORDINARY)
-    ] if label != "なし" else []
+        CashflowRule(source_name=spend_config.name,
+                     cashflow_type=CashflowType.REGULAR)
+    ]
+    if label != "なし":
+      rules.append(
+          CashflowRule(source_name=f"Income_{label}",
+                       cashflow_type=CashflowType.EXTRAORDINARY))
 
     # Fixed 100% Orukan (Exp-1-A)
     exp1_strategies.append(
@@ -123,11 +131,10 @@ def main():
                  initial_loan=0.0,
                  yearly_loan_interest=0.0,
                  initial_asset_ratio={ORUKAN_NAME: 1.0},
-                 annual_cost=ANNUAL_COST,
-                 inflation_rate=CPI_NAME,
+                 cashflow_rules=rules,
                  selling_priority=[ORUKAN_NAME],
                  rebalance_interval=1,
-                 cashflow_rules=rules))
+                 ))
 
     # Dynamic Rebalance (Exp-1-B)
     exp1_strategies.append(
@@ -139,12 +146,11 @@ def main():
                      ORUKAN_NAME: 1.0,
                      risk_free_asset: 0.0
                  },
-                 annual_cost=ANNUAL_COST,
-                 inflation_rate=CPI_NAME,
+                 cashflow_rules=rules,
                  selling_priority=[RISK_FREE_NAME, ORUKAN_NAME],
                  rebalance_interval=12,
                  dynamic_rebalance_fn=dynamic_rebalance_fn,
-                 cashflow_rules=rules))
+                 ))
 
   exp1_results = {}
   for s in exp1_strategies:
@@ -204,7 +210,7 @@ def main():
       }
   }
 
-  exp2_cf_configs: List[CashflowConfig] = []
+  exp2_cf_configs: List[CashflowConfig] = [spend_config]
   for label, cfg in exp2_cases.items():
     duration_val = int(cfg["duration"])
     amount_val = float(cfg["amount"])
@@ -223,6 +229,8 @@ def main():
   exp2_strategies = []
   for label in exp2_cases.keys():
     rules = [
+        CashflowRule(source_name=spend_config.name,
+                     cashflow_type=CashflowType.REGULAR),
         CashflowRule(source_name=f"Income_{label}",
                      cashflow_type=CashflowType.EXTRAORDINARY)
     ]
@@ -234,11 +242,10 @@ def main():
                  initial_loan=0.0,
                  yearly_loan_interest=0.0,
                  initial_asset_ratio={ORUKAN_NAME: 1.0},
-                 annual_cost=ANNUAL_COST,
-                 inflation_rate=CPI_NAME,
+                 cashflow_rules=rules,
                  selling_priority=[ORUKAN_NAME],
                  rebalance_interval=1,
-                 cashflow_rules=rules))
+                 ))
 
     # Dynamic Rebalance
     exp2_strategies.append(
@@ -250,12 +257,11 @@ def main():
                      ORUKAN_NAME: 1.0,
                      risk_free_asset: 0.0
                  },
-                 annual_cost=ANNUAL_COST,
-                 inflation_rate=CPI_NAME,
+                 cashflow_rules=rules,
                  selling_priority=[RISK_FREE_NAME, ORUKAN_NAME],
                  rebalance_interval=12,
                  dynamic_rebalance_fn=dynamic_rebalance_fn,
-                 cashflow_rules=rules))
+                 ))
 
   exp2_results = {}
   for s in exp2_strategies:
