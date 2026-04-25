@@ -33,6 +33,8 @@ import pandas as pd
 from src.core import Strategy, simulate_strategy
 from src.lib.asset_generator import (Asset, YearlyLogNormalArithmetic,
                                      generate_monthly_asset_prices)
+from src.lib.cashflow_generator import (BaseSpendConfig, CashflowRule,
+                                        CashflowType, generate_cashflows)
 from src.lib.visualize import create_survival_probability_chart
 
 
@@ -113,8 +115,7 @@ def main():
                                     initial_loan=0,
                                     yearly_loan_interest=0.0,
                                     initial_asset_ratio={asset_name: 1.0},
-                                    annual_cost=0.0,
-                                    inflation_rate=None,
+                                    cashflow_rules=[],
                                     tax_rate=0.0,
                                     selling_priority=[asset_name])
   res_no_withdrawal = simulate_strategy(strategy_no_withdrawal,
@@ -165,20 +166,34 @@ def main():
 
   # これらのパスに対して取り崩しありのシミュレーションを実行
   print("中央値パスに対して取り崩しシミュレーションを実行中...")
+
+  # 1. キャッシュフロールールの定義
+  spend_config = BaseSpendConfig(
+      name="生活費",
+      amount=ANNUAL_WITHDRAWAL,
+      cpi_name=None
+  )
+  cashflow_rules = [
+      CashflowRule(source_name=spend_config.name,
+                   cashflow_type=CashflowType.REGULAR)
+  ]
+  monthly_cashflows = generate_cashflows(
+      [spend_config], monthly_asset_prices, N_SIM, YEARS * 12)
+
   # 全体に対して一度実行し、後でインデックスで抽出する
   strategy_withdrawal = Strategy(name="4M Withdrawal",
                                  initial_money=INITIAL_MONEY,
                                  initial_loan=0,
                                  yearly_loan_interest=0.0,
                                  initial_asset_ratio={asset_name: 1.0},
-                                 annual_cost=ANNUAL_WITHDRAWAL,
-                                 inflation_rate=None,
+                                 cashflow_rules=cashflow_rules,
                                  tax_rate=0.0,
                                  selling_priority=[asset_name])
   # core.py の simulate_strategy は全パスに対して実行される
   # 特定のパスだけ実行する機能はないため、全体を回す（N_SIM=5000 なので高速）
   res_withdrawal_all = simulate_strategy(strategy_withdrawal,
-                                         monthly_asset_prices)
+                                         monthly_asset_prices,
+                                         monthly_cashflows=monthly_cashflows)
 
   # 中央値パスのうち、破産した人を特定
   # 破産 = sustained_months < N_MONTHS
