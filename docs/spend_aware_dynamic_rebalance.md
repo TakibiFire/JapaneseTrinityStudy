@@ -3,9 +3,9 @@
 <!--
 DO NOT DELETE:
 
-$ src/dynamic_rebalance_dp_grid_main.py --exp_name dp_comp
-$ src/dynamic_rebalance_dp_grid_main.py --exp_name dump_withdraw
-$ src/analyze_dynamic_rebalance_dp_grid_main.py --exp_name dump_withdraw
+$ python3 src/dynamic_rebalance_dp_grid_main.py --exp_name dp_comp
+$ python3 src/dynamic_rebalance_dp_grid_main.py --exp_name dump_withdraw
+$ python3 src/analyze_dynamic_rebalance_dp_grid_main.py --exp_name dump_withdraw
 
 -->
 
