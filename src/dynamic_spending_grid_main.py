@@ -35,6 +35,8 @@ from src.core import (DynamicSpending, Strategy, ZeroRiskAsset,
 from src.lib.asset_generator import (Asset, CpiAsset, ForexAsset,
                                      YearlyLogNormalArithmetic,
                                      generate_monthly_asset_prices)
+from src.lib.cashflow_generator import (BaseSpendConfig, CashflowRule,
+                                        CashflowType, generate_cashflows)
 from src.lib.dp_predictor import DPOptimalStrategyPredictor
 from src.lib.dynamic_rebalance import calculate_optimal_strategy
 from src.lib.simulation_defaults import get_cpi_ar12_config
@@ -161,6 +163,13 @@ def run_experiment(exp_name: str):
       dynamic_rebalance_options)
   count = 0
 
+  # 1. キャッシュフロールールの定義 (基本支出のベース設定)
+  spend_config = BaseSpendConfig(name="生活費",
+                                 amount=initial_spend,
+                                 cpi_name=cpi_name)
+  monthly_cashflows = generate_cashflows([spend_config], monthly_asset_prices,
+                                         n_sim, years * 12)
+
   print(f"各戦略のシミュレーションを実行中... (実験: {exp_name})")
   for is_dyn in dynamic_rebalance_options:
     for upper in upper_limits:
@@ -185,25 +194,32 @@ def run_experiment(exp_name: str):
           }
 
         # DynamicSpendingの仕様上、インフレ調整は名目前年支出額に対して行われるため、
-        # Strategyにcpi_nameを渡すことで、Vanguardルールのインフレ調整が有効になる。
+        # BaseSpendConfigにcpi_nameを渡すことで、Vanguardルールのインフレ調整が有効になる。
+        ds_handler = DynamicSpending(initial_annual_spend=initial_spend,
+                                     target_ratio=target_ratio,
+                                     upper_limit=upper,
+                                     lower_limit=lower)
+        cashflow_rules = [
+            CashflowRule(source_name=spend_config.name,
+                         cashflow_type=CashflowType.REGULAR,
+                         dynamic_handler=ds_handler)
+        ]
+
         strategy = Strategy(name=f"DR{is_dyn}/U{upper:.1%}/L{lower:.1%}",
                             initial_money=initial_money,
                             initial_loan=0,
                             yearly_loan_interest=0,
                             initial_asset_ratio=initial_ratio,
-                            annual_cost=DynamicSpending(
-                                initial_annual_spend=initial_spend,
-                                target_ratio=target_ratio,
-                                upper_limit=upper,
-                                lower_limit=lower),
-                            inflation_rate=cpi_name,
+                            cashflow_rules=cashflow_rules,
                             tax_rate=tax_rate,
                             selling_priority=selling_priority,
                             rebalance_interval=12,
                             dynamic_rebalance_fn=dynamic_fn,
                             record_annual_spend=is_spend_dump)
 
-        res = simulate_strategy(strategy, monthly_asset_prices)
+        res = simulate_strategy(strategy,
+                                monthly_asset_prices,
+                                monthly_cashflows=monthly_cashflows)
 
         if is_spend_dump:
           # 支出額のダンプ
