@@ -22,6 +22,8 @@ from src.core import Strategy, simulate_strategy
 from src.lib.asset_generator import (Asset, CpiAsset, DerivedAsset,
                                      YearlyLogNormalArithmetic,
                                      generate_monthly_asset_prices)
+from src.lib.cashflow_generator import (BaseSpendConfig, CashflowRule,
+                                        CashflowType, generate_cashflows)
 from src.lib.visualize import create_styled_summary, visualize_and_save
 
 
@@ -69,6 +71,15 @@ def main():
                                                        sigma=0.0))
 
   # 2. 戦略(Plan)の定義
+  # 1. キャッシュフロールールの定義
+  spend_config = BaseSpendConfig(name="生活費",
+                                 amount=annual_cost_base,
+                                 cpi_name=cpi_name)
+  cashflow_rules = [
+      CashflowRule(source_name=spend_config.name,
+                   cashflow_type=CashflowType.REGULAR)
+  ]
+
   strategies = []
   for name, _ in trust_fees:
     strategies.append(
@@ -77,8 +88,7 @@ def main():
                  initial_loan=0,
                  yearly_loan_interest=2.125 / 100,
                  initial_asset_ratio={name: 1.0},
-                 annual_cost=annual_cost_base,
-                 inflation_rate=cpi_name,
+                 cashflow_rules=cashflow_rules,
                  tax_rate=tax_rate_std,
                  selling_priority=[name]))
 
@@ -90,11 +100,15 @@ def main():
                                                        n_paths=n_sim,
                                                        n_months=n_months,
                                                        seed=seed)
+  monthly_cashflows = generate_cashflows([spend_config], monthly_asset_prices,
+                                         n_sim, n_months)
 
   results = {}
   print("各戦略のシミュレーションを実行中...")
   for strategy in strategies:
-    res = simulate_strategy(strategy, monthly_asset_prices)
+    res = simulate_strategy(strategy,
+                            monthly_asset_prices,
+                            monthly_cashflows=monthly_cashflows)
     results[strategy.name] = res
 
   # 4. 可視化と保存
