@@ -9,7 +9,8 @@ from src.core import (DynamicSpending, SimulationResult, Strategy,
 from src.lib.asset_generator import Asset, CpiAsset, MonthlySimpleNormal
 from src.lib.cashflow_generator import (BaseSpendConfig, CashflowConfig,
                                         CashflowRule, CashflowType,
-                                        SuddenSpendConfig, generate_cashflows)
+                                        PensionConfig, SuddenSpendConfig,
+                                        generate_cashflows)
 from src.lib.spend_aware_dynamic_spending import SpendAwareDynamicSpending
 
 
@@ -671,3 +672,46 @@ def test_spend_aware_dynamic_spending_basic():
   assert res.annual_spends is not None
   # 支出が 100.0 より削減されていることを確認
   assert res.annual_spends[0, 0] < 100.0
+
+
+def test_strategy_initial_spending_memory():
+  """
+  Strategy の initial_prev_net_reg_spend / initial_prev_gross_reg_spend が
+  シミュレーション開始時点 (m=0) の multiplier_fn に正しく渡されることを検証する。
+  """
+  n_sim = 1
+  n_months = 12
+  prices = {"A": np.ones((1, 13)), "Cash": np.ones((1, 13))}
+
+  # 1年目の年初に呼び出される multiplier_fn
+  # prev_gross が 400 であれば 1.0, そうでなければ 0.0 を返すようにする
+  def trigger_fn(m: int, nw: np.ndarray, prev_net: np.ndarray, prev_gross: np.ndarray) -> np.ndarray:
+    if m == 0 and np.all(prev_gross == 400.0) and np.all(prev_net == 300.0):
+      return np.ones(len(nw))
+    return np.zeros(len(nw))
+
+  rules = [
+    CashflowRule("Work", CashflowType.REGULAR, multiplier_fn=trigger_fn)
+  ]
+  # Work ルールの基本額は 100
+  cf_configs: List[CashflowConfig] = [PensionConfig("Work", 100.0, 0)]
+  monthly_cf = generate_cashflows(cf_configs, prices, n_sim, n_months)
+
+  strategy = Strategy(
+    name="Test",
+    initial_money=1000.0,
+    initial_loan=0.0,
+    yearly_loan_interest=0.0,
+    initial_asset_ratio={"A": 1.0},
+    selling_priority=["A"],
+    initial_prev_net_reg_spend=300.0,
+    initial_prev_gross_reg_spend=400.0,
+    cashflow_rules=rules
+  )
+
+  # シミュレーション実行
+  res = simulate_strategy(strategy, prices, monthly_cf)
+  
+  # Work が発動していれば、資産は 1000 + (100 * 12) = 2200 になっているはず
+  # 発動していなければ 1000 のまま
+  assert res.net_values[0] == 2200.0

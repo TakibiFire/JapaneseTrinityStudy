@@ -134,6 +134,10 @@ class Strategy:
   rebalance_interval: int = 0
   dynamic_rebalance_fn: Optional[DynamicRebalanceFn] = None
   record_annual_spend: bool = False
+  # シミュレーション開始時点（1年目の年初）において、「前年の支出実績」として扱う金額。
+  # multiplier_fn や DynamicSpending ハンドラが 1年目の支出や行動を決定する際の基準となる。
+  initial_prev_net_reg_spend: float = 0.0  # 前年の正味定常支出（支出 - 収入）
+  initial_prev_gross_reg_spend: float = 0.0 # 前年の総定常支出（収入控除前、ライフスタイルコスト）
   cashflow_rules: List[CashflowRule] = dataclasses.field(default_factory=list)
 
   def __post_init__(self):
@@ -270,8 +274,8 @@ def simulate_strategy(
   # prev_gross_reg_spend_y: 前年の総年間支出額（実績、収入控除前）
   # annual_net_reg_spend_tracker: 今年の正味年間支出額の累計
   # annual_gross_reg_spend_tracker: 今年の総年間支出額の累計
-  prev_net_reg_spend_y = np.zeros(n_sim, dtype=np.float64)
-  prev_gross_reg_spend_y = np.zeros(n_sim, dtype=np.float64)
+  prev_net_reg_spend_y = np.full(n_sim, strategy.initial_prev_net_reg_spend, dtype=np.float64)
+  prev_gross_reg_spend_y = np.full(n_sim, strategy.initial_prev_gross_reg_spend, dtype=np.float64)
   annual_net_reg_spend_tracker = np.zeros(n_sim, dtype=np.float64)
   annual_gross_reg_spend_tracker = np.zeros(n_sim, dtype=np.float64)
 

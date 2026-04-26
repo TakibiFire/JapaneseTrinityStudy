@@ -167,6 +167,8 @@ def main():
                         yearly_loan_interest=0.0,
                         initial_asset_ratio={ORUKAN_NAME: 1.0},
                         selling_priority=[ORUKAN_NAME],
+                        initial_prev_net_reg_spend=ANNUAL_COST,
+                        initial_prev_gross_reg_spend=ANNUAL_COST,
                         cashflow_rules=[
                             CashflowRule(source_name=spend_config.name,
                                          cashflow_type=CashflowType.REGULAR),
