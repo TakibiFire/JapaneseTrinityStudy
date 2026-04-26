@@ -21,9 +21,9 @@ from src.lib.asset_generator import (AssetConfigType, DerivedAsset, ForexAsset,
                                      SlideAdjustedCpiAsset,
                                      YearlyLogNormalArithmetic,
                                      generate_monthly_asset_prices)
-from src.lib.cashflow_generator import (CashflowConfig, CashflowRule,
-                                        CashflowType, PensionConfig,
-                                        generate_cashflows)
+from src.lib.cashflow_generator import (BaseSpendConfig, CashflowConfig,
+                                        CashflowRule, CashflowType,
+                                        PensionConfig, generate_cashflows)
 from src.lib.dp_predictor import DPOptimalStrategyPredictor
 from src.lib.retired_spending import (SpendingType,
                                       get_retired_spending_multipliers,
@@ -111,8 +111,28 @@ def main():
   KISO_ANNUAL = KISO_FULL_ANNUAL * REDUCTION_RATE
   KOUSEI_ANNUAL = PENSION_TOTAL_ANNUAL - KISO_ANNUAL
 
+  # 支出リスト (万円/年)
+  annual_cost_setting = [
+      (val * 12.0 / 10000.0) for val in spending_multipliers_by_age
+  ]
+  print(f"DEBUG: annual_cost_setting[0] = {annual_cost_setting[0]}")
+
   cf_configs: List[CashflowConfig] = []
   cf_rules: List[CashflowRule] = []
+
+  # ベース支出の設定 (CPI連動版と名目版の両方を準備)
+  cf_configs.append(
+      BaseSpendConfig(name="base_spend_cpi",
+                      amount=annual_cost_setting,
+                      cpi_name=CPI_NAME))
+  cf_configs.append(
+      BaseSpendConfig(name="base_spend_nominal",
+                      amount=annual_cost_setting,
+                      cpi_name=None))
+  cf_configs.append(
+      BaseSpendConfig(name="base_spend_cpi_flat",
+                      amount=BASE_SPEND_ANNUAL_WO_PENSION,
+                      cpi_name=CPI_NAME))
 
   # 保険料支払い: 40歳から60歳まで (20年間 = 240ヶ月)
   cf_configs.append(
@@ -153,11 +173,6 @@ def main():
   # DP予測器の準備
   dp_predictor = DPOptimalStrategyPredictor(MODELS_PATH)
 
-  # 支出リスト (万円/年)
-  annual_cost_setting = [
-      (val * 12.0 / 10000.0) for val in spending_multipliers_by_age
-  ]
-
   # DRv2: DPベースの動的リバランス
   def dynamic_rebalance_fn(total_net, annual_spend, rem_years, post_tax_net):
     predict_age = int(round(START_AGE + (YEARS - (rem_years - 0.25))))
@@ -185,8 +200,7 @@ def main():
 
     for strat_name in strategies:
       # 戦略の設定
-      annual_cost: Union[List[float], DynamicSpending, SpendAwareDynamicSpending]
-      inflation_rate: Union[float, str, None] = CPI_NAME
+      current_cf_rules = list(cf_rules)
       
       # FixedSpend (Baseline) の場合は潤沢な資産で実行する
       current_init_money = init_money
@@ -194,10 +208,12 @@ def main():
         current_init_money = 100 * 10000 # 100億円
 
       if strat_name == "FixedSpend":
-        annual_cost = annual_cost_setting
+        current_cf_rules.append(
+            CashflowRule(source_name="base_spend_cpi",
+                         cashflow_type=CashflowType.REGULAR))
       elif strat_name == "SpendAware" or strat_name == "DRv2_DSv2":
         # DSv2: 生存確率ベースの動的支出
-        annual_cost = SpendAwareDynamicSpending(
+        ds_handler = SpendAwareDynamicSpending(
             initial_age=START_AGE,
             p_low=0.85,
             p_high=0.97,
@@ -205,15 +221,22 @@ def main():
             upper_mult=1.02,   # +2.0%
             annual_cost_real=annual_cost_setting,
             dp_predictor=dp_predictor)
-        inflation_rate = 0.0  # SpendAware は名目ベースで計算するため 0 に設定
+        current_cf_rules.append(
+            CashflowRule(source_name="base_spend_nominal",
+                         cashflow_type=CashflowType.REGULAR,
+                         dynamic_handler=ds_handler))
       elif strat_name == "DRv2_DSv1":
         # DSv1: core.py の DynamicSpending (Vanguard型) をそのまま使用
-        annual_cost = DynamicSpending(
+        ds_handler = DynamicSpending(
             initial_annual_spend=BASE_SPEND_ANNUAL_WO_PENSION,
             target_ratio=rule / 100.0,
             upper_limit=0.01,   # +1.0%
             lower_limit=-0.015  # -1.5%
         )
+        current_cf_rules.append(
+            CashflowRule(source_name="base_spend_cpi_flat",
+                         cashflow_type=CashflowType.REGULAR,
+                         dynamic_handler=ds_handler))
 
       strategy = Strategy(name=strat_name,
                           initial_money=float(current_init_money),
@@ -223,14 +246,12 @@ def main():
                               ORUKAN_NAME: 1.0,
                               zr_asset_obj: 0.0
                           },
-                          annual_cost=annual_cost,
-                          inflation_rate=inflation_rate,
                           tax_rate=TAX_RATE,
                           rebalance_interval=12,
                           dynamic_rebalance_fn=dynamic_rebalance_fn,
                           selling_priority=[ORUKAN_NAME, ZERO_RISK_NAME],
                           record_annual_spend=True,
-                          cashflow_rules=cf_rules)
+                          cashflow_rules=current_cf_rules)
 
       print(f"{strat_name} 実行中...")
       res = simulate_strategy(strategy,

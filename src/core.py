@@ -2,7 +2,7 @@
 日本版トリニティ・スタディのシミュレーションに必要なデータクラスと関数群（新エンジン版）。
 
 アセット生成（asset_generator.py）で生成された月次価格推移に基づき、
-ポート欧の運用、リバランス、取り崩し、税金計算などを実行する。
+ポートフォリオの運用、リバランス、取り崩し、税金計算などを実行する。
 """
 
 import dataclasses
@@ -12,7 +12,6 @@ import numpy as np
 
 from src.lib.cashflow_generator import (CashflowRule, CashflowType,
                                         ExtraCashflowMultiplierFn)
-from src.lib.spend_aware_dynamic_spending import SpendAwareDynamicSpending
 
 # ---------------------------------------------------------------------------
 # 1. データ構造 (Dataclasses)
@@ -34,7 +33,7 @@ class DynamicSpending:
   ダイナミック・スペンディング（動的支出）戦略の設定。
 
   支出額を資産残高の一定割合（target_ratio）に保とうとするが、
-  前年の基本支出（annual_base_spend）に対して一定の範囲（lower_limit, upper_limit）
+  前年の支出実績（prev_actual_amount）に対して一定の範囲（lower_limit, upper_limit）
   に収まるように調整する。
   """
   initial_annual_spend: float  # 初年度の目標基本支出額 (万円/年)
@@ -42,25 +41,23 @@ class DynamicSpending:
   upper_limit: float           # 前年比の最大上昇率 (0.03 = +3%)
   lower_limit: float           # 前年比の最大下降率 (-0.005 = -0.5%)
 
-  def calculate_nominal_spend(self, m: int, net_worth: np.ndarray,
-                              prev_base_spend_y: np.ndarray, cpi_m: np.ndarray,
-                              cpi_m_minus_12: np.ndarray,
-                              other_net_m: np.ndarray,
-                              active_paths: np.ndarray) -> np.ndarray:
+  def evaluate(self, m: int, active_paths: np.ndarray,
+               current_net_worth: np.ndarray, tax_cost_m: np.ndarray,
+               prev_actual_amount: np.ndarray, other_net_m: np.ndarray,
+               precomputed_cf_m: np.ndarray,
+               precomputed_cf_prev_m: np.ndarray) -> np.ndarray:
     """
     Vanguard のダイナミックスペンディング規則に基づき、新しい名目基本支出額を算出する。
-    
+
     Args:
       m: シミュレーション開始からの経過月数
-      net_worth: 実効純資産（税引前純資産 - 前年確定分の未払税金）
-      prev_base_spend_y: 前年の名目基本支出額
-      cpi_m: 現在の累積CPIマルチプライヤー
-      cpi_m_minus_12: 12ヶ月前の累積CPIマルチプライヤー
-      other_net_m: 基本支出以外の月次正味キャッシュフロー（名目）
       active_paths: 現在生存しているパスのマスク
-
-    Returns:
-      np.ndarray: 新しい年間名目基本支出額
+      current_net_worth: 現在の純資産
+      tax_cost_m: 今月の税金
+      prev_actual_amount: 前年の実績支出額
+      other_net_m: 他のキャッシュフローによる正味収支
+      precomputed_cf_m: 事前計算された今月のキャッシュフロー額
+      precomputed_cf_prev_m: 事前計算された12ヶ月前のキャッシュフロー額
     """
     n_sim = len(active_paths)
     new_base_nom = np.zeros(n_sim, dtype=np.float64)
@@ -70,11 +67,15 @@ class DynamicSpending:
       return new_base_nom
 
     # 有効なパスのみ計算対象とする
-    nw_active = net_worth[active_paths]
-    prev_base_active = prev_base_spend_y[active_paths]
+    # Effective NW = current_net_worth - tax_cost_m
+    nw_active = current_net_worth[active_paths] - tax_cost_m[active_paths]
+    prev_actual_active = prev_actual_amount[active_paths]
     other_net_active = other_net_m[active_paths]
-    cpi_m_active = cpi_m[active_paths]
-    cpi_m_minus_12_active = cpi_m_minus_12[active_paths]
+
+    # precomputed_cf_m / precomputed_cf_prev_m が CPI比率に相当する
+    cpi_ratio = np.ones(len(nw_active))
+    mask_nonzero = precomputed_cf_prev_m[active_paths] > 0
+    cpi_ratio[mask_nonzero] = precomputed_cf_m[active_paths][mask_nonzero] / precomputed_cf_prev_m[active_paths][mask_nonzero]
 
     # 1. 目標支出額 (Target Withdrawal)
     # ポートフォリオ残高に対する一定割合を目指す。
@@ -85,9 +86,7 @@ class DynamicSpending:
     y_target = np.maximum(0.0, target_withdrawal + (other_net_active * 12.0))
 
     # 2. 前年の支出をインフレ調整 (Inflation-adjusted previous spend)
-    # Vanguard ルールでは、前年の支出額にインフレ率を乗じたものを基準にする。
-    cpi_ratio = cpi_m_active / cpi_m_minus_12_active
-    y_prev_adjusted = prev_base_active * cpi_ratio
+    y_prev_adjusted = prev_actual_active * cpi_ratio
 
     # 3. 上限と下限の算出 (Calculate Limits)
     # 上限・下限はインフレ調整後の前年支出額に対して適用される。
@@ -99,6 +98,20 @@ class DynamicSpending:
 
     new_base_nom[active_paths] = res_active
     return new_base_nom
+
+  def calculate_nominal_spend(self, m: int, net_worth: np.ndarray,
+                              prev_base_spend_y: np.ndarray, cpi_m: np.ndarray,
+                              cpi_m_minus_12: np.ndarray,
+                              other_net_m: np.ndarray,
+                              active_paths: np.ndarray) -> np.ndarray:
+    """
+    (Deprecated) 旧エンジン用の計算メソッド。
+    """
+    return self.evaluate(
+        m=m, active_paths=active_paths, current_net_worth=net_worth,
+        tax_cost_m=np.zeros_like(net_worth), prev_actual_amount=prev_base_spend_y,
+        other_net_m=other_net_m, precomputed_cf_m=cpi_m, precomputed_cf_prev_m=cpi_m_minus_12
+    )
 
 
 # ダイナミックリバランス用のコールバック関数
@@ -116,24 +129,26 @@ class Strategy:
   initial_loan: float  # 万円
   yearly_loan_interest: float
   initial_asset_ratio: Dict[Union[str, ZeroRiskAsset], float]
-  annual_cost: Union[float, List[float], DynamicSpending,
-                     SpendAwareDynamicSpending]
-  inflation_rate: Union[float, str, None]
   selling_priority: List[str]
   tax_rate: float = 0.20315
   rebalance_interval: int = 0
   dynamic_rebalance_fn: Optional[DynamicRebalanceFn] = None
   record_annual_spend: bool = False
+  # シミュレーション開始時点（1年目の年初）において、「前年の支出実績」として扱う金額。
+  # multiplier_fn や DynamicSpending ハンドラが 1年目の支出や行動を決定する際の基準となる。
+  initial_prev_net_reg_spend: float = 0.0  # 前年の正味定常支出（支出 - 収入）
+  initial_prev_gross_reg_spend: float = 0.0 # 前年の総定常支出（収入控除前、ライフスタイルコスト）
   cashflow_rules: List[CashflowRule] = dataclasses.field(default_factory=list)
 
   def __post_init__(self):
+    # 資産配分の合計が 1.0 であるか確認
+    if not np.isclose(sum(self.initial_asset_ratio.values()), 1.0):
+      raise ValueError("Asset allocation must sum to 1.0")
+
     # キャッシュフロールールのソース名が重複していないか確認
     rule_names = [rule.source_name for rule in self.cashflow_rules]
     if len(rule_names) != len(set(rule_names)):
       raise ValueError("Duplicate source_name found in cashflow_rules.")
-
-    if isinstance(self.annual_cost, SpendAwareDynamicSpending) and isinstance(self.inflation_rate, float) and self.inflation_rate != 0.0:
-      raise ValueError("inflation_rate must be 0.0 or None when using SpendAwareDynamicSpending, as it handles limits nominally.")
 
     valid_names = set()
     for key in self.initial_asset_ratio.keys():
@@ -203,15 +218,6 @@ def simulate_strategy(
     n_sim, n_months_plus_one = sample_prices.shape
     total_months = n_months_plus_one - 1
 
-  # CPIパスの参照
-  cpi_multiplier_path: Optional[np.ndarray] = None
-  if isinstance(strategy.inflation_rate, str):
-    if strategy.inflation_rate not in local_monthly_asset_prices:
-      raise ValueError(
-          f"CPI path '{strategy.inflation_rate}' not found in monthly_asset_prices."
-      )
-    cpi_multiplier_path = local_monthly_asset_prices[strategy.inflation_rate]
-
   # 初期資産の正規化と無リスク資産のセットアップ
   normalized_ratio: Dict[str, float] = {}
   zero_risk_assets: List[ZeroRiskAsset] = []
@@ -264,42 +270,31 @@ def simulate_strategy(
   net_values = np.zeros(n_sim, dtype=np.float64)
 
   # 定常支出の管理
-  # target_annual_spend: 今年の目標年間支出額（名目）
   # prev_net_reg_spend_y: 前年の正味の年間支出額（実績）
   # prev_gross_reg_spend_y: 前年の総年間支出額（実績、収入控除前）
-  # prev_base_spend_y: 前年の基本支出額（実績、追加キャッシュフローを含まない）
   # annual_net_reg_spend_tracker: 今年の正味年間支出額の累計
   # annual_gross_reg_spend_tracker: 今年の総年間支出額の累計
-  # annual_base_spend_tracker: 今年の基本支出額の累計
-  target_annual_spend = np.zeros(n_sim, dtype=np.float64)
-  prev_net_reg_spend_y = np.zeros(n_sim, dtype=np.float64)
-  prev_gross_reg_spend_y = np.zeros(n_sim, dtype=np.float64)
-  prev_base_spend_y = np.zeros(n_sim, dtype=np.float64)
+  prev_net_reg_spend_y = np.full(n_sim, strategy.initial_prev_net_reg_spend, dtype=np.float64)
+  prev_gross_reg_spend_y = np.full(n_sim, strategy.initial_prev_gross_reg_spend, dtype=np.float64)
   annual_net_reg_spend_tracker = np.zeros(n_sim, dtype=np.float64)
   annual_gross_reg_spend_tracker = np.zeros(n_sim, dtype=np.float64)
-  annual_base_spend_tracker = np.zeros(n_sim, dtype=np.float64)
 
-  if isinstance(strategy.annual_cost, (DynamicSpending, SpendAwareDynamicSpending)):
-    if isinstance(strategy.annual_cost, SpendAwareDynamicSpending):
-      init_val = strategy.annual_cost.annual_cost_real[0]
-    else:
-      init_val = strategy.annual_cost.initial_annual_spend
-    target_annual_spend.fill(init_val)
-    prev_net_reg_spend_y.fill(init_val)
-    prev_gross_reg_spend_y.fill(init_val)
-    prev_base_spend_y.fill(init_val)
-  elif isinstance(strategy.annual_cost, list):
-    init_val = strategy.annual_cost[0]
-    target_annual_spend.fill(init_val)
-    prev_net_reg_spend_y.fill(init_val)
-    prev_gross_reg_spend_y.fill(init_val)
-    prev_base_spend_y.fill(init_val)
-  else:
-    init_val = cast(float, strategy.annual_cost)
-    target_annual_spend.fill(init_val)
-    prev_net_reg_spend_y.fill(init_val)
-    prev_gross_reg_spend_y.fill(init_val)
-    prev_base_spend_y.fill(init_val)
+  # ルールごとの支出管理
+  # actual_annual_spend_tracker: 今年の各ルールの支出実績累計
+  # prev_annual_spend_y: 前年の各ルールの支出実績
+  # dynamic_annual_amount: 今年の各ルールの動的決定支出額 (年初に決定)
+  actual_annual_spend_tracker: Dict[str, np.ndarray] = {
+      rule.source_name: np.zeros(n_sim, dtype=np.float64)
+      for rule in strategy.cashflow_rules
+  }
+  prev_annual_spend_y: Dict[str, np.ndarray] = {
+      rule.source_name: np.zeros(n_sim, dtype=np.float64)
+      for rule in strategy.cashflow_rules
+  }
+  dynamic_annual_amount: Dict[str, np.ndarray] = {
+      rule.source_name: np.zeros(n_sim, dtype=np.float64)
+      for rule in strategy.cashflow_rules
+  }
 
   # 追加キャッシュフローの倍率（ソース名ごとに保持）
   extra_cf_multipliers: Dict[str, np.ndarray] = {
@@ -307,7 +302,6 @@ def simulate_strategy(
       for rule in strategy.cashflow_rules
       if rule.multiplier_fn is not None
   }
-  has_dynamic_cf = len(extra_cf_multipliers) > 0
 
   # 年次支出の記録用
   annual_spends_record: Optional[np.ndarray] = None
@@ -335,7 +329,7 @@ def simulate_strategy(
       cf = monthly_cashflows[source]
       if cf.shape != (total_months,) and cf.shape != (n_sim, total_months):
         raise ValueError(
-            f"Cashflow source '{source}' has invalid shape {cf.shape}. Expected ({total_months},) or ({n_sim}, {total_months})."
+            f"Cashflow source '{source}' has invalid shape {cf.shape}."
         )
 
       if cf.ndim == 1:
@@ -364,126 +358,92 @@ def simulate_strategy(
     else:
       tax_cost_m.fill(0.0)
 
-    # 3. Base の支出額の決定
-    # 純資産の計算（動的支出または条件付きキャッシュフローがある場合のみ、年1回実行）
+    # 3. キャッシュフローの評価 (年初のみ)
     if m % 12 == 0:
-      # 年間支出トラッカーのリセット (全パスで実行)
+      # 年間支出トラッカーのリセット
       if m > 0:
         prev_net_reg_spend_y[active_paths] = annual_net_reg_spend_tracker[
             active_paths]
         prev_gross_reg_spend_y[active_paths] = annual_gross_reg_spend_tracker[
             active_paths]
-        prev_base_spend_y[active_paths] = annual_base_spend_tracker[
-            active_paths]
         annual_net_reg_spend_tracker.fill(0.0)
         annual_gross_reg_spend_tracker.fill(0.0)
-        annual_base_spend_tracker.fill(0.0)
+        for source in actual_annual_spend_tracker:
+          prev_annual_spend_y[source][active_paths] = actual_annual_spend_tracker[
+              source][active_paths]
+          actual_annual_spend_tracker[source].fill(0.0)
 
-      if isinstance(strategy.annual_cost, (DynamicSpending, SpendAwareDynamicSpending)) or has_dynamic_cf:
-        current_net_worth = cash.copy()
-        for name, u in units.items():
-          current_net_worth[active_paths] += u[
-              active_paths] * local_monthly_asset_prices[name][active_paths, m]
-        current_net_worth[active_paths] -= strategy.initial_loan
+      # 純資産の計算
+      current_net_worth = cash.copy()
+      for name, u in units.items():
+        current_net_worth[active_paths] += u[
+            active_paths] * local_monthly_asset_prices[name][active_paths, m]
+      current_net_worth[active_paths] -= strategy.initial_loan
 
-        # 1. 追加キャッシュフロー倍率の更新 (支出決定の前に実行)
-        for rule in strategy.cashflow_rules:
-          if rule.multiplier_fn is not None:
-            extra_cf_multipliers[
-                rule.source_name][active_paths] = rule.multiplier_fn(
-                    m, current_net_worth[active_paths],
-                    prev_net_reg_spend_y[active_paths],
-                    prev_gross_reg_spend_y[active_paths])
+      # 倍率の更新 (支出決定の前に実行)
+      for rule in strategy.cashflow_rules:
+        if rule.multiplier_fn is not None:
+          extra_cf_multipliers[
+              rule.source_name][active_paths] = rule.multiplier_fn(
+                  m, current_net_worth[active_paths],
+                  prev_net_reg_spend_y[active_paths],
+                  prev_gross_reg_spend_y[active_paths])
 
-        # 2. 基本支出の更新
-        if isinstance(strategy.annual_cost, (DynamicSpending, SpendAwareDynamicSpending)):
-          # Effective NW = current_net_worth - tax_cost_m
-          eff_nw = current_net_worth.copy()
-          eff_nw[active_paths] -= tax_cost_m[active_paths]
-
-          # Other_Net_m の算出 (名目)
-          # その月の REGULAR キャッシュフローを集計する
+      # 動的ハンドラの評価
+      # 各キャッシュフロールールに対して動的な金額（支出額）を決定する
+      for rule, cf_path in prepared_cashflows:
+        if rule.dynamic_handler:
+          # 他の REGULAR キャッシュフローの合計を算出し、ハンドラに渡す。
+          # これにより、ハンドラは「年金などで賄いきれない不足分」を把握できる。
           other_net_m_val = np.zeros(n_sim, dtype=np.float64)
-          for rule, cf_path in prepared_cashflows:
-            if rule.cashflow_type == CashflowType.REGULAR:
-              source = rule.source_name
-              multiplier = extra_cf_multipliers.get(source, 1.0)
-              impact = cf_path[:, m] * multiplier
-              other_net_m_val -= impact  # 収入(正)なら引き出しを減らすのでマイナス
+          for other_rule, other_cf_path in prepared_cashflows:
+            if other_rule.source_name != rule.source_name and other_rule.cashflow_type == CashflowType.REGULAR:
+              other_multiplier = extra_cf_multipliers.get(other_rule.source_name, 1.0)
+              other_impact = other_cf_path[:, m] * other_multiplier
+              other_net_m_val -= other_impact # 収入(正)なら net_m を減らすのでマイナス
 
-          # 前年のCPI（12ヶ月前）
-          cpi_m = np.ones(n_sim, dtype=np.float64)
-          cpi_m_minus_12 = np.ones(n_sim, dtype=np.float64)
-          if isinstance(strategy.inflation_rate, str):
-            cpi_path = cpi_multiplier_path
-            assert cpi_path is not None
-            cpi_m = cpi_path[:, m]
-            if m >= 12:
-              cpi_m_minus_12 = cpi_path[:, m - 12]
-          elif isinstance(strategy.inflation_rate, float):
-            cpi_m = np.full(
-                n_sim, (1.0 + strategy.inflation_rate)**(m / 12.0))
-            if m >= 12:
-              cpi_m_minus_12 = np.full(
-                  n_sim, (1.0 + strategy.inflation_rate)**((m - 12) / 12.0))
+          cf_m = np.abs(cf_path[:, m])
+          cf_prev = np.abs(cf_path[:, m-12]) if m >= 12 else cf_m
 
-          # calculate_nominal_spend はDynamicSpending と
-          # SpendAwareDynamicSpendingで別々に定義されている。
-          target_annual_spend[active_paths] = strategy.annual_cost.calculate_nominal_spend(
-              m, eff_nw, prev_base_spend_y, cpi_m, cpi_m_minus_12,
-              other_net_m_val, active_paths)[active_paths]
+          # 注意: ここで prev_gross_reg_spend_y を渡すと、DynamicSpending や SpendAware が
+          # 自らの出力実績以外の現金流出（年金保険料など）も前年実績として取り込んでしまい、
+          # さらに other_net_m でも二重カウントされることで、支出が指数関数的に膨張する致命的なバグに繋がります。
+          # そのため、各ハンドラには必ず「そのルール自身による前年の出力実績」のみを渡します。
+          prev_amt = prev_annual_spend_y[rule.source_name]
+
+          dynamic_annual_amount[rule.source_name][active_paths] = rule.dynamic_handler.evaluate(
+              m=m, active_paths=active_paths, current_net_worth=current_net_worth,
+              tax_cost_m=tax_cost_m, prev_actual_amount=prev_amt,
+              other_net_m=other_net_m_val, precomputed_cf_m=cf_m, precomputed_cf_prev_m=cf_prev
+          )[active_paths]
 
           # --- DEBUG ---
           if debug_indices is not None and debug_results is not None:
             for d_idx in debug_indices:
               if d_idx < len(active_paths) and active_paths[d_idx]:
-                if isinstance(strategy.annual_cost, SpendAwareDynamicSpending):
-                  debug_results[d_idx].append(
-                      f"[Debug Path {d_idx}] Year {m//12} SpendAware: NW={eff_nw[d_idx]:.2f}, target_annual_spend={target_annual_spend[d_idx]:.2f}, prev_base_spend={prev_base_spend_y[d_idx]:.2f}"
-                  )
-                elif isinstance(strategy.annual_cost, DynamicSpending):
-                  debug_results[d_idx].append(
-                      f"[Debug Path {d_idx}] Year {m//12} DynamicV1: NW={eff_nw[d_idx]:.2f}, target_annual_spend={target_annual_spend[d_idx]:.2f}, prev_base_spend={prev_base_spend_y[d_idx]:.2f}"
-                  )
-          # -------------
+                debug_results[d_idx].append(
+                    f"[Debug {rule.source_name}] Year {m//12}: NW={current_net_worth[d_idx]-tax_cost_m[d_idx]:.2f}, target={dynamic_annual_amount[rule.source_name][d_idx]:.2f}, prev={prev_annual_spend_y[rule.source_name][d_idx]:.2f}"
+                )
 
-    # インフレ調整
-    cpi_multiplier: Union[float, np.ndarray] = 1.0
-    if strategy.inflation_rate is None:
-      cpi_multiplier = 1.0
-    elif isinstance(strategy.inflation_rate, float):
-      cpi_multiplier = (1.0 + strategy.inflation_rate)**(m / 12.0)
-    else:
-      cpi_multiplier = cpi_multiplier_path[:, m]  # type: ignore
-
-    # 基本支出の決定 (annual_base_spend_nominal: 万円/年)
-    if isinstance(strategy.annual_cost, (DynamicSpending, SpendAwareDynamicSpending)):
-      annual_base_spend_nominal = target_annual_spend
-      base_spend_m = annual_base_spend_nominal / 12.0
-    elif isinstance(strategy.annual_cost, list):
-      annual_base_spend_nominal = np.full(
-          n_sim, (strategy.annual_cost[m // 12]) * cpi_multiplier)
-      base_spend_m = annual_base_spend_nominal / 12.0
-    elif isinstance(strategy.annual_cost, (float, int)):
-      annual_base_spend_nominal = np.full(
-          n_sim, strategy.annual_cost * cpi_multiplier)
-      base_spend_m = annual_base_spend_nominal / 12.0
-    else:
-      raise ValueError(f"Unsupported annual_cost type: {type(strategy.annual_cost)}")
-
-    # 4. 収支の計算
-    # 定常的な支出（reg_spend_m）と収入（reg_income_m）を別々に集計
-    reg_spend_m = base_spend_m.copy()
+    # 収支の計算
+    reg_spend_m = np.zeros(n_sim, dtype=np.float64)
     reg_income_m = np.zeros(n_sim, dtype=np.float64)
     iso_spend_m = np.zeros(n_sim, dtype=np.float64)
     iso_income_m = np.zeros(n_sim, dtype=np.float64)
 
-    # 追加キャッシュフローの反映
-    # 収入は正、支出は負の値として与えられる
+    # キャッシュフローの反映
+    # impact の正負に注意:
+    # - 正の値: 収入 (income)
+    # - 負の値: 支出 (spend)
     for rule, cf_path in prepared_cashflows:
       source = rule.source_name
       multiplier = extra_cf_multipliers.get(source, 1.0)
-      impact = cf_path[:, m] * multiplier
+      
+      if rule.dynamic_handler:
+        # 動的ハンドラの結果を月割りにする
+        impact = -(dynamic_annual_amount[source] / 12.0)
+      else:
+        impact = cf_path[:, m] * multiplier
 
       if rule.cashflow_type == CashflowType.REGULAR:
         # 定常収支
@@ -494,22 +454,25 @@ def simulate_strategy(
         iso_income_m[impact >= 0] += impact[impact >= 0]
         iso_spend_m[impact < 0] += np.abs(impact[impact < 0])
 
+      actual_annual_spend_tracker[source][active_paths] += np.abs(impact[active_paths])
+
     # 金融コスト（利息・税金）
     interest_cost_m = strategy.initial_loan * (strategy.yearly_loan_interest /
                                                12.0)
 
-    # 定常的な正味の支出 (DRやDynamicSpendingの基準となる)
-    # 収入は支出を減らす方向に働く
+    # 定常的な正味の支出
+    # ポートフォリオが賄うべき金額 (支出 - 収入)。
+    # 収入 (reg_income_m) は支出を減らす方向に働くため差し引く。
     net_reg_spend_m = reg_spend_m - reg_income_m
     if exp_regard_interest_tax_as_regular:
       net_reg_spend_m += interest_cost_m + tax_cost_m
 
     annual_net_reg_spend_tracker[active_paths] += net_reg_spend_m[active_paths]
     annual_gross_reg_spend_tracker[active_paths] += reg_spend_m[active_paths]
-    annual_base_spend_tracker[active_paths] += base_spend_m[active_paths]
 
     # ポートフォリオからの月間の総引き出し額 (Withdrawal)
-    total_withdrawal_m = (reg_spend_m - reg_income_m) + (
+    # net_reg_spend_m は (reg_spend_m - reg_income_m) と等価
+    total_withdrawal_m = net_reg_spend_m + (
         iso_spend_m - iso_income_m) + interest_cost_m + tax_cost_m
     cash[active_paths] -= total_withdrawal_m[active_paths]
 
@@ -530,7 +493,7 @@ def simulate_strategy(
           break
 
         price_m_plus_1 = local_monthly_asset_prices[asset_name][still_short,
-                                                                m + 1]
+                                                                 m + 1]
         asset_val = units[asset_name][still_short] * price_m_plus_1
         sell_amount = np.minimum(asset_val, -cash[still_short])
 
@@ -574,8 +537,8 @@ def simulate_strategy(
           # ---
           rem_years = (total_months - (m + 1)) / 12.0 + 0.25
           # DRには正味の年間支出を渡す（負の値にならないよう0でクリップ）
-          # ここで '-' を使うのは、収入（正の値）がポートフォリオからの引き出しを減らすため。
           cur_ann_spend = np.maximum(0.0, net_reg_spend_m[reb_paths]) * 12.0
+          
           # リバランス時の未払い税金を計算する（正確な Post-tax Net Value を求めるため）
           unrealized_gains_at_rebalance = np.zeros_like(total_net)
           for name in units:
@@ -662,7 +625,7 @@ def simulate_strategy(
       for idx in debug_indices:
         if idx < len(active_paths) and active_paths[idx]:
           debug_results[idx].append(
-              f"[Debug Path {idx}] Month {m} Step 6: cash={cash[idx]:.2f}, total_val={total_val[idx]:.2f}, new_bankrupt={new_bankrupt[idx]}"
+              f"[Debug Path {idx}] Month {m} Step 7: cash={cash[idx]:.2f}, total_val={total_val[idx]:.2f}, new_bankrupt={new_bankrupt[idx]}"
           )
     # -------------
     bankrupt[new_bankrupt] = True

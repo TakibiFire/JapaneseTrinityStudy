@@ -27,9 +27,9 @@ from src.lib.asset_generator import (AssetConfigType, DerivedAsset, ForexAsset,
                                      SlideAdjustedCpiAsset,
                                      YearlyLogNormalArithmetic,
                                      generate_monthly_asset_prices)
-from src.lib.cashflow_generator import (CashflowConfig, CashflowRule,
-                                        CashflowType, PensionConfig,
-                                        generate_cashflows)
+from src.lib.cashflow_generator import (BaseSpendConfig, CashflowConfig,
+                                        CashflowRule, CashflowType,
+                                        PensionConfig, generate_cashflows)
 from src.lib.dp_predictor import DPOptimalStrategyPredictor
 from src.lib.dynamic_rebalance import calculate_optimal_strategy
 from src.lib.dynamic_rebalance_dp import calculate_optimal_strategy_dp
@@ -163,6 +163,17 @@ def main():
       CashflowRule(source_name="Pension_Receipt_Kiso",
                    cashflow_type=CashflowType.REGULAR))
 
+  # 基本支出の設定 (年齢による変動とCPI連動)
+  annual_cost_setting = [
+      (val * 12.0 / 10000.0) for val in spending_multipliers_by_age
+  ]
+  cf_configs.append(
+      BaseSpendConfig(name="BaseSpend",
+                      amount=annual_cost_setting,
+                      cpi_name=CPI_NAME))
+  cf_rules.append(
+      CashflowRule(source_name="BaseSpend", cashflow_type=CashflowType.REGULAR))
+
   monthly_cashflows = generate_cashflows(cf_configs,
                                          monthly_prices,
                                          n_sim=N_SIM,
@@ -171,29 +182,16 @@ def main():
   # dump_withdraw モードの処理
   if EXP_NAME == "dump_withdraw":
     print("dump_withdraw モード: キャッシュフローを解析して支出額をダンプします。")
-    # 月次の基本支出 (名目額)
-    # spending_multipliers_by_age は月額（円）。これを 12倍して 10000 で割り、CPIを掛ける。
-    # shape: (n_sim, YEARS * 12)
     total_months = YEARS * 12
-    base_spend_m = np.zeros((N_SIM, total_months), dtype=np.float64)
-    cpi_paths = monthly_prices[CPI_NAME][:, :total_months]
-    
-    for m in range(total_months):
-      # 実質月額(万円)
-      monthly_real_spend_man = spending_multipliers_by_age[m // 12] / 10000.0
-      # 名目月額(万円) = 実質月額 * CPI
-      base_spend_m[:, m] = monthly_real_spend_man * cpi_paths[:, m]
 
     # キャッシュフローの合算 (名目、万円)
+    # monthly_cashflows には負の値（支出）と正の値（収入）の両方が含まれている
     total_cf_m = np.zeros((N_SIM, total_months), dtype=np.float64)
     for cf_arr in monthly_cashflows.values():
-      if cf_arr.ndim == 1:
-        total_cf_m += cf_arr
-      else:
-        total_cf_m += cf_arr
+      total_cf_m += cf_arr
 
-    # 取り崩し額 = 支出 - 純キャッシュフロー (収入は正、支出は負なので引くと支出が増える)
-    withdraw_m = base_spend_m - total_cf_m
+    # 取り崩し額 = - 純キャッシュフロー (正の値が引き出しを表す)
+    withdraw_m = -total_cf_m
     
     # 年次集計 (万円/年)
     withdraw_y = np.zeros((N_SIM, YEARS), dtype=np.float64)
@@ -248,13 +246,6 @@ def main():
     initial_annual_cost = base_spend_annual  # spend_mult=1.0
     init_money = initial_annual_cost / (rule / 100.0)
     initial_annual_cost_wo_pension = initial_annual_cost - PENSION_PREMIUM_ANNUAL
-
-    # 支出設定 (トレンド考慮, normalized=False なのでそのまま倍率として使える or 金額として設定)
-    # Strategy.annual_cost には float または List[float] を渡す。
-    # ここでは年間支出のリストを渡す。
-    annual_cost_setting = [
-        (val * 12.0 / 10000.0) for val in spending_multipliers_by_age
-    ]
 
     for strat_name in strategies_to_compare:
       if it % 10 == 0:
@@ -325,8 +316,6 @@ def main():
                               ORUKAN_NAME: 1.0,
                               zr_asset_obj: 0.0
                           },
-                          annual_cost=annual_cost_setting,
-                          inflation_rate=CPI_NAME,
                           tax_rate=TAX_RATE,
                           rebalance_interval=12,
                           dynamic_rebalance_fn=dynamic_rebalance_fn,
@@ -355,6 +344,20 @@ def main():
         survival_rate = 1.0 - (bankrupt_count / N_SIM)
         row_survival[str(year)] = survival_rate
       results.append(row_survival)
+
+      # 2. 支出額の統計 (特定の条件のみ記録)
+      # 元の実験結果と整合性を保つため、4.0% ルールの「支出に合わせた最適リバランス」のみ記録する
+      if res.annual_spends is not None and rule == 4.0 and strat_name == "支出に合わせた最適リバランス":
+        p25 = np.percentile(res.annual_spends, 25, axis=0)
+        p50 = np.percentile(res.annual_spends, 50, axis=0)
+        p75 = np.percentile(res.annual_spends, 75, axis=0)
+
+        for name, p_values in [("spend25p", p25), ("spend50p", p50), ("spend75p", p75)]:
+          row = base_row.copy()
+          row["value_type"] = name
+          for year in range(1, YEARS + 1):
+            row[str(year)] = p_values[year - 1]
+          results.append(row)
 
   # CSV保存
   df = pd.DataFrame(results)

@@ -211,16 +211,13 @@ def main():
               ORUKAN_NAME: pred_a,
               zr_asset_obj: 1.0 - pred_a
           },
-          annual_cost=0.0,
-          inflation_rate=None,
           selling_priority=[ORUKAN_NAME, ZERO_RISK_NAME],
           tax_rate=TAX_RATE,
           rebalance_interval=0,
-      )
-      strategy.cashflow_rules = [
-          CashflowRule(source_name="Net_Spend",
-                       cashflow_type=CashflowType.REGULAR)
-      ]
+          cashflow_rules=[
+              CashflowRule(source_name="Net_Spend",
+                           cashflow_type=CashflowType.REGULAR)
+          ])
       res = simulate_strategy(strategy,
                               year_prices,
                               monthly_cashflows=year_cf,
@@ -365,15 +362,13 @@ def main():
                               ORUKAN_NAME: a,
                               zr_asset_obj: 1.0 - a
                           },
-                          annual_cost=0.0,
-                          inflation_rate=None,
                           selling_priority=[ORUKAN_NAME, ZERO_RISK_NAME],
                           tax_rate=TAX_RATE,
-                          rebalance_interval=0)
-      strategy.cashflow_rules = [
-          CashflowRule(source_name="Net_Spend",
-                       cashflow_type=CashflowType.REGULAR)
-      ]
+                          rebalance_interval=0,
+                          cashflow_rules=[
+                              CashflowRule(source_name="Net_Spend",
+                                           cashflow_type=CashflowType.REGULAR)
+                          ])
       res = simulate_strategy(strategy,
                               year_prices_all,
                               monthly_cashflows=year_cf,

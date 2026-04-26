@@ -31,6 +31,8 @@ from src.core import Strategy, ZeroRiskAsset, simulate_strategy
 from src.lib.asset_generator import (Asset, CpiAsset, ForexAsset,
                                      YearlyLogNormalArithmetic,
                                      generate_monthly_asset_prices)
+from src.lib.cashflow_generator import (BaseSpendConfig, CashflowRule,
+                                        CashflowType, generate_cashflows)
 
 
 def main():
@@ -101,6 +103,18 @@ def main():
   for spending_rate, spending_label in spending_rates:
     annual_cost = initial_money * spending_rate
     print(f"Processing spending rate: {spending_label} ({count}/{total_combinations})")
+
+    # 1. キャッシュフロールールの定義
+    spend_config = BaseSpendConfig(name="生活費",
+                                   amount=annual_cost,
+                                   cpi_name=cpi_name)
+    cashflow_rules = [
+        CashflowRule(source_name=spend_config.name,
+                     cashflow_type=CashflowType.REGULAR)
+    ]
+    monthly_cashflows = generate_cashflows([spend_config], monthly_asset_prices,
+                                           n_sim, years * 12)
+
     for ratio in stock_ratios:
       zr_ratio = 1.0 - ratio
 
@@ -123,14 +137,15 @@ def main():
           initial_loan=0,
           yearly_loan_interest=0,
           initial_asset_ratio=initial_asset_ratio,
-          annual_cost=annual_cost,
-          inflation_rate=cpi_name,
+          cashflow_rules=cashflow_rules,
           tax_rate=tax_rate,
           selling_priority=selling_priority,
           rebalance_interval=12  # 1年ごとのリバランス
       )
 
-      res = simulate_strategy(strategy, monthly_asset_prices)
+      res = simulate_strategy(strategy,
+                              monthly_asset_prices,
+                              monthly_cashflows=monthly_cashflows)
 
       # 生存確率の計算 (生存確率 = 100% - 破産確率)
       row: dict[str, Any] = {

@@ -39,9 +39,9 @@ from src.lib.asset_generator import (Asset, AssetConfigType, CpiAsset,
                                      MonthlyARLogNormal, SlideAdjustedCpiAsset,
                                      YearlyLogNormalArithmetic,
                                      generate_monthly_asset_prices)
-from src.lib.cashflow_generator import (CashflowConfig, CashflowRule,
-                                        CashflowType, PensionConfig,
-                                        generate_cashflows)
+from src.lib.cashflow_generator import (BaseSpendConfig, CashflowConfig,
+                                        CashflowRule, CashflowType,
+                                        PensionConfig, generate_cashflows)
 from src.lib.simulation_defaults import get_cpi_ar12_config
 
 # 設定
@@ -221,6 +221,12 @@ def run_experiment(exp_name: str):
           ))
           extra_cf_names.append(cf_name)
 
+    # 1. キャッシュフロールールの定義 (基本支出)
+    spend_config = BaseSpendConfig(name="生活費",
+                                   amount=current_annual_cost,
+                                   cpi_name=CPI_NAME)
+    cf_configs.append(spend_config)
+
     # キャッシュフロー生成
     monthly_cashflows = generate_cashflows(cf_configs,
                                            monthly_prices,
@@ -229,20 +235,23 @@ def run_experiment(exp_name: str):
 
     # 戦略
     # TODO: INCLUDE_IN_ANNUAL_SPEND を使うべきだが、backward-compatibility のために ISOLATED を今は使う
-    strategy = Strategy(
-        name=f"Pattern_{i}",
-        initial_money=float(init_money),
-        initial_loan=0.0,
-        yearly_loan_interest=0.0,
-        initial_asset_ratio={"オルカン": 1.0},
-        annual_cost=current_annual_cost,
-        inflation_rate=CPI_NAME,
-        selling_priority=["オルカン"],
-        cashflow_rules=[
-            CashflowRule(source_name=name,
-                         cashflow_type=CashflowType.EXTRAORDINARY)
-            for name in extra_cf_names
-        ])
+    # 生活費は REGULAR に設定
+    cf_rules = [
+        CashflowRule(source_name=spend_config.name,
+                     cashflow_type=CashflowType.REGULAR)
+    ]
+    cf_rules.extend([
+        CashflowRule(source_name=name, cashflow_type=CashflowType.EXTRAORDINARY)
+        for name in extra_cf_names
+    ])
+
+    strategy = Strategy(name=f"Pattern_{i}",
+                        initial_money=float(init_money),
+                        initial_loan=0.0,
+                        yearly_loan_interest=0.0,
+                        initial_asset_ratio={"オルカン": 1.0},
+                        selling_priority=["オルカン"],
+                        cashflow_rules=cf_rules)
 
     # シミュレーション
     res = simulate_strategy(strategy,

@@ -23,6 +23,8 @@ from src.lib.asset_generator import (Asset, CpiAsset, Distribution,
                                      MonthlyARLogNormal,
                                      YearlyLogNormalArithmetic,
                                      generate_monthly_asset_prices)
+from src.lib.cashflow_generator import (BaseSpendConfig, CashflowRule,
+                                        CashflowType, generate_cashflows)
 from src.lib.simulation_defaults import get_cpi_ar12_config
 from src.lib.visualize import (create_styled_summary,
                                create_survival_probability_chart)
@@ -65,19 +67,33 @@ def run_experiment(name_prefix: str, asset_configs: List[Asset],
                                                    n_months=n_months,
                                                    seed=seed)
 
-    # 戦略の定義
+    # 1. キャッシュフロールールの定義
+    spend_config = BaseSpendConfig(
+        name="生活費",
+        amount=annual_cost,
+        cpi_name=cpi_name
+    )
+    cashflow_rules = [
+        CashflowRule(source_name=spend_config.name,
+                     cashflow_type=CashflowType.REGULAR)
+    ]
+    monthly_cashflows = generate_cashflows(
+        [spend_config], monthly_prices, n_sim, n_months)
+
+    # 2. 戦略の定義
     strategy = Strategy(name=label,
                         initial_money=initial_money,
                         initial_loan=0,
                         yearly_loan_interest=0,
                         initial_asset_ratio={asset_configs[0].name: 1.0},
-                        annual_cost=annual_cost,
-                        inflation_rate=cpi_name,
+                        cashflow_rules=cashflow_rules,
                         tax_rate=0,
                         selling_priority=[asset_configs[0].name])
 
-    # シミュレーション実行
-    res = simulate_strategy(strategy, monthly_prices)
+    # 3. シミュレーション実行
+    res = simulate_strategy(strategy,
+                            monthly_prices,
+                            monthly_cashflows=monthly_cashflows)
     results[label] = res
 
   return results

@@ -35,9 +35,9 @@ from src.lib.asset_generator import (Asset, AssetConfigType, CpiAsset,
                                      ForexAsset, MonthlyARLogNormal,
                                      YearlyLogNormalArithmetic,
                                      generate_monthly_asset_prices)
-from src.lib.cashflow_generator import (CashflowConfig, CashflowRule,
-                                        CashflowType, PensionConfig,
-                                        generate_cashflows)
+from src.lib.cashflow_generator import (BaseSpendConfig, CashflowConfig,
+                                        CashflowRule, CashflowType,
+                                        PensionConfig, generate_cashflows)
 
 # 設定
 DATA_DIR = "data/"
@@ -143,13 +143,16 @@ def main():
     # 労働収入の設定
     # Z% of 400万 = 400 * Z / 12 per month
     income_monthly = (ANNUAL_COST * z) / 12.0
+    spend_config = BaseSpendConfig(name="生活費",
+                                   amount=ANNUAL_COST,
+                                   cpi_name=CPI_NAME)
     cf_configs: List[CashflowConfig] = [
-        PensionConfig(
-            name="ConditionalWork",
-            amount=income_monthly,
-            start_month=0,
-            end_month=YEARS * 12,  # 倍率関数側で制御
-            cpi_name=CPI_NAME)
+        spend_config,
+        PensionConfig(name="ConditionalWork",
+                      amount=income_monthly,
+                      start_month=0,
+                      end_month=YEARS * 12, # 倍率関数側で制御
+                      cpi_name=CPI_NAME)
     ]
     monthly_cashflows = generate_cashflows(cf_configs,
                                            monthly_prices,
@@ -158,20 +161,21 @@ def main():
 
     # 戦略の設定
     multiplier_fn = create_conditional_work_multiplier(x, y)
-    strategy = Strategy(
-        name=f"X={x}_Y={y}_Z={z}",
-        initial_money=INITIAL_MONEY,
-        initial_loan=0.0,
-        yearly_loan_interest=0.0,
-        initial_asset_ratio={ORUKAN_NAME: 1.0},
-        annual_cost=ANNUAL_COST,
-        inflation_rate=CPI_NAME,
-        selling_priority=[ORUKAN_NAME],
-        cashflow_rules=[
-            CashflowRule(source_name="ConditionalWork",
-                         cashflow_type=CashflowType.REGULAR,
-                         multiplier_fn=multiplier_fn)
-        ])
+    strategy = Strategy(name=f"X={x}_Y={y}_Z={z}",
+                        initial_money=INITIAL_MONEY,
+                        initial_loan=0.0,
+                        yearly_loan_interest=0.0,
+                        initial_asset_ratio={ORUKAN_NAME: 1.0},
+                        selling_priority=[ORUKAN_NAME],
+                        initial_prev_net_reg_spend=ANNUAL_COST,
+                        initial_prev_gross_reg_spend=ANNUAL_COST,
+                        cashflow_rules=[
+                            CashflowRule(source_name=spend_config.name,
+                                         cashflow_type=CashflowType.REGULAR),
+                            CashflowRule(source_name="ConditionalWork",
+                                         cashflow_type=CashflowType.REGULAR,
+                                         multiplier_fn=multiplier_fn)
+                        ])
 
     # シミュレーション
     res = simulate_strategy(strategy,

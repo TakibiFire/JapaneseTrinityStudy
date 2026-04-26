@@ -37,9 +37,9 @@ from src.lib.asset_generator import (AssetConfigType, DerivedAsset, ForexAsset,
                                      SlideAdjustedCpiAsset,
                                      YearlyLogNormalArithmetic,
                                      generate_monthly_asset_prices)
-from src.lib.cashflow_generator import (CashflowConfig, CashflowRule,
-                                        CashflowType, PensionConfig,
-                                        generate_cashflows)
+from src.lib.cashflow_generator import (BaseSpendConfig, CashflowConfig,
+                                        CashflowRule, CashflowType,
+                                        PensionConfig, generate_cashflows)
 from src.lib.dynamic_rebalance import (calculate_optimal_strategy,
                                        calculate_safe_target_ratio)
 from src.lib.retired_spending import (SpendingType,
@@ -209,29 +209,29 @@ def main():
     # 初年度支出, 国民年金保険料含まない。これを initial_cost にする。
     initial_annual_cost_wo_pension = initial_annual_cost - pension_cost
 
-    # 支出設定
-    annual_cost_setting: Union[float, List[float], DynamicSpending]
-    inflation_rate_setting: Optional[str]
+    # 支出とキャッシュフローの設定
+    cf_configs: List[CashflowConfig] = []
+    cf_rules: List[CashflowRule] = []
+
     if use_dyn_spend:
-      annual_cost_setting = DynamicSpending(
+      # ダイナミックスペンディング
+      ds_handler = DynamicSpending(
           initial_annual_spend=initial_annual_cost_wo_pension,
           target_ratio=target_ratio,
           upper_limit=0.03,
           lower_limit=0.0)
-      inflation_rate_setting = None
+      cf_configs.append(BaseSpendConfig(name="base_spend", amount=initial_annual_cost_wo_pension, cpi_name=None))
+      cf_rules.append(CashflowRule(source_name="base_spend", cashflow_type=CashflowType.REGULAR, dynamic_handler=ds_handler))
     else:
-      # 国民年金保険料は cashflow で扱うので initial_annual_cost_wo_pension
-      # を使う。
-      annual_cost_setting = [
+      # 年齢による支出トレンドを適用
+      annual_cost_list = [
           initial_annual_cost_wo_pension * m for m in spending_multipliers_by_age
       ]
-      inflation_rate_setting = CPI_NAME
+      cf_configs.append(BaseSpendConfig(name="base_spend", amount=annual_cost_list, cpi_name=CPI_NAME))
+      cf_rules.append(CashflowRule(source_name="base_spend", cashflow_type=CashflowType.REGULAR))
 
     # キャッシュフロー (年金保険料と受給)
     premium_annual, _ = pension_map[(household_size, pension_start)]
-
-    cf_configs: List[CashflowConfig] = []
-    cf_rules: List[CashflowRule] = []
 
     # 50歳から60歳までの保険料支払い (10年間 = 120ヶ月)
     cf_configs.append(
@@ -244,7 +244,7 @@ def main():
         CashflowRule(source_name="Pension_Premium",
                      cashflow_type=CashflowType.REGULAR))
 
-    # 受給開始年齢に基づく受給 (60歳なら120ヶ月目から, 65歳なら180ヶ月目から)
+    # 受給開始年齢に基づく受給
     receipt_start_month = (pension_start - START_AGE) * 12
     reduction_rate = 0.76 if pension_start == 60 else 1.0
 
@@ -270,7 +270,7 @@ def main():
         CashflowRule(source_name="Pension_Receipt_Kiso",
                      cashflow_type=CashflowType.REGULAR))
 
-    # 配偶者基礎年金 (2人世帯の場合・マクロ経済スライド適用)
+    # 配偶者基礎年金 (2人世帯の場合)
     if household_size == 2:
       spouse_kiso_annual = KISO_FULL_ANNUAL * reduction_rate
       cf_configs.append(
@@ -298,8 +298,6 @@ def main():
             ORUKAN_NAME: 1.0,
             zr_asset_obj: 0.0
         },
-        annual_cost=annual_cost_setting,
-        inflation_rate=inflation_rate_setting,
         tax_rate=TAX_RATE,
         rebalance_interval=12,
         dynamic_rebalance_fn=dynamic_rebalance_fn,

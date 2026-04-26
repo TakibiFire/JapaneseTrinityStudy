@@ -28,6 +28,8 @@ from scipy.stats import gaussian_kde
 from src.core import Strategy, simulate_strategy
 from src.lib.asset_generator import (Asset, YearlyLogNormalArithmetic,
                                      generate_monthly_asset_prices)
+from src.lib.cashflow_generator import (BaseSpendConfig, CashflowRule,
+                                        CashflowType, generate_cashflows)
 from src.lib.visualize import create_styled_summary, visualize_and_save
 
 
@@ -56,8 +58,7 @@ def main():
                initial_loan=0,
                yearly_loan_interest=2.125 / 100,
                initial_asset_ratio={f"オルカン v{v}%": 1.0},
-               annual_cost=0.0,
-               inflation_rate=None,
+               cashflow_rules=[],
                tax_rate=0.0,
                selling_priority=[f"オルカン v{v}%"]) for v in sigmas
   ]
@@ -259,21 +260,31 @@ def main():
 
   # 5. 年間400万取り崩しシミュレーション
   print("\n年間400万円取り崩しシミュレーションを実行中...")
+  # 1. キャッシュフロールールの定義
+  spend_config = BaseSpendConfig(name="生活費", amount=400.0, cpi_name=None)
+  cashflow_rules = [
+      CashflowRule(source_name=spend_config.name,
+                   cashflow_type=CashflowType.REGULAR)
+  ]
+  monthly_cashflows = generate_cashflows([spend_config], monthly_asset_prices,
+                                         N_SIM, N_MONTHS)
+
   withdrawal_strategies = [
       Strategy(name=f"ボラ={v}% (取崩)",
                initial_money=10000,
                initial_loan=0,
                yearly_loan_interest=2.125 / 100,
                initial_asset_ratio={f"オルカン v{v}%": 1.0},
-               annual_cost=400.0,
-               inflation_rate=None,
+               cashflow_rules=cashflow_rules,
                tax_rate=0.0,
                selling_priority=[f"オルカン v{v}%"]) for v in sigmas
   ]
 
   withdrawal_results = {}
   for strategy in withdrawal_strategies:
-    res = simulate_strategy(strategy, monthly_asset_prices)
+    res = simulate_strategy(strategy,
+                            monthly_asset_prices,
+                            monthly_cashflows=monthly_cashflows)
     withdrawal_results[strategy.name] = res
 
   withdrawal_img_path = os.path.join(img_dir, "withdrawal_result.svg")

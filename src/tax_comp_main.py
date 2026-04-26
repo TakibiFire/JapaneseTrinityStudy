@@ -21,6 +21,8 @@ from src.core import Strategy, simulate_strategy
 from src.lib.asset_generator import (Asset, CpiAsset, DerivedAsset,
                                      YearlyLogNormalArithmetic,
                                      generate_monthly_asset_prices)
+from src.lib.cashflow_generator import (BaseSpendConfig, CashflowRule,
+                                        CashflowType, generate_cashflows)
 from src.lib.visualize import create_styled_summary, visualize_and_save
 
 
@@ -52,43 +54,12 @@ def main():
                                                       sigma=0.0))
 
   # 2. 戦略(Plan)の定義
-  strategies = [
-      Strategy(name="1. 税を考慮しない",
-               initial_money=initial_money,
-               initial_loan=0,
-               yearly_loan_interest=2.125 / 100,
-               initial_asset_ratio={"オルカン": 1.0},
-               annual_cost=annual_cost_base,
-               inflation_rate=cpi_name,
-               tax_rate=0.0,
-               selling_priority=["オルカン"]),
-      Strategy(name="2. 税 20.315%",
-               initial_money=initial_money,
-               initial_loan=0,
-               yearly_loan_interest=2.125 / 100,
-               initial_asset_ratio={"オルカン": 1.0},
-               annual_cost=annual_cost_base,
-               inflation_rate=cpi_name,
-               tax_rate=tax_rate_std,
-               selling_priority=["オルカン"]),
-      Strategy(name="3. 税 0%、出費を 20.315% 増やす",
-               initial_money=initial_money,
-               initial_loan=0,
-               yearly_loan_interest=2.125 / 100,
-               initial_asset_ratio={"オルカン": 1.0},
-               annual_cost=annual_cost_base * (1.0 + tax_rate_std),
-               inflation_rate=cpi_name,
-               tax_rate=0.0,
-               selling_priority=["オルカン"]),
-      Strategy(name="4. 税 0%、出費を 11.5% 増やす",
-               initial_money=initial_money,
-               initial_loan=0,
-               yearly_loan_interest=2.125 / 100,
-               initial_asset_ratio={"オルカン": 1.0},
-               annual_cost=annual_cost_base * (1.0 + 0.115),
-               inflation_rate=cpi_name,
-               tax_rate=0.0,
-               selling_priority=["オルカン"]),
+  strategy_configs = [
+      ("1. 税を考慮しない", annual_cost_base, 0.0),
+      ("2. 税 20.315%", annual_cost_base, tax_rate_std),
+      ("3. 税 0%、出費を 20.315% 増やす", annual_cost_base * (1.0 + tax_rate_std),
+       0.0),
+      ("4. 税 0%、出費を 11.5% 増やす", annual_cost_base * (1.0 + 0.115), 0.0),
   ]
 
   # 3. シミュレーションの実行
@@ -102,9 +73,31 @@ def main():
 
   results = {}
   print("各戦略のシミュレーションを実行中...")
-  for strategy in strategies:
-    res = simulate_strategy(strategy, monthly_asset_prices)
-    results[strategy.name] = res
+  for name, annual_cost, tax_rate in strategy_configs:
+    # 1. キャッシュフロールールの定義
+    spend_config = BaseSpendConfig(name="生活費",
+                                   amount=annual_cost,
+                                   cpi_name=cpi_name)
+    cashflow_rules = [
+        CashflowRule(source_name=spend_config.name,
+                     cashflow_type=CashflowType.REGULAR)
+    ]
+    monthly_cashflows = generate_cashflows([spend_config], monthly_asset_prices,
+                                           n_sim, n_months)
+
+    strategy = Strategy(name=name,
+                        initial_money=initial_money,
+                        initial_loan=0,
+                        yearly_loan_interest=2.125 / 100,
+                        initial_asset_ratio={"オルカン": 1.0},
+                        cashflow_rules=cashflow_rules,
+                        tax_rate=tax_rate,
+                        selling_priority=["オルカン"])
+
+    res = simulate_strategy(strategy,
+                            monthly_asset_prices,
+                            monthly_cashflows=monthly_cashflows)
+    results[name] = res
 
   # 4. 可視化と保存
   img_dir = "docs/imgs/tax"

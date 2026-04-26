@@ -14,6 +14,8 @@ from src.core import Strategy, ZeroRiskAsset, simulate_strategy
 from src.lib.asset_generator import (Asset, CpiAsset, ForexAsset,
                                      YearlyLogNormalArithmetic,
                                      generate_monthly_asset_prices)
+from src.lib.cashflow_generator import (BaseSpendConfig, CashflowRule,
+                                        CashflowType, generate_cashflows)
 from src.lib.retired_spending import (SpendingType,
                                       get_retired_spending_multipliers)
 from src.lib.visualize import create_styled_summary, visualize_and_save
@@ -56,20 +58,32 @@ def main():
   ratio = 1.0
   base_annual_cost = 400.0
 
-  strategies = []
+  results = {}
+  print("各戦略のシミュレーションを実行中...")
 
   # 1. 支出一定 (400万円)
-  strategies.append(
-      Strategy(name="1. 支出一定 (400万円)",
-               initial_money=initial_money,
-               initial_loan=0.0,
-               yearly_loan_interest=0.0,
-               initial_asset_ratio={acwi_name: ratio},
-               annual_cost=base_annual_cost,
-               inflation_rate=cpi_name,
-               tax_rate=tax_rate,
-               selling_priority=[acwi_name],
-               rebalance_interval=12))
+  spend_config_const = BaseSpendConfig(name="生活費",
+                                       amount=base_annual_cost,
+                                       cpi_name=cpi_name)
+  cashflow_rules_const = [
+      CashflowRule(source_name=spend_config_const.name,
+                   cashflow_type=CashflowType.REGULAR)
+  ]
+  monthly_cashflows_const = generate_cashflows([spend_config_const],
+                                               monthly_asset_prices, n_sim,
+                                               max_years * 12)
+
+  s_const = Strategy(name="1. 支出一定 (400万円)",
+                     initial_money=initial_money,
+                     initial_loan=0.0,
+                     yearly_loan_interest=0.0,
+                     initial_asset_ratio={acwi_name: ratio},
+                     cashflow_rules=cashflow_rules_const,
+                     tax_rate=tax_rate,
+                     selling_priority=[acwi_name],
+                     rebalance_interval=12)
+  results[s_const.name] = simulate_strategy(
+      s_const, monthly_asset_prices, monthly_cashflows=monthly_cashflows_const)
 
   start_ages = [30, 35, 40, 45, 50, 55, 60]
   for i, start_age in enumerate(start_ages):
@@ -78,23 +92,28 @@ def main():
         max_years)
     annual_costs = [base_annual_cost * m for m in multipliers]
 
-    strategies.append(
-        Strategy(name=f"{i+2}. {start_age}歳",
-                 initial_money=initial_money,
-                 initial_loan=0.0,
-                 yearly_loan_interest=0.0,
-                 initial_asset_ratio={acwi_name: ratio},
-                 annual_cost=annual_costs,
-                 inflation_rate=cpi_name,
-                 tax_rate=tax_rate,
-                 selling_priority=[acwi_name],
-                 rebalance_interval=12))
+    spend_config = BaseSpendConfig(name=f"生活費_{start_age}歳",
+                                   amount=annual_costs,
+                                   cpi_name=cpi_name)
+    cashflow_rules = [
+        CashflowRule(source_name=spend_config.name,
+                     cashflow_type=CashflowType.REGULAR)
+    ]
+    monthly_cashflows = generate_cashflows([spend_config],
+                                           monthly_asset_prices, n_sim,
+                                           max_years * 12)
 
-  results = {}
-  print("各戦略のシミュレーションを実行中...")
-  for strategy in strategies:
-    res = simulate_strategy(strategy, monthly_asset_prices)
-    results[strategy.name] = res
+    strategy = Strategy(name=f"{i+2}. {start_age}歳",
+                        initial_money=initial_money,
+                        initial_loan=0.0,
+                        yearly_loan_interest=0.0,
+                        initial_asset_ratio={acwi_name: ratio},
+                        cashflow_rules=cashflow_rules,
+                        tax_rate=tax_rate,
+                        selling_priority=[acwi_name],
+                        rebalance_interval=12)
+    results[strategy.name] = simulate_strategy(
+        strategy, monthly_asset_prices, monthly_cashflows=monthly_cashflows)
 
   # 2. 可視化と保存
   img_dir = "docs/imgs/retired_spending"

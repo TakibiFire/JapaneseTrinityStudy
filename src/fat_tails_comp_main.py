@@ -17,6 +17,8 @@ from src.lib.asset_generator import (Asset, CpiAsset, DerivedAsset, ForexAsset,
                                      MonthlyLogDist, MonthlyLogNormal,
                                      YearlyLogNormalArithmetic,
                                      generate_monthly_asset_prices)
+from src.lib.cashflow_generator import (BaseSpendConfig, CashflowRule,
+                                        CashflowType, generate_cashflows)
 from src.lib.visualize import create_styled_summary, visualize_and_save
 
 
@@ -87,7 +89,18 @@ def main() -> None:
                        dist=YearlyLogNormalArithmetic(mu=inflation_rate_std,
                                                       sigma=0.0))
 
-  # 3. 戦略(Plan)の定義
+  # 3. キャッシュフロールールの定義
+  spend_config = BaseSpendConfig(
+      name="生活費",
+      amount=annual_cost_base,
+      cpi_name=cpi_name
+  )
+  cashflow_rules = [
+      CashflowRule(source_name=spend_config.name,
+                   cashflow_type=CashflowType.REGULAR)
+  ]
+
+  # 4. 戦略(Plan)の定義
   strategies = []
   for name in model_names:
     strategies.append(
@@ -96,23 +109,26 @@ def main() -> None:
                  initial_loan=0,
                  yearly_loan_interest=0.0,
                  initial_asset_ratio={name: 1.0},
-                 annual_cost=annual_cost_base,
-                 inflation_rate=cpi_name,
+                 cashflow_rules=cashflow_rules,
                  tax_rate=tax_rate_std,
                  selling_priority=[name]))
 
-  # 4. シミュレーションの実行
+  # 5. シミュレーションの実行
   print(f"月次価格の推移を生成中 (パス数: {n_sim})...")
   all_configs: List[Union[Asset, CpiAsset]] = assets + [cpi_asset]  # type: ignore
   monthly_asset_prices = generate_monthly_asset_prices(all_configs,
                                                        n_paths=n_sim,
                                                        n_months=n_months,
                                                        seed=seed)
+  monthly_cashflows = generate_cashflows(
+      [spend_config], monthly_asset_prices, n_sim, n_months)
 
   results = {}
   print("各モデルのシミュレーションを実行中...")
   for strategy in strategies:
-    res = simulate_strategy(strategy, monthly_asset_prices)
+    res = simulate_strategy(strategy,
+                            monthly_asset_prices,
+                            monthly_cashflows=monthly_cashflows)
     results[strategy.name] = res
 
   # 5. 可視化と保存
