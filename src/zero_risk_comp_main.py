@@ -21,6 +21,8 @@ from src.core import Strategy, ZeroRiskAsset, simulate_strategy
 from src.lib.asset_generator import (Asset, CpiAsset, ForexAsset,
                                      YearlyLogNormalArithmetic,
                                      generate_monthly_asset_prices)
+from src.lib.cashflow_generator import (BaseSpendConfig, CashflowRule,
+                                        CashflowType, generate_cashflows)
 from src.lib.visualize import create_styled_summary, visualize_and_save
 
 
@@ -74,7 +76,20 @@ def main():
 
     rf_asset = ZeroRiskAsset(name=rf_asset_name, yield_rate=rf_yield)
 
-    # 1. 戦略(Plan)の定義
+    # 1. キャッシュフロールールの定義
+    spend_config = BaseSpendConfig(
+        name="生活費",
+        amount=annual_cost_base,
+        cpi_name=cpi_name
+    )
+    cashflow_rules = [
+        CashflowRule(source_name=spend_config.name,
+                     cashflow_type=CashflowType.REGULAR)
+    ]
+    monthly_cashflows = generate_cashflows(
+        [spend_config], monthly_asset_prices, n_sim, years * 12)
+
+    # 2. 戦略(Plan)の定義
     strategies = []
     for ratio in ratios:
       stock_ratio = ratio
@@ -94,17 +109,18 @@ def main():
                    initial_loan=0,
                    yearly_loan_interest=0.0,
                    initial_asset_ratio=initial_asset_ratio,
-                   annual_cost=annual_cost_base,
-                   inflation_rate=cpi_name,
+                   cashflow_rules=cashflow_rules,
                    tax_rate=tax_rate,
                    selling_priority=selling_priority_func(
                        acwi_name, rf_asset_name)))
 
-    # 2. シミュレーションの実行
+    # 3. シミュレーションの実行
     results = {}
     print(f"[{exp_title}] 各戦略のシミュレーションを実行中...")
     for strategy in strategies:
-      res = simulate_strategy(strategy, monthly_asset_prices)
+      res = simulate_strategy(strategy,
+                              monthly_asset_prices,
+                              monthly_cashflows=monthly_cashflows)
       results[strategy.name] = res
 
     # 3. 可視化と保存
