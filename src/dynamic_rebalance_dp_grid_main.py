@@ -23,22 +23,13 @@ import numpy as np
 import pandas as pd
 
 from src.core import Strategy, ZeroRiskAsset, simulate_strategy
-from src.lib.asset_generator import (AssetConfigType, DerivedAsset, ForexAsset,
-                                     SlideAdjustedCpiAsset,
-                                     YearlyLogNormalArithmetic,
-                                     generate_monthly_asset_prices)
-from src.lib.cashflow_generator import (BaseSpendConfig, CashflowConfig,
-                                        CashflowRule, CashflowType,
-                                        PensionConfig, generate_cashflows)
+from src.lib.cashflow_generator import (BaseSpendConfig, CashflowRule,
+                                        CashflowType, generate_cashflows)
 from src.lib.dp_predictor import DPOptimalStrategyPredictor
 from src.lib.dynamic_rebalance import calculate_optimal_strategy
 from src.lib.dynamic_rebalance_dp import calculate_optimal_strategy_dp
-from src.lib.retired_spending import (SpendingType,
-                                      get_retired_spending_multipliers,
-                                      get_retired_spending_values)
-from src.lib.simulation_defaults import (AcwiModelKey,
-                                         get_acwi_fat_tail_config,
-                                         get_cpi_ar12_config)
+from src.lib.retired_spending import SpendingType, get_retired_spending_values
+from src.lib.world_setup import create_standard_world
 
 
 def main():
@@ -79,40 +70,30 @@ def main():
   os.makedirs(DATA_DIR, exist_ok=True)
 
   # 1. アセット生成
-  fx_asset = ForexAsset(name=FX_NAME,
-                        dist=YearlyLogNormalArithmetic(mu=0.0, sigma=0.1053))
-  base_sp500 = get_acwi_fat_tail_config(AcwiModelKey.BASE_SP500_155Y)
-  base_acwi = get_acwi_fat_tail_config(AcwiModelKey.BASE_ACWI_APPROX)
-  orukan = DerivedAsset(name=ORUKAN_NAME,
-                        base=base_acwi.name,
-                        trust_fee=TRUST_FEE,
-                        forex=FX_NAME)
-  zr_asset_obj = ZeroRiskAsset(name=ZERO_RISK_NAME, yield_rate=ZERO_RISK_YIELD)
-  base_cpi = get_cpi_ar12_config(name=CPI_NAME)
-  pension_cpi = SlideAdjustedCpiAsset(
-      name=PENSION_CPI_NAME,
-      base_cpi=CPI_NAME,
-      slide_rate=0.005,
-      slide_end_month=(MACRO_ECONOMIC_SLIDE_END_YEAR - CURRENT_YEAR) * 12)
-
-  configs: List[AssetConfigType] = [
-      fx_asset, base_sp500, base_acwi, orukan, base_cpi, pension_cpi
-  ]
-
-  print(f"価格推移を生成中... (試行回数: {N_SIM}, 期間: {YEARS}年)")
-  monthly_prices = generate_monthly_asset_prices(configs,
-                                                 n_paths=N_SIM,
-                                                 n_months=YEARS * 12,
-                                                 seed=SEED)
+  world = create_standard_world(
+      n_sim=N_SIM,
+      start_age=START_AGE,
+      end_age=START_AGE + YEARS - 1,
+      retirement_age=60,
+      pension_start_age=60,
+      seed=SEED,
+      tax_rate=TAX_RATE,
+      zero_risk_yield=ZERO_RISK_YIELD,
+      trust_fee=TRUST_FEE
+  )
+  monthly_prices = world.monthly_prices
+  zr_asset_obj = world.zr_asset_obj
+  ORUKAN_NAME = world.ORUKAN_NAME
+  ZERO_RISK_NAME = world.ZERO_RISK_NAME
+  CPI_NAME = world.CPI_NAME
+  PENSION_CPI_NAME = world.PENSION_CPI_NAME
 
   # 2. キャッシュフローと支出の準備
+  # ベースラインの支出額 (月額合計 -> 年額合計)
   spending_types = [
       SpendingType.CONSUMPTION, SpendingType.NON_CONSUMPTION_EXCLUDE_PENSION
   ]
-  spending_multipliers_by_age = get_retired_spending_multipliers(
-      spending_types, start_age=START_AGE, num_years=YEARS, normalize=False)
-
-  # ベースラインの支出額 (月額合計 -> 年額合計)
+  spending_multipliers_by_age = world.spending_monthly_values
   base_spending_monthly = get_retired_spending_values(
       spending_types, target_ages=np.array([float(START_AGE)]))[0]
   # NOW: Use Japanese comment.
@@ -120,48 +101,10 @@ def main():
   BASE_SPEND_ANNUAL_WO_PENSION = base_spending_monthly * 12.0 / 10000.0
 
   # 年金設定: 1人世帯, 年金開始60歳
-  PENSION_START_AGE = 60
   PENSION_PREMIUM_ANNUAL = 20.4
-  # 1人世帯・60歳開始時の年金合計額 (all_40yr_grid_main.py より)
-  PENSION_TOTAL_ANNUAL = 99.4
-  KISO_FULL_ANNUAL = 81.6
-  REDUCTION_RATE = 0.76
-  KISO_ANNUAL = KISO_FULL_ANNUAL * REDUCTION_RATE
-  KOUSEI_ANNUAL = PENSION_TOTAL_ANNUAL - KISO_ANNUAL
 
-  cf_configs: List[CashflowConfig] = []
-  cf_rules: List[CashflowRule] = []
-
-  # 保険料支払い: 40歳から60歳まで (20年間 = 240ヶ月)
-  cf_configs.append(
-      PensionConfig(name="Pension_Premium",
-                    amount=-PENSION_PREMIUM_ANNUAL / 12.0,
-                    start_month=0,
-                    end_month=240,
-                    cpi_name=CPI_NAME))
-  cf_rules.append(
-      CashflowRule(source_name="Pension_Premium",
-                   cashflow_type=CashflowType.REGULAR))
-
-  # 年金受給: 60歳から (20年後 = 240ヶ月目から)
-  receipt_start_month = max((PENSION_START_AGE - START_AGE) * 12, 0)
-  cf_configs.append(
-      PensionConfig(name="Pension_Receipt_Kousei",
-                    amount=KOUSEI_ANNUAL / 12.0,
-                    start_month=receipt_start_month,
-                    cpi_name=CPI_NAME))
-  cf_rules.append(
-      CashflowRule(source_name="Pension_Receipt_Kousei",
-                   cashflow_type=CashflowType.REGULAR))
-
-  cf_configs.append(
-      PensionConfig(name="Pension_Receipt_Kiso",
-                    amount=KISO_ANNUAL / 12.0,
-                    start_month=receipt_start_month,
-                    cpi_name=PENSION_CPI_NAME))
-  cf_rules.append(
-      CashflowRule(source_name="Pension_Receipt_Kiso",
-                   cashflow_type=CashflowType.REGULAR))
+  cf_configs = world.cf_configs
+  cf_rules = world.cf_rules
 
   # 基本支出の設定 (年齢による変動とCPI連動)
   annual_cost_setting = [

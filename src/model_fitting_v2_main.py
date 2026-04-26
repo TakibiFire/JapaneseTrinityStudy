@@ -33,17 +33,9 @@ from sklearn.isotonic import IsotonicRegression
 
 from src.core import (CashflowRule, CashflowType, Strategy, ZeroRiskAsset,
                       simulate_strategy)
-from src.lib.asset_generator import (AssetConfigType, DerivedAsset, ForexAsset,
-                                     SlideAdjustedCpiAsset,
-                                     YearlyLogNormalArithmetic,
-                                     generate_monthly_asset_prices)
-from src.lib.cashflow_generator import (CashflowConfig, PensionConfig,
-                                        generate_cashflows)
-from src.lib.retired_spending import (SpendingType,
-                                      get_retired_spending_multipliers)
-from src.lib.simulation_defaults import (AcwiModelKey,
-                                         get_acwi_fat_tail_config,
-                                         get_cpi_ar12_config)
+from src.lib.asset_generator import generate_monthly_asset_prices
+from src.lib.cashflow_generator import generate_cashflows
+from src.lib.world_setup import create_standard_world
 
 # 共通定数
 START_AGE = 40
@@ -192,37 +184,25 @@ def main():
                 ] if args.debug_paths else []
 
   # 1. アセットとキャッシュフローの生成
-  # 為替 (USDJPY 0%, 10.53%)
-  fx_asset = ForexAsset(name=FX_NAME,
-                        dist=YearlyLogNormalArithmetic(mu=0.0, sigma=0.1053))
-  # オルカン (共通モデルから取得)
-  base_sp500 = get_acwi_fat_tail_config(AcwiModelKey.BASE_SP500_155Y)
-  base_acwi = get_acwi_fat_tail_config(AcwiModelKey.BASE_ACWI_APPROX)
-  # 投資対象としてのオルカン (為替と信託報酬を適用)
-  orukan = DerivedAsset(name=ORUKAN_NAME,
-                        base=base_acwi.name,
-                        trust_fee=TRUST_FEE,
-                        forex=FX_NAME)
-  # ゼロリスク資産 (利回り 4%)
-  zr_asset_obj = ZeroRiskAsset(name=ZERO_RISK_NAME, yield_rate=ZERO_RISK_YIELD)
-  # CPI (共通モデル)
-  base_cpi = get_cpi_ar12_config(name=CPI_NAME)
-  # 年金用CPI (マクロ経済スライド 0.5% 抑制)
-  pension_cpi = SlideAdjustedCpiAsset(
-      name=PENSION_CPI_NAME,
-      base_cpi=CPI_NAME,
-      slide_rate=0.005,
-      slide_end_month=(MACRO_ECONOMIC_SLIDE_END_YEAR - CURRENT_YEAR) * 12)
-
-  asset_configs: List[AssetConfigType] = [
-      fx_asset, base_sp500, base_acwi, orukan, base_cpi, pension_cpi
-  ]
+  world = create_standard_world(
+      n_sim=n_sim,
+      start_age=START_AGE,
+      end_age=END_AGE - 1,
+      retirement_age=60,
+      pension_start_age=60,
+      seed=SEED,
+      tax_rate=TAX_RATE,
+      zero_risk_yield=ZERO_RISK_YIELD,
+      trust_fee=TRUST_FEE
+  )
+  monthly_prices = world.monthly_prices
+  zr_asset_obj = world.zr_asset_obj
+  ORUKAN_NAME = world.ORUKAN_NAME
+  ZERO_RISK_NAME = world.ZERO_RISK_NAME
+  CPI_NAME = world.CPI_NAME
+  PENSION_CPI_NAME = world.PENSION_CPI_NAME
 
   print(f"Generating asset prices for {YEARS} years, {n_sim} paths...")
-  monthly_prices = generate_monthly_asset_prices(asset_configs,
-                                                 n_paths=n_sim,
-                                                 n_months=YEARS * 12,
-                                                 seed=SEED)
 
   # CPI の統計計算 (想定外のジャンプを計算するため)
   # 年次 CPI 倍率の平均と標準偏差を計算
@@ -242,59 +222,12 @@ def main():
   unexpected_cpi_jump = (1.0 + cpi_annual_mu + 2.326 * cpi_annual_sigma) / (1.0 + cpi_annual_mu)
   print(f"CPI Stats: mu={cpi_annual_mu:.4f}, sigma={cpi_annual_sigma:.4f}, unexpected_jump={unexpected_cpi_jump:.4f}")
 
-  # キャッシュフロー設定 (一人世帯 H1, 年金60歳受給 P60相当)
-  cf_configs: List[CashflowConfig] = []
-  cf_rules: List[CashflowRule] = []
-
-  # 国民年金保険料 (40歳から60歳まで)
-  cf_configs.append(
-      PensionConfig(name="Pension_Premium_Kiso",
-                    amount=-20.4 / 12.0,
-                    start_month=0,
-                    end_month=(60 - START_AGE) * 12,
-                    cpi_name=CPI_NAME))
-  cf_rules.append(
-      CashflowRule(source_name="Pension_Premium_Kiso",
-                   cashflow_type=CashflowType.REGULAR))
-
-  # 年金受給 (60歳から)
-  # 40歳退職時の厚生年金: 49.2, 基礎年金: 81.6. 60歳開始は 0.76倍。
-  # 合計 (49.2 + 81.6) * 0.76 = 99.408. P60-H1 と整合。
-  reduction_rate = 0.76
-  kousei_annual = 49.2 * reduction_rate
-  kiso_annual = 81.6 * reduction_rate
-
-  cf_configs.append(
-      PensionConfig(name="Pension_Receipt_Kousei",
-                    amount=kousei_annual / 12.0,
-                    start_month=(60 - START_AGE) * 12,
-                    cpi_name=CPI_NAME))
-  cf_rules.append(
-      CashflowRule(source_name="Pension_Receipt_Kousei",
-                   cashflow_type=CashflowType.REGULAR))
-
-  cf_configs.append(
-      PensionConfig(name="Pension_Receipt_Kiso",
-                    amount=kiso_annual / 12.0,
-                    start_month=(60 - START_AGE) * 12,
-                    cpi_name=PENSION_CPI_NAME))
-  cf_rules.append(
-      CashflowRule(source_name="Pension_Receipt_Kiso",
-                   cashflow_type=CashflowType.REGULAR))
-
-  # 年齢による月額支出（名目ベースライン、円）の取得 (40歳から60年間)
-  # normalize=False を指定して、実際の統計値ベースの月額（円）を取得する。
-  spending_monthly_values = get_retired_spending_multipliers(
-      [SpendingType.CONSUMPTION, SpendingType.NON_CONSUMPTION_EXCLUDE_PENSION],
-      start_age=START_AGE,
-      num_years=YEARS,
-      normalize=False)
-
   print("Generating cashflows...")
-  monthly_cashflows = generate_cashflows(cf_configs,
+  monthly_cashflows = generate_cashflows(world.cf_configs,
                                          monthly_prices,
                                          n_sim=n_sim,
-                                         n_months=YEARS * 12)
+                                         n_months=world.years * 12)
+  spending_monthly_values = world.spending_monthly_values
 
   # 2. Backward DP
   models: Dict[str, Any] = {
