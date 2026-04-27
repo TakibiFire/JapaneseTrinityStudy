@@ -1,3 +1,4 @@
 [submodule "internal"]
 	path = internal
 	url = https://github.com/TakibiFire/JapaneseTrinityStudy-internal.git
+	ignore = all
