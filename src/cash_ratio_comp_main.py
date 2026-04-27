@@ -79,17 +79,15 @@ def main():
     cash_asset = ZeroRiskAsset(name=cash_asset_name, yield_rate=0.0)
 
     # 1. キャッシュフロールールの定義
-    spend_config = BaseSpendConfig(
-        name="生活費",
-        amount=annual_cost_base,
-        cpi_name=cpi_name
-    )
+    spend_config = BaseSpendConfig(name="生活費",
+                                   amount=annual_cost_base,
+                                   cpi_name=cpi_name)
     cashflow_rules = [
         CashflowRule(source_name=spend_config.name,
                      cashflow_type=CashflowType.REGULAR)
     ]
-    monthly_cashflows = generate_cashflows(
-        [spend_config], monthly_asset_prices, n_sim, years * 12)
+    monthly_cashflows = generate_cashflows([spend_config], monthly_asset_prices,
+                                           n_sim, years * 12)
 
     # 2. 戦略(Plan)の定義
     strategies = []

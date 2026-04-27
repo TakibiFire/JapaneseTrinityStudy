@@ -57,8 +57,7 @@ def main():
   strategy_configs = [
       ("1. 税を考慮しない", annual_cost_base, 0.0),
       ("2. 税 20.315%", annual_cost_base, tax_rate_std),
-      ("3. 税 0%、出費を 20.315% 増やす", annual_cost_base * (1.0 + tax_rate_std),
-       0.0),
+      ("3. 税 0%、出費を 20.315% 増やす", annual_cost_base * (1.0 + tax_rate_std), 0.0),
       ("4. 税 0%、出費を 11.5% 増やす", annual_cost_base * (1.0 + 0.115), 0.0),
   ]
 

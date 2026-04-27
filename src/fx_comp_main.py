@@ -92,11 +92,9 @@ def main():
       strategy_name = f"{i + 1}. ドル円 0%, 9.18%"
 
     # 1. キャッシュフロールールの定義
-    spend_config = BaseSpendConfig(
-        name="生活費",
-        amount=annual_cost_base,
-        cpi_name=cpi_name
-    )
+    spend_config = BaseSpendConfig(name="生活費",
+                                   amount=annual_cost_base,
+                                   cpi_name=cpi_name)
     cashflow_rules = [
         CashflowRule(source_name=spend_config.name,
                      cashflow_type=CashflowType.REGULAR)
@@ -136,8 +134,8 @@ def main():
                                                        n_paths=n_sim,
                                                        n_months=n_months,
                                                        seed=seed)
-  monthly_cashflows = generate_cashflows(
-      [spend_config], monthly_asset_prices, n_sim, n_months)
+  monthly_cashflows = generate_cashflows([spend_config], monthly_asset_prices,
+                                         n_sim, n_months)
 
   results = {}
   print("各戦略のシミュレーションを実行中...")

@@ -68,17 +68,15 @@ def run_experiment(name_prefix: str, asset_configs: List[Asset],
                                                    seed=seed)
 
     # 1. キャッシュフロールールの定義
-    spend_config = BaseSpendConfig(
-        name="生活費",
-        amount=annual_cost,
-        cpi_name=cpi_name
-    )
+    spend_config = BaseSpendConfig(name="生活費",
+                                   amount=annual_cost,
+                                   cpi_name=cpi_name)
     cashflow_rules = [
         CashflowRule(source_name=spend_config.name,
                      cashflow_type=CashflowType.REGULAR)
     ]
-    monthly_cashflows = generate_cashflows(
-        [spend_config], monthly_prices, n_sim, n_months)
+    monthly_cashflows = generate_cashflows([spend_config], monthly_prices,
+                                           n_sim, n_months)
 
     # 2. 戦略の定義
     strategy = Strategy(name=label,
@@ -182,13 +180,17 @@ def main():
   ]
 
   # AR(12) 1981年〜
-  phis_1981 = [0.07456263570805544, -0.14442648233062177, -0.0693542287128989, -0.006265287407105956, 0.06328448135944292, 0.0493508550156997, 0.09362194504911231, 0.03832889494972861, 0.03269694292183145, -0.06762784737529454, 0.07140939573134378, 0.41951806303046024]
+  phis_1981 = [
+      0.07456263570805544, -0.14442648233062177, -0.0693542287128989,
+      -0.006265287407105956, 0.06328448135944292, 0.0493508550156997,
+      0.09362194504911231, 0.03832889494972861, 0.03269694292183145,
+      -0.06762784737529454, 0.07140939573134378, 0.41951806303046024
+  ]
 
   exp3_params = [
       CpiParam(label='独立 (歴史的 2.44%, 4.13%)',
                dist=YearlyLogNormalArithmetic(mu=0.0244, sigma=0.0413)),
-      CpiParam(label='AR(12) 粘着性モデル (1970年〜)',
-               dist=get_cpi_ar12_config().dist),
+      CpiParam(label='AR(12) 粘着性モデル (1970年〜)', dist=get_cpi_ar12_config().dist),
       CpiParam(label='AR(12) 粘着性モデル (1981年〜)',
                dist=MonthlyARLogNormal(c=0.00028810,
                                        phis=phis_1981,

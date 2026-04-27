@@ -39,35 +39,33 @@ def main() -> None:
   mu_log_monthly = 0.006393
   sigma_log_monthly = 0.048285
 
-  # Model C (Best Asymmetric Dist Fixed Mean): dist=johnsonsu, 
+  # Model C (Best Asymmetric Dist Fixed Mean): dist=johnsonsu,
   # params=(0.5985794609028992, 1.5979947040822444, 0.033828733503047, 0.05883263137905962)
-  jsu_params_monthly = (0.5985794609028992, 1.5979947040822444, 0.033828733503047, 0.05883263137905962)
+  jsu_params_monthly = (0.5985794609028992, 1.5979947040822444,
+                        0.033828733503047, 0.05883263137905962)
 
   # 2. 資産の定義
   cpi_name = "Japan_CPI_1.77pct"
-  
+
   # 為替リスクの定義 (ドル円 0%, 10.53%)
   fx_name = "USDJPY_0_10.53"
   fx_asset = ForexAsset(name=fx_name,
                         dist=YearlyLogNormalArithmetic(mu=0.0, sigma=0.1053))
-  
+
   # 比較対象のベースモデル (為替・コスト適用前)
   base_configs = [
-      ("Base_ACWI_LogNormal", MonthlyLogDist(stats.norm, params=(mu_log_monthly, sigma_log_monthly))),
-      ("Base_ACWI_JSU", MonthlyLogDist(stats.johnsonsu, params=jsu_params_monthly)),
+      ("Base_ACWI_LogNormal",
+       MonthlyLogDist(stats.norm, params=(mu_log_monthly, sigma_log_monthly))),
+      ("Base_ACWI_JSU",
+       MonthlyLogDist(stats.johnsonsu, params=jsu_params_monthly)),
   ]
 
   assets: List[Union[Asset, DerivedAsset, ForexAsset, CpiAsset]] = []
   assets.append(fx_asset)
-  
+
   # ベース資産を登録
   for base_name, dist in base_configs:
-    assets.append(
-        Asset(name=base_name,
-              dist=dist,
-              trust_fee=0.0,
-              leverage=1)
-    )
+    assets.append(Asset(name=base_name, dist=dist, trust_fee=0.0, leverage=1))
 
   # 為替と信託報酬を適用した資産を定義
   model_names = []
@@ -76,13 +74,12 @@ def main() -> None:
       final_name = "ACWI-1: 対数正規分布 (為替あり)"
     else:
       final_name = "ACWI-2: Johnson SU分布 (為替あり)"
-    
+
     assets.append(
         DerivedAsset(name=final_name,
                      base=base_name,
                      trust_fee=trust_fee_std,
-                     forex=fx_name)
-    )
+                     forex=fx_name))
     model_names.append(final_name)
 
   cpi_asset = CpiAsset(name=cpi_name,
@@ -90,11 +87,9 @@ def main() -> None:
                                                       sigma=0.0))
 
   # 3. キャッシュフロールールの定義
-  spend_config = BaseSpendConfig(
-      name="生活費",
-      amount=annual_cost_base,
-      cpi_name=cpi_name
-  )
+  spend_config = BaseSpendConfig(name="生活費",
+                                 amount=annual_cost_base,
+                                 cpi_name=cpi_name)
   cashflow_rules = [
       CashflowRule(source_name=spend_config.name,
                    cashflow_type=CashflowType.REGULAR)
@@ -115,13 +110,14 @@ def main() -> None:
 
   # 5. シミュレーションの実行
   print(f"月次価格の推移を生成中 (パス数: {n_sim})...")
-  all_configs: List[Union[Asset, CpiAsset]] = assets + [cpi_asset]  # type: ignore
+  all_configs: List[Union[Asset,
+                          CpiAsset]] = assets + [cpi_asset]  # type: ignore
   monthly_asset_prices = generate_monthly_asset_prices(all_configs,
                                                        n_paths=n_sim,
                                                        n_months=n_months,
                                                        seed=seed)
-  monthly_cashflows = generate_cashflows(
-      [spend_config], monthly_asset_prices, n_sim, n_months)
+  monthly_cashflows = generate_cashflows([spend_config], monthly_asset_prices,
+                                         n_sim, n_months)
 
   results = {}
   print("各モデルのシミュレーションを実行中...")
@@ -138,7 +134,8 @@ def main() -> None:
   os.makedirs(data_dir, exist_ok=True)
 
   survival_image_file = os.path.join(img_dir, 'fat_tails_comp_survival.svg')
-  distribution_image_file = os.path.join(img_dir, 'fat_tails_comp_distribution.svg')
+  distribution_image_file = os.path.join(img_dir,
+                                         'fat_tails_comp_distribution.svg')
   html_file = 'temp/fat_tails_comp_result.html'
 
   print("結果を保存中...")

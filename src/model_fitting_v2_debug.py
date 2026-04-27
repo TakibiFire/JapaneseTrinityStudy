@@ -39,8 +39,7 @@ from src.lib.cashflow_generator import (CashflowConfig, PensionConfig,
 from src.lib.dp_predictor import DPOptimalStrategyPredictor
 from src.lib.retired_spending import (SpendingType,
                                       get_retired_spending_multipliers)
-from src.lib.simulation_defaults import (AcwiModelKey,
-                                         get_acwi_fat_tail_config,
+from src.lib.simulation_defaults import (AcwiModelKey, get_acwi_fat_tail_config,
                                          get_cpi_ar12_config)
 
 # 共通定数
@@ -202,22 +201,21 @@ def main():
       mns -= (pp + pk + pi)
       year_cf = {"Net_Spend": -mns.reshape(1, 12)}
 
-      strategy = Strategy(
-          name=f"trace_path{path_idx}_age{cur_age}",
-          initial_money=np.array([x_n]),
-          initial_loan=0.0,
-          yearly_loan_interest=0.0,
-          initial_asset_ratio={
-              ORUKAN_NAME: pred_a,
-              zr_asset_obj: 1.0 - pred_a
-          },
-          selling_priority=[ORUKAN_NAME, ZERO_RISK_NAME],
-          tax_rate=TAX_RATE,
-          rebalance_interval=0,
-          cashflow_rules=[
-              CashflowRule(source_name="Net_Spend",
-                           cashflow_type=CashflowType.REGULAR)
-          ])
+      strategy = Strategy(name=f"trace_path{path_idx}_age{cur_age}",
+                          initial_money=np.array([x_n]),
+                          initial_loan=0.0,
+                          yearly_loan_interest=0.0,
+                          initial_asset_ratio={
+                              ORUKAN_NAME: pred_a,
+                              zr_asset_obj: 1.0 - pred_a
+                          },
+                          selling_priority=[ORUKAN_NAME, ZERO_RISK_NAME],
+                          tax_rate=TAX_RATE,
+                          rebalance_interval=0,
+                          cashflow_rules=[
+                              CashflowRule(source_name="Net_Spend",
+                                           cashflow_type=CashflowType.REGULAR)
+                          ])
       res = simulate_strategy(strategy,
                               year_prices,
                               monthly_cashflows=year_cf,
@@ -271,12 +269,16 @@ def main():
   # デバッグログ: 支出のの内訳を表示
   avg_cpi = np.mean(cpi_path)
   avg_spend_base = monthly_spend_base * avg_cpi
-  avg_p_premium = -np.mean(p_premium) # 支払額なので正負反転
+  avg_p_premium = -np.mean(p_premium)  # 支払額なので正負反転
   print(f"\n[DEBUG] Withdrawal (Y_{age}) Breakdown (Mean):")
-  print(f"  - Base Spend (Consumption + Non-Consumption Excl. Pension) * CPI: {avg_spend_base * 12:.2f} 万円/年")
+  print(
+      f"  - Base Spend (Consumption + Non-Consumption Excl. Pension) * CPI: {avg_spend_base * 12:.2f} 万円/年"
+  )
   print(f"  - Pension Premium (国民年金): {avg_p_premium * 12:.2f} 万円/年")
   print(f"  - Total Withdrawal: {np.mean(y_withdraw_n):.2f} 万円/年")
-  print(f"  (Note: Statistics for working households at age 40 show ~504万/year, but that includes ~46万 of 厚生年金保険料 which is removed here because you are retired.)")
+  print(
+      f"  (Note: Statistics for working households at age 40 show ~504万/year, but that includes ~46万 of 厚生年金保険料 which is removed here because you are retired.)"
+  )
 
   # 翌年の情報
   next_age = age + 1
@@ -287,8 +289,8 @@ def main():
   next_end_m = (next_year_idx + 1) * 12
   next_cpi_path = monthly_prices[CPI_NAME][:, next_start_m:next_end_m]
   next_monthly_spend_base = spending_monthly_values[next_year_idx] / 10000.0
-  next_p_premium = monthly_cashflows["Pension_Premium_Kiso"][:,
-                                                        next_start_m:next_end_m]
+  next_p_premium = monthly_cashflows[
+      "Pension_Premium_Kiso"][:, next_start_m:next_end_m]
   next_p_kousei = monthly_cashflows[
       "Pension_Receipt_Kousei"][:, next_start_m:next_end_m]
   next_p_kiso = monthly_cashflows[
@@ -387,7 +389,8 @@ def main():
         p_next[bankrupt_this_year] = next_model.p_min
 
       avg_surv = np.mean(p_next)
-      results_for_analysis[a] = (res, x_next_arr, r_next, p_next, float(avg_surv))
+      results_for_analysis[a] = (res, x_next_arr, r_next, p_next,
+                                 float(avg_surv))
 
     # 4. 出力
     # results_for_analysis[a] の型を Mypy に教える

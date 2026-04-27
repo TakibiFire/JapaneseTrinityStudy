@@ -466,7 +466,7 @@ def generate_monthly_asset_prices(configs: Sequence[AssetConfigType],
     elif isinstance(config, SlideAdjustedCpiAsset):
       base_ret = returns[config.base_cpi]
       monthly_slide = config.slide_rate / 12.0
-      
+
       # マクロ経済スライドの適用: max(0, base_ret - monthly_slide)
       if config.slide_end_month is not None:
         # スライド終了月以降は調整なし (0.0)

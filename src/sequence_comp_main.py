@@ -67,8 +67,8 @@ def save_percentile_chart(prices_subset, title, filename, n_months):
       color=alt.Color('Percentile:N',
                       sort=['10%', '50%', '90%'],
                       title='パーセンタイル')).properties(title=title,
-                                                  width=600,
-                                                  height=400)
+                                                   width=600,
+                                                   height=400)
   chart.save(filename)
 
 
@@ -168,17 +168,15 @@ def main():
   print("中央値パスに対して取り崩しシミュレーションを実行中...")
 
   # 1. キャッシュフロールールの定義
-  spend_config = BaseSpendConfig(
-      name="生活費",
-      amount=ANNUAL_WITHDRAWAL,
-      cpi_name=None
-  )
+  spend_config = BaseSpendConfig(name="生活費",
+                                 amount=ANNUAL_WITHDRAWAL,
+                                 cpi_name=None)
   cashflow_rules = [
       CashflowRule(source_name=spend_config.name,
                    cashflow_type=CashflowType.REGULAR)
   ]
-  monthly_cashflows = generate_cashflows(
-      [spend_config], monthly_asset_prices, N_SIM, YEARS * 12)
+  monthly_cashflows = generate_cashflows([spend_config], monthly_asset_prices,
+                                         N_SIM, YEARS * 12)
 
   # 全体に対して一度実行し、後でインデックスで抽出する
   strategy_withdrawal = Strategy(name="4M Withdrawal",
@@ -249,13 +247,14 @@ def main():
   if plot_data_bankrupt:
     df_bankrupt = pd.DataFrame(plot_data_bankrupt)
     chart_bankrupt_withdrawal = alt.Chart(df_bankrupt).mark_line(
-        opacity=0.4, strokeWidth=1).encode(x=alt.X('Year:Q', title='経過年数 (年)'),
-                            y=alt.Y('Value_OKUEN:Q', title='資産額 (億円)'),
-                            color=alt.Color('PathID:N', legend=None),
-                            detail='PathID:N').properties(
-                                title='中央値パスで破産した人の資産推移 (400万取崩, 対数スケール)',
-                                width=600,
-                                height=400)
+        opacity=0.4,
+        strokeWidth=1).encode(x=alt.X('Year:Q', title='経過年数 (年)'),
+                              y=alt.Y('Value_OKUEN:Q', title='資産額 (億円)'),
+                              color=alt.Color('PathID:N', legend=None),
+                              detail='PathID:N').properties(
+                                  title='中央値パスで破産した人の資産推移 (400万取崩, 対数スケール)',
+                                  width=600,
+                                  height=400)
     chart_bankrupt_withdrawal.save(
         os.path.join(IMG_DIR, "bankrupt_paths_withdrawal.svg"))
 
@@ -274,31 +273,30 @@ def main():
     df_raw_bankrupt = pd.DataFrame(plot_data_raw_bankrupt)
     chart_raw_bankrupt = alt.Chart(df_raw_bankrupt).mark_line(
         opacity=0.4, strokeWidth=1).encode(x=alt.X('Year:Q', title='経過年数 (年)'),
-                            y=alt.Y('Index:Q',
-                                    title='アセットインデックス',
-                                    scale=alt.Scale(type='log')),
-                            color=alt.Color('PathID:N', legend=None),
-                            detail='PathID:N').properties(
-                                title='中央値パスで破産した人の元のアセット推移',
-                                width=600,
-                                height=400)
+                                           y=alt.Y('Index:Q',
+                                                   title='アセットインデックス',
+                                                   scale=alt.Scale(type='log')),
+                                           color=alt.Color('PathID:N',
+                                                           legend=None),
+                                           detail='PathID:N').properties(
+                                               title='中央値パスで破産した人の元のアセット推移',
+                                               width=600,
+                                               height=400)
     chart_raw_bankrupt.save(
         os.path.join(IMG_DIR, "bankrupt_paths_asset_log.svg"))
 
   # 破産した人と成功した人のパーセンタイル推移を追加プロット
-  save_percentile_chart(
-      prices_subset=raw_prices[bankrupt_indices_in_median],
-      title='中央値パスで破産した人のアセットパーセンタイル推移',
-      filename=os.path.join(IMG_DIR, "bankrupt_paths_asset_percentile.svg"),
-      n_months=N_MONTHS
-  )
+  save_percentile_chart(prices_subset=raw_prices[bankrupt_indices_in_median],
+                        title='中央値パスで破産した人のアセットパーセンタイル推移',
+                        filename=os.path.join(
+                            IMG_DIR, "bankrupt_paths_asset_percentile.svg"),
+                        n_months=N_MONTHS)
 
-  save_percentile_chart(
-      prices_subset=raw_prices[success_indices_in_median],
-      title='中央値パスで成功した人のアセットパーセンタイル推移',
-      filename=os.path.join(IMG_DIR, "success_paths_asset_percentile.svg"),
-      n_months=N_MONTHS
-  )
+  save_percentile_chart(prices_subset=raw_prices[success_indices_in_median],
+                        title='中央値パスで成功した人のアセットパーセンタイル推移',
+                        filename=os.path.join(
+                            IMG_DIR, "success_paths_asset_percentile.svg"),
+                        n_months=N_MONTHS)
 
   # ---------------------------------------------------------------------------
   # Section 2 - 破産タイミングの深掘り
@@ -354,12 +352,11 @@ def main():
     print(f"年代 {start_y}-{end_y}y の破産者数 (サンプル): {len(group_indices)}")
 
     if len(group_indices) > 0:
-      save_percentile_chart(
-          prices_subset=raw_prices[group_indices],
-          title=f'{start_y}-{end_y}年に破産した人のアセット推移',
-          filename=os.path.join(IMG_DIR, f"raw_index_bankrupt_{suffix}.svg"),
-          n_months=N_MONTHS
-      )
+      save_percentile_chart(prices_subset=raw_prices[group_indices],
+                            title=f'{start_y}-{end_y}年に破産した人のアセット推移',
+                            filename=os.path.join(
+                                IMG_DIR, f"raw_index_bankrupt_{suffix}.svg"),
+                            n_months=N_MONTHS)
     else:
       # 空のファイルを作らないか、あるいは空の旨を記したグラフを作る
       print(f"Warning: No bankruptcies in {start_y}-{end_y}y range.")

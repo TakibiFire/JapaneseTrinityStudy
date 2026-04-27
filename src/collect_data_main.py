@@ -42,9 +42,12 @@ def main() -> None:
   アセットデータ（S&P500, ACWI, BTC）を収集し、CSVとして保存するメインスクリプト。
   """
   parser = argparse.ArgumentParser(description="Collect historical asset data")
-  parser.add_argument("--output", type=str, default="data/asset_daily_prices.csv", help="Output CSV file path")
+  parser.add_argument("--output",
+                      type=str,
+                      default="data/asset_daily_prices.csv",
+                      help="Output CSV file path")
   args = parser.parse_args()
-  
+
   df = fetch_asset_data()
   # 出力ディレクトリの存在を確認
   os.makedirs(os.path.dirname(args.output), exist_ok=True)
@@ -52,6 +55,7 @@ def main() -> None:
   print(f"Data saved to {args.output}")
   print(df.head())
   print(df.tail())
+
 
 if __name__ == "__main__":
   main()

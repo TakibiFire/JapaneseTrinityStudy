@@ -44,8 +44,7 @@ from src.lib.dynamic_rebalance import (calculate_optimal_strategy,
                                        calculate_safe_target_ratio)
 from src.lib.retired_spending import (SpendingType,
                                       get_retired_spending_multipliers)
-from src.lib.simulation_defaults import (AcwiModelKey,
-                                         get_acwi_fat_tail_config,
+from src.lib.simulation_defaults import (AcwiModelKey, get_acwi_fat_tail_config,
                                          get_cpi_ar12_config)
 
 
@@ -220,15 +219,27 @@ def main():
           target_ratio=target_ratio,
           upper_limit=0.03,
           lower_limit=0.0)
-      cf_configs.append(BaseSpendConfig(name="base_spend", amount=initial_annual_cost_wo_pension, cpi_name=None))
-      cf_rules.append(CashflowRule(source_name="base_spend", cashflow_type=CashflowType.REGULAR, dynamic_handler=ds_handler))
+      cf_configs.append(
+          BaseSpendConfig(name="base_spend",
+                          amount=initial_annual_cost_wo_pension,
+                          cpi_name=None))
+      cf_rules.append(
+          CashflowRule(source_name="base_spend",
+                       cashflow_type=CashflowType.REGULAR,
+                       dynamic_handler=ds_handler))
     else:
       # 年齢による支出トレンドを適用
       annual_cost_list = [
-          initial_annual_cost_wo_pension * m for m in spending_multipliers_by_age
+          initial_annual_cost_wo_pension * m
+          for m in spending_multipliers_by_age
       ]
-      cf_configs.append(BaseSpendConfig(name="base_spend", amount=annual_cost_list, cpi_name=CPI_NAME))
-      cf_rules.append(CashflowRule(source_name="base_spend", cashflow_type=CashflowType.REGULAR))
+      cf_configs.append(
+          BaseSpendConfig(name="base_spend",
+                          amount=annual_cost_list,
+                          cpi_name=CPI_NAME))
+      cf_rules.append(
+          CashflowRule(source_name="base_spend",
+                       cashflow_type=CashflowType.REGULAR))
 
     # キャッシュフロー (年金保険料と受給)
     premium_annual, _ = pension_map[(household_size, pension_start)]

@@ -23,9 +23,7 @@ def test_pension_config_with_cpi():
                          amount=10.0,
                          start_month=12,
                          cpi_name="CPI")
-  cf = config.generate(n_sim=10,
-                       n_months=24,
-                       monthly_prices={"CPI": cpi_array})
+  cf = config.generate(n_sim=10, n_months=24, monthly_prices={"CPI": cpi_array})
 
   assert cf.shape == (10, 24)
   assert np.all(cf[:, :12] == 0.0)
@@ -83,13 +81,14 @@ def test_mortality_config():
 def test_mortality_config_exceed_max_age():
   # 生命表の最大年齢を超えた場合のテスト
   mortality_rates = [0.1, 0.2]  # age 0, 1
-  config = MortalityConfig(name="death_old",
-                           mortality_rates=mortality_rates,
-                           initial_age=1, # month 0-11: age 1
-                           payout=500.0)
-  
+  config = MortalityConfig(
+      name="death_old",
+      mortality_rates=mortality_rates,
+      initial_age=1,  # month 0-11: age 1
+      payout=500.0)
+
   cf = config.generate(n_sim=10, n_months=24, monthly_prices={})
-  
+
   # month 12以降はage 2となり、mortality_ratesの範囲外なので無条件で死亡(payout=500.0)となるはず
   assert np.all(cf[:, 12:] == 500.0)
 
@@ -99,18 +98,18 @@ def test_mortality_config_probability():
   # 1 - (1-p_y)^(1/12) = p_m  =>  p_m を 0.5 にしたい場合、 p_y = 1 - (1-0.5)^12
   monthly_prob = 0.5
   yearly_prob = 1.0 - (1.0 - monthly_prob)**12
-  
+
   mortality_rates = [yearly_prob] * 10
   config = MortalityConfig(name="death_prob",
                            mortality_rates=mortality_rates,
                            initial_age=0,
                            payout=1.0)
-  
+
   n_sim = 10000
   n_months = 12
   np.random.seed(42)
   cf = config.generate(n_sim=n_sim, n_months=n_months, monthly_prices={})
-  
+
   # payout=1.0 なので、cfの要素の平均が約0.5になるはず
   mean_death_rate = np.mean(cf)
   assert 0.49 < mean_death_rate < 0.51

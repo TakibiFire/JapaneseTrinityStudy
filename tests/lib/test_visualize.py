@@ -81,7 +81,6 @@ def test_create_styled_summary_legacy():
 
   df, styled = create_styled_summary(results, bankruptcy_years=[20])
 
-
   # 型チェック
   assert isinstance(styled, pd.io.formats.style.Styler)
 

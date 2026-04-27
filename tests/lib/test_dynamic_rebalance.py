@@ -151,7 +151,7 @@ def test_calculate_optimal_strategy_accuracy():
       pred = calculate_optimal_strategy(np.array([s_val]), float(y))[0]
       actual = actual_ratios[j]
 
-      if abs(pred - actual) < 0.05: # 許容誤差を 0.05 に締める
+      if abs(pred - actual) < 0.05:  # 許容誤差を 0.05 に締める
         match_count += 1
       total_count += 1
 

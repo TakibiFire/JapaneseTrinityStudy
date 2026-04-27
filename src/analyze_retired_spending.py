@@ -11,8 +11,7 @@ from src.lib.retired_spending import (BASE_AGES, CONSUMPTION_DATA,
                                       NON_CONSUMPTION_DATA,
                                       SINGLE_2019_BASE_AGES,
                                       SINGLE_2019_CONSUMPTION_DATA,
-                                      SpendingType,
-                                      get_retired_spending_values)
+                                      SpendingType, get_retired_spending_values)
 
 
 def analyze_single_spending():
@@ -20,8 +19,8 @@ def analyze_single_spending():
   単身世帯の2019年データに基づく支出推移を可視化する。
   """
   target_ages = np.arange(20, 101)
-  target_con = get_retired_spending_values([SpendingType.SINGLE_2019_CONSUMPTION],
-                                           target_ages)
+  target_con = get_retired_spending_values(
+      [SpendingType.SINGLE_2019_CONSUMPTION], target_ages)
 
   df_actual = pd.DataFrame({
       "Age": SINGLE_2019_BASE_AGES,
@@ -118,15 +117,12 @@ def main():
   ])
 
   # グラフ描画
-  color_scale = alt.Color("支出種別:N",
-                          scale=alt.Scale(domain=[
-                              "消費支出 (生活費)", "非消費支出 (税・保険料)", "合計支出", "非消費支出 (年金を除く)"
-                          ],
-                                          range=[
-                                              "#1f77b4", "#ff7f0e", "#2ca02c",
-                                              "#ff7f0e"
-                                          ]),
-                          legend=alt.Legend(orient='top'))
+  color_scale = alt.Color(
+      "支出種別:N",
+      scale=alt.Scale(
+          domain=["消費支出 (生活費)", "非消費支出 (税・保険料)", "合計支出", "非消費支出 (年金を除く)"],
+          range=["#1f77b4", "#ff7f0e", "#2ca02c", "#ff7f0e"]),
+      legend=alt.Legend(orient='top'))
 
   chart_actual = alt.Chart(df_actual).mark_point(size=60, filled=True).encode(
       x=alt.X("Age:Q", title="年齢", scale=alt.Scale(domain=[30, 100])),
@@ -138,9 +134,8 @@ def main():
       y=alt.Y("Value:Q", title="支出(円)"),
       color=color_scale,
       strokeDash=alt.condition(
-          (alt.datum.支出種別 == "合計支出") |
-          (alt.datum.支出種別 == "非消費支出 (年金を除く)"), alt.value([5, 5]),
-          alt.value([0, 0])))
+          (alt.datum.支出種別 == "合計支出") | (alt.datum.支出種別 == "非消費支出 (年金を除く)"),
+          alt.value([5, 5]), alt.value([0, 0])))
 
   chart = (chart_actual + chart_spline).properties(width=600,
                                                    height=400,

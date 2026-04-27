@@ -16,8 +16,7 @@ from src.lib.cashflow_generator import (CashflowConfig, PensionConfig,
                                         generate_cashflows)
 from src.lib.retired_spending import (SpendingType,
                                       get_retired_spending_multipliers)
-from src.lib.simulation_defaults import (AcwiModelKey,
-                                         get_acwi_fat_tail_config,
+from src.lib.simulation_defaults import (AcwiModelKey, get_acwi_fat_tail_config,
                                          get_cpi_ar12_config)
 
 # 共有アセット名の定数
@@ -132,7 +131,7 @@ def create_standard_world(
                                                  n_paths=n_sim,
                                                  n_months=years * 12,
                                                  seed=seed)
-  
+
   zr_asset_obj = ZeroRiskAsset(name=ZERO_RISK_NAME, yield_rate=zero_risk_yield)
 
   # 2. キャッシュフロー設定
@@ -159,7 +158,7 @@ def create_standard_world(
   else:
     # 繰り下げ (0.7% / 月 増額)
     reduction_rate = 1.0 + 0.007 * (pension_start_age - 65) * 12
-  
+
   kousei_annual = kousei_annual_base * reduction_rate
   kiso_annual = kiso_annual_base * reduction_rate
 

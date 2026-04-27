@@ -64,11 +64,12 @@ def main():
   comparison_assets = []
   for name, fee in trust_fees:
     comparison_assets.append(
-        DerivedAsset(name=name, base=base_asset_name, trust_fee=fee, leverage=1))
+        DerivedAsset(name=name, base=base_asset_name, trust_fee=fee,
+                     leverage=1))
 
   cpi_asset = CpiAsset(name=cpi_name,
                        dist=YearlyLogNormalArithmetic(mu=inflation_rate_std,
-                                                       sigma=0.0))
+                                                      sigma=0.0))
 
   # 2. 戦略(Plan)の定義
   # 1. キャッシュフロールールの定義
@@ -94,8 +95,9 @@ def main():
 
   # 3. シミュレーションの実行
   print(f"月次価格の推移を生成中 (パス数: {n_sim})...")
-  all_configs: List[Union[Asset, DerivedAsset,
-                          CpiAsset]] = assets + comparison_assets + [cpi_asset]  # type: ignore
+  all_configs: List[Union[
+      Asset, DerivedAsset,
+      CpiAsset]] = assets + comparison_assets + [cpi_asset]  # type: ignore
   monthly_asset_prices = generate_monthly_asset_prices(all_configs,
                                                        n_paths=n_sim,
                                                        n_months=n_months,
@@ -118,7 +120,8 @@ def main():
   os.makedirs(data_dir, exist_ok=True)
 
   survival_image_file = os.path.join(img_dir, 'trust_fee_comp_survival.svg')
-  distribution_image_file = os.path.join(img_dir, 'trust_fee_comp_distribution.svg')
+  distribution_image_file = os.path.join(img_dir,
+                                         'trust_fee_comp_distribution.svg')
   html_file = 'temp/trust_fee_comp_result.html'
 
   print("結果を保存中...")

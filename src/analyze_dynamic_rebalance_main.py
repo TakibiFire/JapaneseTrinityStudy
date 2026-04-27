@@ -19,7 +19,9 @@ def main():
   csv_path = "data/dynamic_rebalance_summary.csv"
 
   if not os.path.exists(csv_path):
-    print(f"Error: {csv_path} が見つかりません。先に src/dynamic_rebalance_comp_main.py を実行してください。")
+    print(
+        f"Error: {csv_path} が見つかりません。先に src/dynamic_rebalance_comp_main.py を実行してください。"
+    )
     return
 
   # CSVを読み込む
@@ -35,7 +37,9 @@ def main():
       "110-年齢 (60歳開始)",
   ]
   # 存在する戦略のみに限定
-  existing_strategies = [s for s in strategy_order if s in df["strategy"].unique()]
+  existing_strategies = [
+      s for s in strategy_order if s in df["strategy"].unique()
+  ]
   df = df[df["strategy"].isin(existing_strategies)]
 
   # ピボットテーブルの作成
@@ -52,25 +56,26 @@ def main():
 
   # --- Markdown 形式で出力 ---
   md_lines = []
-  
+
   # ヘッダー
   headers = ["支出率", "目標年数"] + list(pivot_df.columns)
   md_lines.append("| " + " | ".join(headers) + " |")
-  md_lines.append("| " + " | ".join([":---"] * 2 + [":---:"] * (len(headers) - 2)) + " |")
-  
+  md_lines.append("| " + " | ".join([":---"] * 2 + [":---:"] *
+                                    (len(headers) - 2)) + " |")
+
   for index_val, row in pivot_df.iterrows():
     s_rate, t_years = cast(Tuple[float, float], index_val)
     # 最大値を見つける (許容誤差を含める)
     max_val = row.max()
     is_max = row >= (max_val - 1e-6)
-    
+
     formatted_row = [f"{s_rate:.2%}", f"{int(t_years)}年"]
     for i, val in enumerate(row):
       cell = f"{val:.2%}"
       if is_max.iloc[i]:
         cell = f"**{cell}**"
       formatted_row.append(cell)
-    
+
     md_lines.append("| " + " | ".join(formatted_row) + " |")
 
   md_output = "\n".join(md_lines)
@@ -97,14 +102,14 @@ def main():
         if row["ダイナミック最適比率"] > row["固定最適比率"] + 1e-6:
           win_count += 1
         count += 1
-    
+
     avg_survival = pivot_df[strategy].mean()
     stat = {"戦略": strategy, "平均生存確率": f"{avg_survival:.2%}"}
     if strategy == "ダイナミック最適比率" and count > 0:
       stat["対 固定最適 勝ち越し数"] = f"{win_count}/{count}"
       stat["対 固定最適 平均改善幅"] = f"{total_diff/count:+.2%}"
     summary_stats.append(stat)
-  
+
   print(pd.DataFrame(summary_stats))
 
   # --- 可視化 (Altair) ---
@@ -118,28 +123,30 @@ def main():
       (0.04, "25x (4.00%)"),
       (0.0333333, "30x (3.33%)"),
   ]
-  
+
   charts = []
   for s_rate, label in grid_targets:
     # 最も近い支出率を探す
     actual_s = min(df["spend_ratio"].unique(), key=lambda x: abs(x - s_rate))
-    
-    chart = alt.Chart(df[df["spend_ratio"] == actual_s]).mark_line(point=True).encode(
-        x=alt.X("target_years:Q", title="目標年数", axis=alt.Axis(values=list(range(0, 51, 10)))),
-        y=alt.Y("survival_probability:Q", title="生存確率", scale=alt.Scale(domain=[0, 1])),
-        color=alt.Color("strategy:N", title="戦略", sort=existing_strategies),
-        tooltip=["strategy", "target_years", "survival_probability"]
-    ).properties(
-        title=f"支出率 {label} の比較",
-        width=300,
-        height=250
-    )
+
+    chart = alt.Chart(
+        df[df["spend_ratio"] == actual_s]).mark_line(point=True).encode(
+            x=alt.X("target_years:Q",
+                    title="目標年数",
+                    axis=alt.Axis(values=list(range(0, 51, 10)))),
+            y=alt.Y("survival_probability:Q",
+                    title="生存確率",
+                    scale=alt.Scale(domain=[0, 1])),
+            color=alt.Color("strategy:N", title="戦略", sort=existing_strategies),
+            tooltip=["strategy", "target_years", "survival_probability"
+                    ]).properties(title=f"支出率 {label} の比較",
+                                  width=300,
+                                  height=250)
     charts.append(chart)
-  
-  grid_chart = alt.vconcat(
-      alt.hconcat(charts[0], charts[1]),
-      alt.hconcat(charts[2], charts[3])
-  ).resolve_scale(color='shared')
+
+  grid_chart = alt.vconcat(alt.hconcat(charts[0], charts[1]),
+                           alt.hconcat(charts[2],
+                                       charts[3])).resolve_scale(color='shared')
 
   grid_path = os.path.join(img_dir, "strategy_comparison_grid.svg")
   grid_chart.save(grid_path)
@@ -148,7 +155,6 @@ def main():
 
 if __name__ == "__main__":
   main()
-
 
 if __name__ == "__main__":
   main()

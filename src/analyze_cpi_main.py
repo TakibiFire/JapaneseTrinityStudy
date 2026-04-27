@@ -15,7 +15,8 @@ import numpy as np
 import pandas as pd
 
 
-def calculate_annual_returns(cpi_data: List[float]) -> Tuple[List[float], List[float]]:
+def calculate_annual_returns(
+    cpi_data: List[float]) -> Tuple[List[float], List[float]]:
   """
   CPIデータリストから前年比の年次リターン（算術リターンおよび対数リターン）を計算する。
   
@@ -141,10 +142,10 @@ def main() -> None:
 
   # リターン、mu、sigmaを計算する
   simple_returns, log_returns = calculate_annual_returns(cpi_data)
-  
+
   # 算術リターンの統計 (YearlyLogNormalArithmetic用)
   mu_arith, sigma_arith = compute_mu_sigma(simple_returns)
-  
+
   # 対数リターンの統計 (MonthlyLogNormal用)
   mu_log_annual, sigma_log_annual = compute_mu_sigma(log_returns)
   mu_log_monthly = mu_log_annual / 12.0
@@ -152,15 +153,15 @@ def main() -> None:
 
   print(f"データポイント数: {len(cpi_data)}年分")
   print(f"計算されたリターン数: {len(simple_returns)}年分")
-  
+
   print("\n--- For YearlyLogNormalArithmetic (Annual Arithmetic) ---")
   print(f"Mu (arithmetic): {mu_arith:.6f}")
   print(f"Sigma (arithmetic): {sigma_arith:.6f}")
-  
+
   print("\n--- For MonthlyLogNormal (Monthly Log-Return) ---")
   print(f"Mu (log monthly): {mu_log_monthly:.6f}")
   print(f"Sigma (log monthly): {sigma_log_monthly:.6f}")
-  
+
   print("\n--- Annual Log-Return Stats (Reference) ---")
   print(f"Mu (log annual): {mu_log_annual:.6f}")
   print(f"Sigma (log annual): {sigma_log_annual:.6f}")

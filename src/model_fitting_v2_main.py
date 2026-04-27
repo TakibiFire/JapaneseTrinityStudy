@@ -184,17 +184,15 @@ def main():
                 ] if args.debug_paths else []
 
   # 1. アセットとキャッシュフローの生成
-  world = create_standard_world(
-      n_sim=n_sim,
-      start_age=START_AGE,
-      end_age=END_AGE - 1,
-      retirement_age=60,
-      pension_start_age=60,
-      seed=SEED,
-      tax_rate=TAX_RATE,
-      zero_risk_yield=ZERO_RISK_YIELD,
-      trust_fee=TRUST_FEE
-  )
+  world = create_standard_world(n_sim=n_sim,
+                                start_age=START_AGE,
+                                end_age=END_AGE - 1,
+                                retirement_age=60,
+                                pension_start_age=60,
+                                seed=SEED,
+                                tax_rate=TAX_RATE,
+                                zero_risk_yield=ZERO_RISK_YIELD,
+                                trust_fee=TRUST_FEE)
   monthly_prices = world.monthly_prices
   zr_asset_obj = world.zr_asset_obj
   ORUKAN_NAME = world.ORUKAN_NAME
@@ -215,12 +213,15 @@ def main():
     else:
       jumps = cpi_data[:, (y + 1) * 12 - 1] / cpi_data[:, y * 12 - 1]
     annual_cpi_jumps.extend(jumps.tolist())
-  
+
   cpi_annual_mu = float(np.mean(annual_cpi_jumps)) - 1.0
   cpi_annual_sigma = float(np.std(annual_cpi_jumps))
   # 99%ile (Z=2.326) の想定外ジャンプ倍率
-  unexpected_cpi_jump = (1.0 + cpi_annual_mu + 2.326 * cpi_annual_sigma) / (1.0 + cpi_annual_mu)
-  print(f"CPI Stats: mu={cpi_annual_mu:.4f}, sigma={cpi_annual_sigma:.4f}, unexpected_jump={unexpected_cpi_jump:.4f}")
+  unexpected_cpi_jump = (1.0 + cpi_annual_mu +
+                         2.326 * cpi_annual_sigma) / (1.0 + cpi_annual_mu)
+  print(
+      f"CPI Stats: mu={cpi_annual_mu:.4f}, sigma={cpi_annual_sigma:.4f}, unexpected_jump={unexpected_cpi_jump:.4f}"
+  )
 
   print("Generating cashflows...")
   monthly_cashflows = generate_cashflows(world.cf_configs,
@@ -281,10 +282,11 @@ def main():
       w_n = avg_y_withdraw_n * 1.25 / (1.0 + EFFECTIVE_ZERO_RISK_YIELD)
     else:
       w_n = (avg_y_withdraw_n + last_w) / (1.0 + EFFECTIVE_ZERO_RISK_YIELD)
-    
+
     last_w = w_n
     m_winning_multiplier = w_n / avg_y_withdraw_n
-    print(f"  Winning Threshold: M_N={m_winning_multiplier:.4f} (W_N={w_n:.2f})")
+    print(
+        f"  Winning Threshold: M_N={m_winning_multiplier:.4f} (W_N={w_n:.2f})")
 
     if args.debug_level >= 2:
       print(f"  [Level 2 Info] Cashflow:")
@@ -313,7 +315,8 @@ def main():
         depth: Optional[int] = None,
         reason: str = "",
         segment: Optional[Tuple[float, float]] = None,
-        segment_a_opts: Optional[Tuple[float, float]] = None) -> Tuple[float, float, Dict[float, float], float, float]:
+        segment_a_opts: Optional[Tuple[float, float]] = None
+    ) -> Tuple[float, float, Dict[float, float], float, float]:
       # キャッシュにあればそれを返す (浮動小数点の誤差を考慮して丸める)
       r_key = round(r, 6)
       if r_key in eval_cache:
@@ -330,15 +333,22 @@ def main():
 
       # ログ項目の準備（シミュレーション実行前に一部記録）
       log_entry = {
-          "r": float(r),
-          "stage": stage,
-          "depth": depth,
+          "r":
+              float(r),
+          "stage":
+              stage,
+          "depth":
+              depth,
           "segment": [float(s) for s in segment] if segment else None,
-          "segment_a_opts": [float(a) for a in segment_a_opts] if segment_a_opts else None,
+          "segment_a_opts": [float(a) for a in segment_a_opts]
+                            if segment_a_opts else None,
           "tried_as": [float(a) for a in search_a_list],
-          "r_min_a": float(r_min_a) if r_min_a is not None else None,
-          "r_max_a": float(r_max_a) if r_max_a is not None else None,
-          "decision_reason": reason
+          "r_min_a":
+              float(r_min_a) if r_min_a is not None else None,
+          "r_max_a":
+              float(r_max_a) if r_max_a is not None else None,
+          "decision_reason":
+              reason
       }
       search_logs.append(log_entry)
 
@@ -376,7 +386,7 @@ def main():
                                 fallback_total_months=12,
                                 calculate_post_tax=True)
         x_next = cast(np.ndarray, res.post_tax_net_values)  # shape (n_sim,)
-        
+
         # 今年の破産判定
         bankrupt_this_year = res.sustained_months < 12
 
@@ -405,16 +415,17 @@ def main():
 
           # CPI のブレ (残差)
           # unexpected_cpi_jump = (1 + mu + z*sigma) / (1 + mu)
-          relative_cpi_jumps = (1.0 + cpi_annual_mu +
-                                z_scores * cpi_annual_sigma) / (1.0 +
-                                                                cpi_annual_mu)
+          relative_cpi_jumps = (1.0 + cpi_annual_mu + z_scores *
+                                cpi_annual_sigma) / (1.0 + cpi_annual_mu)
 
           # y_next_dist shape: (n_sim, 7)
-          y_next_dist = y_withdraw_n[:, np.newaxis] * expected_growth * relative_cpi_jumps
+          y_next_dist = y_withdraw_n[:, np.
+                                     newaxis] * expected_growth * relative_cpi_jumps
 
           # 7つの R_next シナリオを計算
           # x_next shape: (n_sim,) -> (n_sim, 7)
-          r_next_scenarios = y_next_dist / np.maximum(x_next[:, np.newaxis], 1e-7)
+          r_next_scenarios = y_next_dist / np.maximum(x_next[:, np.newaxis],
+                                                      1e-7)
 
           # 次年度の生存確率モデルを取得
           next_model = dp_results[age + 1]["p_model"]
@@ -429,8 +440,10 @@ def main():
           # マスクの作成
           bankrupt_mask = bankrupt_this_year[:, np.newaxis]
           # ブロードキャストされる
-          p_next_scenarios[~bankrupt_mask & (r_next_scenarios <= next_r_min)] = next_p_max
-          p_next_scenarios[~bankrupt_mask & (r_next_scenarios >= next_r_max)] = next_p_min
+          p_next_scenarios[~bankrupt_mask &
+                           (r_next_scenarios <= next_r_min)] = next_p_max
+          p_next_scenarios[~bankrupt_mask &
+                           (r_next_scenarios >= next_r_max)] = next_p_min
 
           in_range = ~bankrupt_mask & (r_next_scenarios > next_r_min) & (
               r_next_scenarios < next_r_max)
@@ -441,7 +454,8 @@ def main():
                 r_next_scenarios[in_range])
 
           # 期待値を計算 (各シナリオの重み付き平均)
-          survival = np.sum(p_next_scenarios * weights, axis=1)  # shape: (n_sim,)
+          survival = np.sum(p_next_scenarios * weights,
+                            axis=1)  # shape: (n_sim,)
 
         # デバッグ情報の表示
         if age == args.debug_age and debug_paths:

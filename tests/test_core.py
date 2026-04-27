@@ -23,29 +23,29 @@ def test_simulate_strategy_no_ruin():
   n_sim = 10
   n_months = 120
   prices = {
-    "AssetA": np.ones((n_sim, n_months + 1)),
-    "Cash": np.ones((n_sim, n_months + 1)),
+      "AssetA": np.ones((n_sim, n_months + 1)),
+      "Cash": np.ones((n_sim, n_months + 1)),
   }
-  
+
   rules = [
-    CashflowRule(source_name="BaseSpend", cashflow_type=CashflowType.REGULAR)
+      CashflowRule(source_name="BaseSpend", cashflow_type=CashflowType.REGULAR)
   ]
   cf_configs: List[CashflowConfig] = [
-    BaseSpendConfig(name="BaseSpend", amount=10.0)
+      BaseSpendConfig(name="BaseSpend", amount=10.0)
   ]
   monthly_cf = generate_cashflows(cf_configs, prices, n_sim, n_months)
 
-  strategy = Strategy(
-    name="Test",
-    initial_money=1000.0,
-    initial_loan=0.0,
-    yearly_loan_interest=0.0,
-    initial_asset_ratio={"AssetA": 1.0},
-    selling_priority=["AssetA"],
-    cashflow_rules=rules
-  )
+  strategy = Strategy(name="Test",
+                      initial_money=1000.0,
+                      initial_loan=0.0,
+                      yearly_loan_interest=0.0,
+                      initial_asset_ratio={"AssetA": 1.0},
+                      selling_priority=["AssetA"],
+                      cashflow_rules=rules)
 
-  res = simulate_strategy(strategy=strategy, monthly_asset_prices=prices, monthly_cashflows=monthly_cf)
+  res = simulate_strategy(strategy=strategy,
+                          monthly_asset_prices=prices,
+                          monthly_cashflows=monthly_cf)
 
   assert res.net_values.shape == (n_sim,)
   # 1000 - 100 = 900
@@ -61,33 +61,29 @@ def test_simulate_strategy_bankruptcy():
   n_sim = 5
   n_months = 24
   prices = {
-    "AssetA": np.ones((n_sim, n_months + 1)),
-    "Cash": np.ones((n_sim, n_months + 1)),
+      "AssetA": np.ones((n_sim, n_months + 1)),
+      "Cash": np.ones((n_sim, n_months + 1)),
   }
-  
+
   rules = [
-    CashflowRule(source_name="BaseSpend", cashflow_type=CashflowType.REGULAR)
+      CashflowRule(source_name="BaseSpend", cashflow_type=CashflowType.REGULAR)
   ]
   cf_configs: List[CashflowConfig] = [
-    BaseSpendConfig(name="BaseSpend", amount=100.0)
+      BaseSpendConfig(name="BaseSpend", amount=100.0)
   ]
   monthly_cf = generate_cashflows(cf_configs, prices, n_sim, n_months)
 
-  strategy = Strategy(
-    name="Test",
-    initial_money=10.0,
-    initial_loan=0.0,
-    yearly_loan_interest=0.0,
-    initial_asset_ratio={"AssetA": 1.0},
-    selling_priority=["AssetA"],
-    cashflow_rules=rules
-  )
+  strategy = Strategy(name="Test",
+                      initial_money=10.0,
+                      initial_loan=0.0,
+                      yearly_loan_interest=0.0,
+                      initial_asset_ratio={"AssetA": 1.0},
+                      selling_priority=["AssetA"],
+                      cashflow_rules=rules)
 
-  res = simulate_strategy(
-    strategy=strategy,
-    monthly_asset_prices=prices,
-    monthly_cashflows=monthly_cf
-  )
+  res = simulate_strategy(strategy=strategy,
+                          monthly_asset_prices=prices,
+                          monthly_cashflows=monthly_cf)
   assert np.all(res.sustained_months < n_months)
 
 
@@ -100,27 +96,25 @@ def test_simulate_strategy_cost_withdrawal():
   n_sim = 1
   n_months = 12
   prices = {
-    "AssetA": np.ones((n_sim, n_months + 1)),
-    "Cash": np.ones((n_sim, n_months + 1)),
+      "AssetA": np.ones((n_sim, n_months + 1)),
+      "Cash": np.ones((n_sim, n_months + 1)),
   }
-  
+
   rules = [
-    CashflowRule(source_name="BaseSpend", cashflow_type=CashflowType.REGULAR)
+      CashflowRule(source_name="BaseSpend", cashflow_type=CashflowType.REGULAR)
   ]
   cf_configs: List[CashflowConfig] = [
-    BaseSpendConfig(name="BaseSpend", amount=120.0)
+      BaseSpendConfig(name="BaseSpend", amount=120.0)
   ]
   monthly_cf = generate_cashflows(cf_configs, prices, n_sim, n_months)
 
-  strategy = Strategy(
-    name="Test",
-    initial_money=1000.0,
-    initial_loan=0.0,
-    yearly_loan_interest=0.0,
-    initial_asset_ratio={"AssetA": 1.0},
-    selling_priority=["AssetA"],
-    cashflow_rules=rules
-  )
+  strategy = Strategy(name="Test",
+                      initial_money=1000.0,
+                      initial_loan=0.0,
+                      yearly_loan_interest=0.0,
+                      initial_asset_ratio={"AssetA": 1.0},
+                      selling_priority=["AssetA"],
+                      cashflow_rules=rules)
 
   # 12ヶ月分の支出 120 が引かれる
   res = simulate_strategy(strategy, prices, monthly_cf, fallback_total_months=1)
@@ -136,32 +130,28 @@ def test_simulate_strategy_annual_cost_list():
   n_sim = 1
   n_months = 24
   prices = {
-    "AssetA": np.ones((n_sim, n_months + 1)),
-    "Cash": np.ones((n_sim, n_months + 1)),
+      "AssetA": np.ones((n_sim, n_months + 1)),
+      "Cash": np.ones((n_sim, n_months + 1)),
   }
   rules = [
-    CashflowRule(source_name="BaseSpend", cashflow_type=CashflowType.REGULAR)
+      CashflowRule(source_name="BaseSpend", cashflow_type=CashflowType.REGULAR)
   ]
   cf_configs: List[CashflowConfig] = [
-    BaseSpendConfig(name="BaseSpend", amount=[120.0, 240.0])
+      BaseSpendConfig(name="BaseSpend", amount=[120.0, 240.0])
   ]
   monthly_cf = generate_cashflows(cf_configs, prices, n_sim, n_months)
 
-  strategy = Strategy(
-    name="Test",
-    initial_money=1000.0,
-    initial_loan=0.0,
-    yearly_loan_interest=0.0,
-    initial_asset_ratio={"AssetA": 1.0},
-    selling_priority=["AssetA"],
-    cashflow_rules=rules
-  )
+  strategy = Strategy(name="Test",
+                      initial_money=1000.0,
+                      initial_loan=0.0,
+                      yearly_loan_interest=0.0,
+                      initial_asset_ratio={"AssetA": 1.0},
+                      selling_priority=["AssetA"],
+                      cashflow_rules=rules)
 
-  res = simulate_strategy(
-    strategy=strategy,
-    monthly_asset_prices=prices,
-    monthly_cashflows=monthly_cf
-  )
+  res = simulate_strategy(strategy=strategy,
+                          monthly_asset_prices=prices,
+                          monthly_cashflows=monthly_cf)
   assert np.allclose(res.net_values[0], 640.0)
 
 
@@ -174,36 +164,30 @@ def test_dynamic_spending_initial_cost():
   n_sim = 1
   n_months = 12
   prices = {"A": np.ones((1, 13)), "Cash": np.ones((1, 13))}
-  ds = DynamicSpending(
-    initial_annual_spend=120.0,
-    target_ratio=0.0,
-    upper_limit=0.0,
-    lower_limit=0.0
-  )
+  ds = DynamicSpending(initial_annual_spend=120.0,
+                       target_ratio=0.0,
+                       upper_limit=0.0,
+                       lower_limit=0.0)
   rules = [
-    CashflowRule(
-      source_name="BaseSpend",
-      cashflow_type=CashflowType.REGULAR,
-      dynamic_handler=ds
-    )
+      CashflowRule(source_name="BaseSpend",
+                   cashflow_type=CashflowType.REGULAR,
+                   dynamic_handler=ds)
   ]
-  cf_configs: List[CashflowConfig] = [BaseSpendConfig(name="BaseSpend", amount=0.0)]
+  cf_configs: List[CashflowConfig] = [
+      BaseSpendConfig(name="BaseSpend", amount=0.0)
+  ]
   monthly_cf = generate_cashflows(cf_configs, prices, n_sim, n_months)
 
-  strategy = Strategy(
-    name="Test",
-    initial_money=1000.0,
-    initial_loan=0.0,
-    yearly_loan_interest=0.0,
-    initial_asset_ratio={"A": 1.0},
-    selling_priority=["A"],
-    cashflow_rules=rules
-  )
-  res = simulate_strategy(
-    strategy=strategy,
-    monthly_asset_prices=prices,
-    monthly_cashflows=monthly_cf
-  )
+  strategy = Strategy(name="Test",
+                      initial_money=1000.0,
+                      initial_loan=0.0,
+                      yearly_loan_interest=0.0,
+                      initial_asset_ratio={"A": 1.0},
+                      selling_priority=["A"],
+                      cashflow_rules=rules)
+  res = simulate_strategy(strategy=strategy,
+                          monthly_asset_prices=prices,
+                          monthly_cashflows=monthly_cf)
   assert np.allclose(res.net_values[0], 880.0)
 
 
@@ -217,35 +201,33 @@ def test_dynamic_spending_ceiling():
   n_months = 24
   prices = {"A": np.ones((1, 25)) * 10.0, "Cash": np.ones((1, 25))}
   prices["A"][0, 0] = 1.0
-  
+
   # 10% 抽出だが、前年比 +5% 上限
-  ds = DynamicSpending(
-    initial_annual_spend=100.0,
-    target_ratio=0.1,
-    upper_limit=0.05,
-    lower_limit=-0.05
-  )
+  ds = DynamicSpending(initial_annual_spend=100.0,
+                       target_ratio=0.1,
+                       upper_limit=0.05,
+                       lower_limit=-0.05)
   rules = [
-    CashflowRule(source_name="BaseSpend", cashflow_type=CashflowType.REGULAR, dynamic_handler=ds)
+      CashflowRule(source_name="BaseSpend",
+                   cashflow_type=CashflowType.REGULAR,
+                   dynamic_handler=ds)
   ]
-  cf_configs: List[CashflowConfig] = [BaseSpendConfig(name="BaseSpend", amount=0.0)]
+  cf_configs: List[CashflowConfig] = [
+      BaseSpendConfig(name="BaseSpend", amount=0.0)
+  ]
   monthly_cf = generate_cashflows(cf_configs, prices, n_sim, n_months)
 
-  strategy = Strategy(
-    name="Test",
-    initial_money=1000.0,
-    initial_loan=0.0,
-    yearly_loan_interest=0.0,
-    initial_asset_ratio={"A": 1.0},
-    selling_priority=["A"],
-    cashflow_rules=rules,
-    record_annual_spend=True
-  )
-  res = simulate_strategy(
-    strategy=strategy,
-    monthly_asset_prices=prices,
-    monthly_cashflows=monthly_cf
-  )
+  strategy = Strategy(name="Test",
+                      initial_money=1000.0,
+                      initial_loan=0.0,
+                      yearly_loan_interest=0.0,
+                      initial_asset_ratio={"A": 1.0},
+                      selling_priority=["A"],
+                      cashflow_rules=rules,
+                      record_annual_spend=True)
+  res = simulate_strategy(strategy=strategy,
+                          monthly_asset_prices=prices,
+                          monthly_cashflows=monthly_cf)
   assert res.annual_spends is not None
   assert np.allclose(res.annual_spends[0, 1], 105.0)
 
@@ -260,34 +242,33 @@ def test_dynamic_spending_floor():
   n_months = 24
   prices = {"A": np.ones((1, 25)) * 0.1, "Cash": np.ones((1, 25))}
   prices["A"][0, 0] = 1.0
-  
-  ds = DynamicSpending(
-    initial_annual_spend=100.0,
-    target_ratio=0.1,
-    upper_limit=0.05,
-    lower_limit=-0.05
-  )
+
+  ds = DynamicSpending(initial_annual_spend=100.0,
+                       target_ratio=0.1,
+                       upper_limit=0.05,
+                       lower_limit=-0.05)
   rules = [
-    CashflowRule(source_name="BaseSpend", cashflow_type=CashflowType.REGULAR, dynamic_handler=ds)
+      CashflowRule(source_name="BaseSpend",
+                   cashflow_type=CashflowType.REGULAR,
+                   dynamic_handler=ds)
   ]
-  cf_configs: List[CashflowConfig] = [BaseSpendConfig(name="BaseSpend", amount=0.0)]
+  cf_configs: List[CashflowConfig] = [
+      BaseSpendConfig(name="BaseSpend", amount=0.0)
+  ]
   monthly_cf = generate_cashflows(cf_configs, prices, n_sim, n_months)
 
   strategy = Strategy(
-    name="Test",
-    initial_money=10000.0, # 破綻を避けるために増額
-    initial_loan=0.0,
-    yearly_loan_interest=0.0,
-    initial_asset_ratio={"A": 1.0},
-    selling_priority=["A"],
-    cashflow_rules=rules,
-    record_annual_spend=True
-  )
-  res = simulate_strategy(
-    strategy=strategy,
-    monthly_asset_prices=prices,
-    monthly_cashflows=monthly_cf
-  )
+      name="Test",
+      initial_money=10000.0,  # 破綻を避けるために増額
+      initial_loan=0.0,
+      yearly_loan_interest=0.0,
+      initial_asset_ratio={"A": 1.0},
+      selling_priority=["A"],
+      cashflow_rules=rules,
+      record_annual_spend=True)
+  res = simulate_strategy(strategy=strategy,
+                          monthly_asset_prices=prices,
+                          monthly_cashflows=monthly_cf)
   assert res.annual_spends is not None
   assert np.allclose(res.annual_spends[0, 1], 95.0)
 
@@ -301,34 +282,30 @@ def test_simulate_strategy_tax():
   n_sim = 1
   n_months = 12
   prices = {
-    "AssetA": np.ones((n_sim, n_months + 1)),
-    "Cash": np.ones((n_sim, n_months + 1)),
+      "AssetA": np.ones((n_sim, n_months + 1)),
+      "Cash": np.ones((n_sim, n_months + 1)),
   }
   prices["AssetA"][0, :] = np.linspace(1.0, 2.0, n_months + 1)
 
   rules = [
-    CashflowRule(source_name="BaseSpend", cashflow_type=CashflowType.REGULAR)
+      CashflowRule(source_name="BaseSpend", cashflow_type=CashflowType.REGULAR)
   ]
   cf_configs: List[CashflowConfig] = [
-    BaseSpendConfig(name="BaseSpend", amount=120.0)
+      BaseSpendConfig(name="BaseSpend", amount=120.0)
   ]
   monthly_cf = generate_cashflows(cf_configs, prices, n_sim, n_months)
 
-  strategy = Strategy(
-    name="Test",
-    initial_money=1000.0,
-    initial_loan=0.0,
-    yearly_loan_interest=0.0,
-    initial_asset_ratio={"AssetA": 1.0},
-    selling_priority=["AssetA"],
-    cashflow_rules=rules
-  )
+  strategy = Strategy(name="Test",
+                      initial_money=1000.0,
+                      initial_loan=0.0,
+                      yearly_loan_interest=0.0,
+                      initial_asset_ratio={"AssetA": 1.0},
+                      selling_priority=["AssetA"],
+                      cashflow_rules=rules)
 
-  res = simulate_strategy(
-    strategy=strategy,
-    monthly_asset_prices=prices,
-    monthly_cashflows=monthly_cf
-  )
+  res = simulate_strategy(strategy=strategy,
+                          monthly_asset_prices=prices,
+                          monthly_cashflows=monthly_cf)
   assert res.net_values[0] < 1880.0
   assert res.net_values[0] > 1600.0
 
@@ -342,22 +319,23 @@ def test_simulate_strategy_rebalance():
   n_sim = 1
   n_months = 12
   prices = {
-    "AssetA": np.ones((n_sim, n_months + 1)),
-    "Cash": np.ones((n_sim, n_months + 1)),
+      "AssetA": np.ones((n_sim, n_months + 1)),
+      "Cash": np.ones((n_sim, n_months + 1)),
   }
   prices["AssetA"][0, 1:] = 2.0
   prices["AssetA"][0, 0] = 1.0
 
-  strategy = Strategy(
-    name="Test",
-    initial_money=1000.0,
-    initial_loan=0.0,
-    yearly_loan_interest=0.0,
-    initial_asset_ratio={"AssetA": 0.5, "Cash": 0.5},
-    selling_priority=["AssetA", "Cash"],
-    rebalance_interval=1,
-    tax_rate=0.0
-  )
+  strategy = Strategy(name="Test",
+                      initial_money=1000.0,
+                      initial_loan=0.0,
+                      yearly_loan_interest=0.0,
+                      initial_asset_ratio={
+                          "AssetA": 0.5,
+                          "Cash": 0.5
+                      },
+                      selling_priority=["AssetA", "Cash"],
+                      rebalance_interval=1,
+                      tax_rate=0.0)
 
   res = simulate_strategy(strategy, prices, {})
   assert res.net_values[0] == 1500.0
@@ -371,15 +349,13 @@ def test_simulate_strategy_zero_risk_asset():
   n_sim = 1
   n_months = 12
   zr = ZeroRiskAsset(name="Savings", yield_rate=0.0)
-  
-  strategy = Strategy(
-    name="Test",
-    initial_money=1000.0,
-    initial_loan=0.0,
-    yearly_loan_interest=0.0,
-    initial_asset_ratio={zr: 1.0},
-    selling_priority=["Savings"]
-  )
+
+  strategy = Strategy(name="Test",
+                      initial_money=1000.0,
+                      initial_loan=0.0,
+                      yearly_loan_interest=0.0,
+                      initial_asset_ratio={zr: 1.0},
+                      selling_priority=["Savings"])
   res = simulate_strategy(strategy, {}, {})
   assert res.net_values[0] == 1000.0
 
@@ -390,29 +366,26 @@ def test_strategy_validation():
   キャッシュフロールール名の重複チェックなどのバリデーションが正しく動作することを検証する。
   """
   with pytest.raises(ValueError, match="Asset allocation must sum to 1.0"):
-    Strategy(
-      name="Test",
-      initial_money=1000.0,
-      initial_loan=0.0,
-      yearly_loan_interest=0.0,
-      initial_asset_ratio={"A": 0.5},
-      selling_priority=["A"]
-    )
+    Strategy(name="Test",
+             initial_money=1000.0,
+             initial_loan=0.0,
+             yearly_loan_interest=0.0,
+             initial_asset_ratio={"A": 0.5},
+             selling_priority=["A"])
 
   rules = [
-    CashflowRule("S1", CashflowType.REGULAR),
-    CashflowRule("S1", CashflowType.REGULAR),
+      CashflowRule("S1", CashflowType.REGULAR),
+      CashflowRule("S1", CashflowType.REGULAR),
   ]
-  with pytest.raises(ValueError, match="Duplicate source_name found in cashflow_rules"):
-    Strategy(
-      name="Test",
-      initial_money=1000.0,
-      initial_loan=0.0,
-      yearly_loan_interest=0.0,
-      initial_asset_ratio={"A": 1.0},
-      selling_priority=["A"],
-      cashflow_rules=rules
-    )
+  with pytest.raises(ValueError,
+                     match="Duplicate source_name found in cashflow_rules"):
+    Strategy(name="Test",
+             initial_money=1000.0,
+             initial_loan=0.0,
+             yearly_loan_interest=0.0,
+             initial_asset_ratio={"A": 1.0},
+             selling_priority=["A"],
+             cashflow_rules=rules)
 
 
 def test_simulate_with_dynamic_rebalance():
@@ -424,20 +397,22 @@ def test_simulate_with_dynamic_rebalance():
   n_months = 12
   prices = {"A": np.ones((1, 13)), "Cash": np.ones((1, 13))}
 
-  def dummy_rebalance_fn(total_net: np.ndarray, cur_ann_spend: np.ndarray, 
-                         rem_years: float, post_tax_net: np.ndarray) -> Dict[str, Union[float, np.ndarray]]:
+  def dummy_rebalance_fn(
+      total_net: np.ndarray, cur_ann_spend: np.ndarray, rem_years: float,
+      post_tax_net: np.ndarray) -> Dict[str, Union[float, np.ndarray]]:
     return {"A": 0.8, "Cash": 0.2}
 
-  strategy = Strategy(
-    name="Test",
-    initial_money=1000.0,
-    initial_loan=0.0,
-    yearly_loan_interest=0.0,
-    initial_asset_ratio={"A": 0.5, "Cash": 0.5},
-    selling_priority=["A", "Cash"],
-    rebalance_interval=1,
-    dynamic_rebalance_fn=dummy_rebalance_fn
-  )
+  strategy = Strategy(name="Test",
+                      initial_money=1000.0,
+                      initial_loan=0.0,
+                      yearly_loan_interest=0.0,
+                      initial_asset_ratio={
+                          "A": 0.5,
+                          "Cash": 0.5
+                      },
+                      selling_priority=["A", "Cash"],
+                      rebalance_interval=1,
+                      dynamic_rebalance_fn=dummy_rebalance_fn)
 
   res = simulate_strategy(strategy, prices, {})
   assert res.net_values.shape == (1,)
@@ -449,16 +424,16 @@ def test_simulate_strategy_empty_prices():
   フォールバック値を用いてシミュレーションが実行されることを検証する。
   """
   zr = ZeroRiskAsset(name="Savings", yield_rate=0.0)
-  strategy = Strategy(
-    name="Test",
-    initial_money=1000.0,
-    initial_loan=0.0,
-    yearly_loan_interest=0.0,
-    initial_asset_ratio={zr: 1.0},
-    selling_priority=["Savings"]
-  )
+  strategy = Strategy(name="Test",
+                      initial_money=1000.0,
+                      initial_loan=0.0,
+                      yearly_loan_interest=0.0,
+                      initial_asset_ratio={zr: 1.0},
+                      selling_priority=["Savings"])
   # 空の辞書を渡してもエラーにならず、fallback_n_sim などが使われる
-  res = simulate_strategy(strategy, {}, fallback_n_sim=10, fallback_total_months=12)
+  res = simulate_strategy(strategy, {},
+                          fallback_n_sim=10,
+                          fallback_total_months=12)
   assert res.net_values.shape == (10,)
 
 
@@ -476,20 +451,16 @@ def test_simulate_strategy_extra_cashflow():
   cf_configs: List[CashflowConfig] = [SuddenSpendConfig("Sudden", -500, 6)]
   monthly_cf = generate_cashflows(cf_configs, prices, n_sim, n_months)
 
-  strategy = Strategy(
-    name="Test",
-    initial_money=1000.0,
-    initial_loan=0.0,
-    yearly_loan_interest=0.0,
-    initial_asset_ratio={"A": 1.0},
-    selling_priority=["A"],
-    cashflow_rules=rules
-  )
-  res = simulate_strategy(
-    strategy=strategy,
-    monthly_asset_prices=prices,
-    monthly_cashflows=monthly_cf
-  )
+  strategy = Strategy(name="Test",
+                      initial_money=1000.0,
+                      initial_loan=0.0,
+                      yearly_loan_interest=0.0,
+                      initial_asset_ratio={"A": 1.0},
+                      selling_priority=["A"],
+                      cashflow_rules=rules)
+  res = simulate_strategy(strategy=strategy,
+                          monthly_asset_prices=prices,
+                          monthly_cashflows=monthly_cf)
   assert res.net_values[0] == 500.0
 
 
@@ -503,30 +474,29 @@ def test_extra_cashflow_multiplier():
   n_months = 12
   prices = {"A": np.ones((1, 13)), "Cash": np.ones((1, 13))}
 
-  def double_multiplier(m: int, nw: np.ndarray, prev_net: np.ndarray, prev_gross: np.ndarray) -> np.ndarray:
+  def double_multiplier(m: int, nw: np.ndarray, prev_net: np.ndarray,
+                        prev_gross: np.ndarray) -> np.ndarray:
     # 常に 2.0 倍にする。nw の長さに合わせた配列を返す。
     return np.ones(len(nw)) * 2.0
 
   rules = [
-    CashflowRule("BaseSpend", CashflowType.REGULAR, multiplier_fn=double_multiplier)
+      CashflowRule("BaseSpend",
+                   CashflowType.REGULAR,
+                   multiplier_fn=double_multiplier)
   ]
   cf_configs: List[CashflowConfig] = [BaseSpendConfig("BaseSpend", 120.0)]
   monthly_cf = generate_cashflows(cf_configs, prices, n_sim, n_months)
 
-  strategy = Strategy(
-    name="Test",
-    initial_money=1000.0,
-    initial_loan=0.0,
-    yearly_loan_interest=0.0,
-    initial_asset_ratio={"A": 1.0},
-    selling_priority=["A"],
-    cashflow_rules=rules
-  )
-  res = simulate_strategy(
-    strategy=strategy,
-    monthly_asset_prices=prices,
-    monthly_cashflows=monthly_cf
-  )
+  strategy = Strategy(name="Test",
+                      initial_money=1000.0,
+                      initial_loan=0.0,
+                      yearly_loan_interest=0.0,
+                      initial_asset_ratio={"A": 1.0},
+                      selling_priority=["A"],
+                      cashflow_rules=rules)
+  res = simulate_strategy(strategy=strategy,
+                          monthly_asset_prices=prices,
+                          monthly_cashflows=monthly_cf)
   assert np.allclose(res.net_values[0], 760.0)
 
 
@@ -541,32 +511,31 @@ def test_cashflow_type_isolated_from_dynamic_base():
   n_months = 24
   prices = {"A": np.ones((1, 25)), "Cash": np.ones((1, 25))}
 
-  ds = DynamicSpending(initial_annual_spend=0.0, target_ratio=0.0, upper_limit=1.0, lower_limit=0.0)
+  ds = DynamicSpending(initial_annual_spend=0.0,
+                       target_ratio=0.0,
+                       upper_limit=1.0,
+                       lower_limit=0.0)
   rules = [
-    CashflowRule("Extra", CashflowType.REGULAR),
-    CashflowRule("Dynamic", CashflowType.REGULAR, dynamic_handler=ds)
+      CashflowRule("Extra", CashflowType.REGULAR),
+      CashflowRule("Dynamic", CashflowType.REGULAR, dynamic_handler=ds)
   ]
   cf_configs: List[CashflowConfig] = [
-    SuddenSpendConfig("Extra", -100, 6),
-    BaseSpendConfig("Dynamic", 0.0)
+      SuddenSpendConfig("Extra", -100, 6),
+      BaseSpendConfig("Dynamic", 0.0)
   ]
   monthly_cf = generate_cashflows(cf_configs, prices, n_sim, n_months)
 
-  strategy = Strategy(
-    name="Test",
-    initial_money=5000.0,
-    initial_loan=0.0,
-    yearly_loan_interest=0.0,
-    initial_asset_ratio={"A": 1.0},
-    selling_priority=["A"],
-    cashflow_rules=rules,
-    record_annual_spend=True
-  )
-  res = simulate_strategy(
-    strategy=strategy,
-    monthly_asset_prices=prices,
-    monthly_cashflows=monthly_cf
-  )
+  strategy = Strategy(name="Test",
+                      initial_money=5000.0,
+                      initial_loan=0.0,
+                      yearly_loan_interest=0.0,
+                      initial_asset_ratio={"A": 1.0},
+                      selling_priority=["A"],
+                      cashflow_rules=rules,
+                      record_annual_spend=True)
+  res = simulate_strategy(strategy=strategy,
+                          monthly_asset_prices=prices,
+                          monthly_cashflows=monthly_cf)
   # 1年目: Dynamic=0, Extra=100。合計支出=100。残高=4900
   # 2年目: Dynamicは自分自身の前年実績(0)をベースにするため、0。Extraは無し。残高=4900のまま。
   assert np.allclose(res.net_values[0], 4900.0)  # 5000 - 100
@@ -581,34 +550,37 @@ def test_dynamic_spending_inflation_fix():
   n_sim = 1
   n_months = 24
   # CPIが1年で2倍になる設定
-  cpi_val = np.array([1.0]*12 + [2.0]*13).reshape(1, 25)
+  cpi_val = np.array([1.0] * 12 + [2.0] * 13).reshape(1, 25)
   prices = {"A": np.ones((1, 25)), "Cash": np.ones((1, 25)), "CPI": cpi_val}
-  
+
   # DynamicSpending 自体は CPI を直接参照しないが、evaluate に precomputed_cf_m (CPI) が渡される
-  ds = DynamicSpending(initial_annual_spend=100.0, target_ratio=0.0, upper_limit=1.0, lower_limit=0.0)
+  ds = DynamicSpending(initial_annual_spend=100.0,
+                       target_ratio=0.0,
+                       upper_limit=1.0,
+                       lower_limit=0.0)
   rules = [
-    CashflowRule(source_name="BaseSpend", cashflow_type=CashflowType.REGULAR, dynamic_handler=ds)
+      CashflowRule(source_name="BaseSpend",
+                   cashflow_type=CashflowType.REGULAR,
+                   dynamic_handler=ds)
   ]
   # BaseSpendConfig で CPI 連動させる。
   # CPI比率を正しく計算させるため、非ゼロの amount を指定する。
-  cf_configs: List[CashflowConfig] = [BaseSpendConfig(name="BaseSpend", amount=12.0, cpi_name="CPI")]
+  cf_configs: List[CashflowConfig] = [
+      BaseSpendConfig(name="BaseSpend", amount=12.0, cpi_name="CPI")
+  ]
   monthly_cf = generate_cashflows(cf_configs, prices, n_sim, n_months)
 
-  strategy = Strategy(
-    name="Test",
-    initial_money=5000.0,
-    initial_loan=0.0,
-    yearly_loan_interest=0.0,
-    initial_asset_ratio={"A": 1.0},
-    selling_priority=["A"],
-    cashflow_rules=rules,
-    record_annual_spend=True
-  )
-  res = simulate_strategy(
-    strategy=strategy,
-    monthly_asset_prices=prices,
-    monthly_cashflows=monthly_cf
-  )
+  strategy = Strategy(name="Test",
+                      initial_money=5000.0,
+                      initial_loan=0.0,
+                      yearly_loan_interest=0.0,
+                      initial_asset_ratio={"A": 1.0},
+                      selling_priority=["A"],
+                      cashflow_rules=rules,
+                      record_annual_spend=True)
+  res = simulate_strategy(strategy=strategy,
+                          monthly_asset_prices=prices,
+                          monthly_cashflows=monthly_cf)
   # 1年目支出: 100 (initial)
   # 2年目支出決定時(m=12): cf_ratio = CPI[12]/CPI[0] = 2.0.
   # 2年目名目支出 = 100 * 2.0 = 200.
@@ -621,9 +593,11 @@ class MockDPPredictor:
   SpendAwareDynamicSpending のテスト用モック。
   s_rate（支出率）が低いほど生存確率が高くなる単純な線形モデルを提供。
   """
+
   def predict_p_surv(self, age: int, s_rate: np.ndarray) -> np.ndarray:
     # s_rate が低いほど生存確率が高い単純なモデル
     return np.clip(1.0 - s_rate * 10, 0.0, 1.0)
+
 
 def test_spend_aware_dynamic_spending_basic():
   """
@@ -634,41 +608,39 @@ def test_spend_aware_dynamic_spending_basic():
   n_sim = 1
   n_months = 12
   prices = {"A": np.ones((1, 13)), "Cash": np.ones((1, 13))}
-  
+
   predictor = MockDPPredictor()
-  # 資産 1000, 予定支出 100 -> s_rate=0.1. 
-  # predict_p_surv(0.1) = 1.0 - 0.1*10 = 0.0. 
+  # 資産 1000, 予定支出 100 -> s_rate=0.1.
+  # predict_p_surv(0.1) = 1.0 - 0.1*10 = 0.0.
   # p_low=0.9 なので、大幅な支出削減が発生するはず。
-  ds = SpendAwareDynamicSpending(
-    initial_age=60,
-    p_low=0.9,
-    p_high=0.95,
-    lower_mult=0.5,
-    upper_mult=1.5,
-    annual_cost_real=[100.0]*100,
-    dp_predictor=cast(Any, predictor)
-  )
+  ds = SpendAwareDynamicSpending(initial_age=60,
+                                 p_low=0.9,
+                                 p_high=0.95,
+                                 lower_mult=0.5,
+                                 upper_mult=1.5,
+                                 annual_cost_real=[100.0] * 100,
+                                 dp_predictor=cast(Any, predictor))
   rules = [
-    CashflowRule(source_name="BaseSpend", cashflow_type=CashflowType.REGULAR, dynamic_handler=ds)
+      CashflowRule(source_name="BaseSpend",
+                   cashflow_type=CashflowType.REGULAR,
+                   dynamic_handler=ds)
   ]
-  cf_configs: List[CashflowConfig] = [BaseSpendConfig(name="BaseSpend", amount=0.0)]
+  cf_configs: List[CashflowConfig] = [
+      BaseSpendConfig(name="BaseSpend", amount=0.0)
+  ]
   monthly_cf = generate_cashflows(cf_configs, prices, n_sim, n_months)
 
-  strategy = Strategy(
-    name="Test",
-    initial_money=1000.0,
-    initial_loan=0.0,
-    yearly_loan_interest=0.0,
-    initial_asset_ratio={"A": 1.0},
-    selling_priority=["A"],
-    cashflow_rules=rules,
-    record_annual_spend=True
-  )
-  res = simulate_strategy(
-    strategy=strategy,
-    monthly_asset_prices=prices,
-    monthly_cashflows=monthly_cf
-  )
+  strategy = Strategy(name="Test",
+                      initial_money=1000.0,
+                      initial_loan=0.0,
+                      yearly_loan_interest=0.0,
+                      initial_asset_ratio={"A": 1.0},
+                      selling_priority=["A"],
+                      cashflow_rules=rules,
+                      record_annual_spend=True)
+  res = simulate_strategy(strategy=strategy,
+                          monthly_asset_prices=prices,
+                          monthly_cashflows=monthly_cf)
   assert res.annual_spends is not None
   # 支出が 100.0 より削減されていることを確認
   assert res.annual_spends[0, 0] < 100.0
@@ -685,33 +657,30 @@ def test_strategy_initial_spending_memory():
 
   # 1年目の年初に呼び出される multiplier_fn
   # prev_gross が 400 であれば 1.0, そうでなければ 0.0 を返すようにする
-  def trigger_fn(m: int, nw: np.ndarray, prev_net: np.ndarray, prev_gross: np.ndarray) -> np.ndarray:
+  def trigger_fn(m: int, nw: np.ndarray, prev_net: np.ndarray,
+                 prev_gross: np.ndarray) -> np.ndarray:
     if m == 0 and np.all(prev_gross == 400.0) and np.all(prev_net == 300.0):
       return np.ones(len(nw))
     return np.zeros(len(nw))
 
-  rules = [
-    CashflowRule("Work", CashflowType.REGULAR, multiplier_fn=trigger_fn)
-  ]
+  rules = [CashflowRule("Work", CashflowType.REGULAR, multiplier_fn=trigger_fn)]
   # Work ルールの基本額は 100
   cf_configs: List[CashflowConfig] = [PensionConfig("Work", 100.0, 0)]
   monthly_cf = generate_cashflows(cf_configs, prices, n_sim, n_months)
 
-  strategy = Strategy(
-    name="Test",
-    initial_money=1000.0,
-    initial_loan=0.0,
-    yearly_loan_interest=0.0,
-    initial_asset_ratio={"A": 1.0},
-    selling_priority=["A"],
-    initial_prev_net_reg_spend=300.0,
-    initial_prev_gross_reg_spend=400.0,
-    cashflow_rules=rules
-  )
+  strategy = Strategy(name="Test",
+                      initial_money=1000.0,
+                      initial_loan=0.0,
+                      yearly_loan_interest=0.0,
+                      initial_asset_ratio={"A": 1.0},
+                      selling_priority=["A"],
+                      initial_prev_net_reg_spend=300.0,
+                      initial_prev_gross_reg_spend=400.0,
+                      cashflow_rules=rules)
 
   # シミュレーション実行
   res = simulate_strategy(strategy, prices, monthly_cf)
-  
+
   # Work が発動していれば、資産は 1000 + (100 * 12) = 2200 になっているはず
   # 発動していなければ 1000 のまま
   assert res.net_values[0] == 2200.0

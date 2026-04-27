@@ -41,10 +41,8 @@ def main():
 
   # 1. 生存確率の推移比較 (Survival Probability Time-series)
   # 3.0% 〜 4.5% の範囲に限定、かつ FixedSpend は除外
-  df_surv_plot = df_survival[
-      df_survival["rule"].isin([3.0, 3.5, 4.0, 4.5]) &
-      (df_survival["strategy"] != "FixedSpend")
-  ].copy()
+  df_surv_plot = df_survival[df_survival["rule"].isin([3.0, 3.5, 4.0, 4.5]) &
+                             (df_survival["strategy"] != "FixedSpend")].copy()
 
   # 日本語ラベルへの変換 (Altairでの改行用にセパレータ '@' を使用)
   strat_map = {
@@ -78,10 +76,7 @@ def main():
           title='戦略',
           legend=alt.Legend(labelExpr="split(datum.label, '@')"),
           scale=alt.Scale(
-              domain=[
-                  "支出率を目標にする@ダイナミックスペンディング",
-                  "生存確率を目標にする@ダイナミックスペンディング"
-              ],
+              domain=["支出率を目標にする@ダイナミックスペンディング", "生存確率を目標にする@ダイナミックスペンディング"],
               range=[[4, 4], [0, 0]])),
       tooltip=[
           'year', 'rule', 'strategy_jp',
@@ -124,9 +119,7 @@ def main():
 
     # カラー設定: DSv1=red, DSv2=blue, Baseline=green
     color_domain = [
-        "支出率を目標にする@ダイナミックスペンディング",
-        "生存確率を目標にする@ダイナミックスペンディング",
-        "定額取り崩し（ベースライン）"
+        "支出率を目標にする@ダイナミックスペンディング", "生存確率を目標にする@ダイナミックスペンディング", "定額取り崩し（ベースライン）"
     ]
     color_range = ["red", "blue", "green"]
 
@@ -146,7 +139,8 @@ def main():
   surv_years = [30, 50]
   for year in surv_years:
     print(f"--- Year {year} ---")
-    df_surv_year = df_survival[(df_survival["year"] == year) & (df_survival["strategy"] != "FixedSpend")]
+    df_surv_year = df_survival[(df_survival["year"] == year) &
+                               (df_survival["strategy"] != "FixedSpend")]
     for rule in sorted(df_surv_year["rule"].unique()):
       df_rule = df_surv_year[df_surv_year["rule"] == rule]
       print(f"Rule {rule}%:")
@@ -162,7 +156,8 @@ def main():
       df_rule = df_spend_year[df_spend_year["rule"] == rule]
       print(f"Rule {rule}%:")
       for _, row in df_rule.iterrows():
-        print(f"  {row['strategy']}: p25={row['p25']:.1f}, p50={row['p50']:.1f}")
+        print(
+            f"  {row['strategy']}: p25={row['p25']:.1f}, p50={row['p50']:.1f}")
 
 
 if __name__ == "__main__":

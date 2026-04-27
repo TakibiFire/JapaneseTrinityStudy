@@ -29,8 +29,8 @@ def get_chart_opt_a(age):
   all_points = pd.DataFrame(data['all_points'])
 
   # Grid for prediction
-  r_grid = np.geomspace(max(all_points['r'].min(), 0.005), all_points['r'].max(),
-                        1000)
+  r_grid = np.geomspace(max(all_points['r'].min(), 0.005),
+                        all_points['r'].max(), 1000)
 
   # Raw PCHIP prediction
   a_pred_raw = pchip_interpolate(r_pts, a_pts, r_grid)
@@ -71,7 +71,11 @@ def get_chart_opt_a(age):
     )
 
   # DataFrames for plotting
-  plot_raw = pd.DataFrame({'r': r_grid, 'a': a_pred_raw, 'type': 'Prod (PCHIP Raw)'})
+  plot_raw = pd.DataFrame({
+      'r': r_grid,
+      'a': a_pred_raw,
+      'type': 'Prod (PCHIP Raw)'
+  })
   plot_guarded = pd.DataFrame({
       'r': r_grid,
       'a': a_pred_guarded,
@@ -88,17 +92,13 @@ def get_chart_opt_a(age):
       'type': 'Actual Max A'
   })
 
-  chart_range = alt.Chart(range_df).mark_area(opacity=0.2, color='red',
-                                              clip=True).encode(
-                                                  x=alt.X('r:Q',
-                                                          scale=alt.Scale(
-                                                              type='log',
-                                                              domain=[
-                                                                  r_min_p * 0.5,
-                                                                  r_max_p * 2.0
-                                                              ],
-                                                              clamp=True),
-                                                          title='R'),
+  chart_range = alt.Chart(range_df).mark_area(
+      opacity=0.2, color='red', clip=True).encode(x=alt.X(
+          'r:Q',
+          scale=alt.Scale(type='log',
+                          domain=[r_min_p * 0.5, r_max_p * 2.0],
+                          clamp=True),
+          title='R'),
                                                   y='a_opt_min:Q',
                                                   y2='a_opt_max:Q')
 
@@ -163,7 +163,9 @@ def parse_ages(age_str: str) -> list[int]:
 if __name__ == "__main__":
   parser = argparse.ArgumentParser(
       description='Recreate production fits for A_opt model.')
-  parser.add_argument('--ages', type=str, help='Ages to process (e.g., 91,93-95)')
+  parser.add_argument('--ages',
+                      type=str,
+                      help='Ages to process (e.g., 91,93-95)')
   args = parser.parse_args()
 
   if args.ages:

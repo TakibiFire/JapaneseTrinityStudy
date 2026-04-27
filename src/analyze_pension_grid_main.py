@@ -26,13 +26,16 @@ import altair as alt
 import pandas as pd
 
 
-def create_heatmap(df: pd.DataFrame, initial_age: int, target_age: int, output_path: str):
+def create_heatmap(df: pd.DataFrame, initial_age: int, target_age: int,
+                   output_path: str):
   """
   特定の開始年齢とターゲット年齢に対するヒートマップを作成して保存する。
   """
   target_year = target_age - initial_age
   if str(target_year) not in df.columns:
-    print(f"Warning: Year {target_year} not found for initial_age {initial_age}. Skipping.")
+    print(
+        f"Warning: Year {target_year} not found for initial_age {initial_age}. Skipping."
+    )
     return
 
   # データの抽出とラベル付け
@@ -42,7 +45,7 @@ def create_heatmap(df: pd.DataFrame, initial_age: int, target_age: int, output_p
     scenario = row['scenario']
     amount_monthly = row['initial_pension_nominal_annual'] / 12.0
     amount_str = f"({amount_monthly:.0f}万)"
-    
+
     mapping = {
         "NoPensionWorld": "年金制度なし",
         "PayNoReceive": "受給なし",
@@ -85,37 +88,31 @@ def create_heatmap(df: pd.DataFrame, initial_age: int, target_age: int, output_p
               title='シナリオ',
               sort=x_order,
               axis=alt.Axis(labelAngle=-45)),
-      y=alt.Y('asset_cost:O',
-              title='(初期資産, 年間支出)',
-              sort=y_order),
+      y=alt.Y('asset_cost:O', title='(初期資産, 年間支出)', sort=y_order),
   )
 
   # ヒートマップ部分
   heatmap = base.mark_rect(lineBreak=r'\n').encode(
       color=alt.Color('survival_rate:Q',
                       title='生存確率',
-                      scale=alt.Scale(scheme='redyellowgreen', domain=[0, 1]))
-  )
+                      scale=alt.Scale(scheme='redyellowgreen', domain=[0, 1])))
 
   # テキスト部分
   text = base.mark_text(baseline='middle').encode(
       text=alt.Text('survival_rate_pct:Q', format='.1f'),
-      color=alt.condition(
-          alt.datum.survival_rate > 0.3,
-          alt.value('black'),
-          alt.value('white')
-      )
-  )
+      color=alt.condition(alt.datum.survival_rate > 0.3, alt.value('black'),
+                          alt.value('white')))
 
   chart = (heatmap + text).properties(
       title=f'{initial_age}歳開始 - {target_age}歳時点の生存確率 (%)',
       width=450,
-      height=200
-  )
+      height=200)
 
   # STDOUTにヒートマップの値を出力
   print(f"\n--- {initial_age}歳開始 - {target_age}歳時点の生存確率 (%) ---")
-  pivot_df = plot_df.pivot(index="asset_cost", columns="scenario_label", values="survival_rate_pct")
+  pivot_df = plot_df.pivot(index="asset_cost",
+                           columns="scenario_label",
+                           values="survival_rate_pct")
   pivot_df = pivot_df.reindex(index=y_order, columns=x_order)
   print(pivot_df.to_string())
 

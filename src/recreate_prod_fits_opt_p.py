@@ -30,8 +30,8 @@ def get_chart(age):
   all_points = pd.DataFrame(data['all_points'])
 
   # 1. Recreate Production Model (PCHIP Spline)
-  r_grid = np.geomspace(max(all_points['r'].min(), 0.005), all_points['r'].max(),
-                        1000)
+  r_grid = np.geomspace(max(all_points['r'].min(), 0.005),
+                        all_points['r'].max(), 1000)
 
   p_pred = pchip_interpolate(r_anchors, p_anchors, r_grid)
 
@@ -82,14 +82,13 @@ def get_chart(age):
               title='R'),
       y=alt.Y('p:Q', title='P_surv'),
       color=alt.Color('type:N',
-                      scale=alt.Scale(
-                          domain=['Prod (PCHIP + Guard)', 'Actual'],
-                          range=['#4c78a8', '#f58518'])))
+                      scale=alt.Scale(domain=['Prod (PCHIP + Guard)', 'Actual'],
+                                      range=['#4c78a8', '#f58518'])))
 
-  lines = chart_base.mark_line(opacity=0.8,
-                               clip=True).transform_filter("datum.type != 'Actual'")
-  points = chart_base.mark_circle(size=40,
-                                  clip=True).transform_filter("datum.type == 'Actual'")
+  lines = chart_base.mark_line(
+      opacity=0.8, clip=True).transform_filter("datum.type != 'Actual'")
+  points = chart_base.mark_circle(
+      size=40, clip=True).transform_filter("datum.type == 'Actual'")
 
   return (lines + points).properties(title=f'Age {age} PCHIP Fit',
                                      width=350,
@@ -117,7 +116,9 @@ def parse_ages(age_str: str) -> list[int]:
 if __name__ == "__main__":
   parser = argparse.ArgumentParser(
       description='Recreate production fits for P_surv model.')
-  parser.add_argument('--ages', type=str, help='Ages to process (e.g., 91,93-95)')
+  parser.add_argument('--ages',
+                      type=str,
+                      help='Ages to process (e.g., 91,93-95)')
   args = parser.parse_args()
 
   if args.ages:

@@ -48,7 +48,9 @@ def run_survival_analysis(df_survival: pd.DataFrame):
     # あるいは簡易的な描画関数をここで作成する。
     # ここでは Altair で直接描画する。
 
-    year_cols = [str(i) for i in range(1, NUM_YEARS + 1) if str(i) in df_plot.columns]
+    year_cols = [
+        str(i) for i in range(1, NUM_YEARS + 1) if str(i) in df_plot.columns
+    ]
     id_vars = ["strategy", "spending_rule"]
 
     df_long = df_plot.melt(id_vars=id_vars,

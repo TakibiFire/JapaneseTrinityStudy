@@ -62,7 +62,8 @@ class SpendAwareDynamicSpending(CashflowDynamicHandler):
       # precomputed_cf_m / precomputed_cf_prev_m が cpi_ratio * lifeplan_ratio に相当する
       cf_ratio = np.ones(n_sim)
       mask_nonzero = precomputed_cf_prev_m > 0
-      cf_ratio[mask_nonzero] = precomputed_cf_m[mask_nonzero] / precomputed_cf_prev_m[mask_nonzero]
+      cf_ratio[mask_nonzero] = precomputed_cf_m[
+          mask_nonzero] / precomputed_cf_prev_m[mask_nonzero]
       target_base_nom = prev_actual_amount * cf_ratio
 
     # 有効なパスのみ計算対象とする
@@ -72,9 +73,11 @@ class SpendAwareDynamicSpending(CashflowDynamicHandler):
     target_active = target_base_nom[active_paths]
 
     # Step 3: S_Rate 関数 (annual withdrawal rate based on nominal base spend Y)
-    def get_s_rate(y: np.ndarray, mask: Optional[np.ndarray] = None) -> np.ndarray:
+    def get_s_rate(y: np.ndarray,
+                   mask: Optional[np.ndarray] = None) -> np.ndarray:
       nw = nw_active[mask] if mask is not None else nw_active
-      other_net = other_net_active[mask] if mask is not None else other_net_active
+      other_net = other_net_active[
+          mask] if mask is not None else other_net_active
       safe_nw = np.maximum(nw, 1.0)
       return ((y / 12.0 + other_net) * 12.0) / safe_nw
 
@@ -179,6 +182,9 @@ class SpendAwareDynamicSpending(CashflowDynamicHandler):
         tax_cost_m=np.zeros_like(net_worth),
         prev_actual_amount=prev_base_spend_y,
         other_net_m=other_net_m,
-        precomputed_cf_m=cpi_m * self.annual_cost_real[m//12] if m//12 < len(self.annual_cost_real) else cpi_m * self.annual_cost_real[-1],
-        precomputed_cf_prev_m=cpi_m_minus_12 * self.annual_cost_real[max(0, m//12-1)] if max(0, m//12-1) < len(self.annual_cost_real) else cpi_m_minus_12 * self.annual_cost_real[-1]
-    )
+        precomputed_cf_m=cpi_m * self.annual_cost_real[m // 12] if m //
+        12 < len(self.annual_cost_real) else cpi_m * self.annual_cost_real[-1],
+        precomputed_cf_prev_m=cpi_m_minus_12 *
+        self.annual_cost_real[max(0, m // 12 - 1)] if max(0, m // 12 - 1) < len(
+            self.annual_cost_real) else cpi_m_minus_12 *
+        self.annual_cost_real[-1])

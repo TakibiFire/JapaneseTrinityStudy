@@ -93,7 +93,7 @@ def main():
   # 為替リスク: USDJPY (期待リターン0%, リスク10.53%)
   usdjpy = ForexAsset(name=USDJPY_NAME,
                       dist=YearlyLogNormalArithmetic(mu=0.0, sigma=0.1053))
-  
+
   # AR(12) CPI (1970年〜)
   initial_y = [
       0.0027039223324009146, 0.0035938942545892623, 0.0026869698208253877,
@@ -126,8 +126,7 @@ def main():
   income_percent_z_list = [0.25, 0.50, 0.75, 1.0]
 
   all_combinations = list(
-      product(threshold_x_list, max_year_y_list,
-              income_percent_z_list))
+      product(threshold_x_list, max_year_y_list, income_percent_z_list))
   # Baseline (閾値101% = 決して働かない) を追加
   all_combinations.append((1.01, 0, 0.0))
 
@@ -148,11 +147,12 @@ def main():
                                    cpi_name=CPI_NAME)
     cf_configs: List[CashflowConfig] = [
         spend_config,
-        PensionConfig(name="ConditionalWork",
-                      amount=income_monthly,
-                      start_month=0,
-                      end_month=YEARS * 12, # 倍率関数側で制御
-                      cpi_name=CPI_NAME)
+        PensionConfig(
+            name="ConditionalWork",
+            amount=income_monthly,
+            start_month=0,
+            end_month=YEARS * 12,  # 倍率関数側で制御
+            cpi_name=CPI_NAME)
     ]
     monthly_cashflows = generate_cashflows(cf_configs,
                                            monthly_prices,

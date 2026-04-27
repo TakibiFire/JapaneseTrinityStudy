@@ -59,13 +59,15 @@ def analyze():
       res_b = asset_model.fit_normal_log(log)
 
       try:
-        mu_a, sig_a = asset_model.simulate_annual_stats_simple(stats.norm, (res_a['mu'], res_a['std']), n_sims=100000)
+        mu_a, sig_a = asset_model.simulate_annual_stats_simple(
+            stats.norm, (res_a['mu'], res_a['std']), n_sims=100000)
         ann_str_a = f", Ann(mu={mu_a*100:.2f}%, sig={sig_a*100:.2f}%)"
       except:
         ann_str_a = ""
 
       try:
-        mu_b, sig_b = asset_model.simulate_annual_stats_log(stats.norm, (res_b['mu'], res_b['std']), n_sims=100000)
+        mu_b, sig_b = asset_model.simulate_annual_stats_log(
+            stats.norm, (res_b['mu'], res_b['std']), n_sims=100000)
         ann_str_b = f", Ann(mu={mu_b*100:.2f}%, sig={sig_b*100:.2f}%)"
       except:
         ann_str_b = ""
@@ -79,13 +81,16 @@ def analyze():
 
       # For C, run best distribution fit with fixed mean
       # Since it might be slow, print it with caution
-      res_c_list = asset_model.find_best_distribution_with_fixed_mean(log, top_n=1)
+      res_c_list = asset_model.find_best_distribution_with_fixed_mean(log,
+                                                                      top_n=1)
       if res_c_list:
         res_c = res_c_list[0]
         # Also compute annualized stats for Model C to show it doesn't explode
         dist_obj = getattr(stats, res_c['name'])
         try:
-          mu_a, sig_a = asset_model.simulate_annual_stats_log(dist_obj, res_c['params'], n_sims=100000)
+          mu_a, sig_a = asset_model.simulate_annual_stats_log(dist_obj,
+                                                              res_c['params'],
+                                                              n_sims=100000)
           ann_str = f", Ann(mu={mu_a*100:.2f}%, sig={sig_a*100:.2f}%)"
         except:
           ann_str = ""
@@ -104,26 +109,40 @@ def analyze():
   res_a_local = asset_model.fit_normal_simple(local_sp500_simple)
   res_b_local = asset_model.fit_normal_log(local_sp500_log)
   print(f"Period: {overlap_dates[0].date()} to {overlap_dates[-1].date()}")
-  print(f"Model A (Simple): mu={res_a_local['mu']:.6f}, std={res_a_local['std']:.6f}, BIC={res_a_local['bic']:.2f}, MSE={res_a_local['mse']:.6f}")
-  print(f"Model B (Log):    mu={res_b_local['mu']:.6f}, std={res_b_local['std']:.6f}, BIC={res_b_local['bic']:.2f}, MSE={res_b_local['mse']:.6f}")
-  res_c_local_list = asset_model.find_best_distribution_with_fixed_mean(local_sp500_log, top_n=1)
+  print(
+      f"Model A (Simple): mu={res_a_local['mu']:.6f}, std={res_a_local['std']:.6f}, BIC={res_a_local['bic']:.2f}, MSE={res_a_local['mse']:.6f}"
+  )
+  print(
+      f"Model B (Log):    mu={res_b_local['mu']:.6f}, std={res_b_local['std']:.6f}, BIC={res_b_local['bic']:.2f}, MSE={res_b_local['mse']:.6f}"
+  )
+  res_c_local_list = asset_model.find_best_distribution_with_fixed_mean(
+      local_sp500_log, top_n=1)
   if res_c_local_list:
     res_c_local = res_c_local_list[0]
-    print(f"Model C (Best Asymmetric):  dist={res_c_local['name']}, params={res_c_local['params']}, BIC={res_c_local['bic']:.2f}, MSE={res_c_local['mse']:.6f}")
+    print(
+        f"Model C (Best Asymmetric):  dist={res_c_local['name']}, params={res_c_local['params']}, BIC={res_c_local['bic']:.2f}, MSE={res_c_local['mse']:.6f}"
+    )
 
   print("\n=== S&P 500 Monthly Fit (30 Years: 1996-01 to 2025-12) ===")
   sp500_monthly_log = monthly_returns['SP500_log'].dropna()
-  sp500_monthly_log_30y = sp500_monthly_log[(sp500_monthly_log.index >= '1996-01-01') & (sp500_monthly_log.index <= '2025-12-31')]
-  res_c_30y_list = asset_model.find_best_distribution_with_fixed_mean(sp500_monthly_log_30y, top_n=1)
+  sp500_monthly_log_30y = sp500_monthly_log[
+      (sp500_monthly_log.index >= '1996-01-01') &
+      (sp500_monthly_log.index <= '2025-12-31')]
+  res_c_30y_list = asset_model.find_best_distribution_with_fixed_mean(
+      sp500_monthly_log_30y, top_n=1)
   if res_c_30y_list:
     res_c_30y = res_c_30y_list[0]
     dist_obj = getattr(stats, res_c_30y['name'])
     try:
-      mu_y, sig_y = asset_model.simulate_annual_stats_log(dist_obj, res_c_30y['params'], n_sims=100000)
+      mu_y, sig_y = asset_model.simulate_annual_stats_log(dist_obj,
+                                                          res_c_30y['params'],
+                                                          n_sims=100000)
       ann_str = f", Ann(mu={mu_y*100:.2f}%, sig={sig_y*100:.2f}%)"
     except:
       ann_str = ""
-    print(f"Model C (Best Asymmetric):  dist={res_c_30y['name']}, params={res_c_30y['params']}, BIC={res_c_30y['bic']:.2f}, MSE={res_c_30y['mse']:.6f}{ann_str}")
+    print(
+        f"Model C (Best Asymmetric):  dist={res_c_30y['name']}, params={res_c_30y['params']}, BIC={res_c_30y['bic']:.2f}, MSE={res_c_30y['mse']:.6f}{ann_str}"
+    )
 
   print("\n=== S&P500 1871-2024 Verify Claim ===")
   df['Date'] = pd.to_datetime(df['Date'])
@@ -152,7 +171,8 @@ def analyze():
   print(f"ACWI = {slope_d:.4f} * SP500 + {intercept_d:.6f}")
   print(f"R-squared: {r_d**2:.4f}")
 
-  residuals_d = overlap_daily['ACWI_log'] - (slope_d * overlap_daily['SP500_log'] + intercept_d)
+  residuals_d = overlap_daily['ACWI_log'] - (
+      slope_d * overlap_daily['SP500_log'] + intercept_d)
   res_noise_d_list = asset_model.find_best_distribution(residuals_d, top_n=1)
   if res_noise_d_list:
     res_noise_d = res_noise_d_list[0]
@@ -169,21 +189,23 @@ def analyze():
   print(f"ACWI = {slope_m:.4f} * SP500 + {intercept_m:.6f}")
   print(f"R-squared: {r_m**2:.4f}")
 
-  residuals_m = overlap_monthly['ACWI_log'] - (slope_m * overlap_monthly['SP500_log'] + intercept_m)
+  residuals_m = overlap_monthly['ACWI_log'] - (
+      slope_m * overlap_monthly['SP500_log'] + intercept_m)
   res_noise_m_list = asset_model.find_best_distribution(residuals_m, top_n=1)
   if res_noise_m_list:
     res_noise_m = res_noise_m_list[0]
-    
+
     # Calculate annualized stats for the induced ACWI model (Approx)
     # ACWI_log = slope * SP500_log + intercept + noise
     # We use SP500 155y Model C (genlogistic) as the base
-    res_c_sp500_list = asset_model.find_best_distribution_with_fixed_mean(monthly_returns['SP500_log'].dropna(), top_n=1)
+    res_c_sp500_list = asset_model.find_best_distribution_with_fixed_mean(
+        monthly_returns['SP500_log'].dropna(), top_n=1)
     if res_c_sp500_list:
       res_c_sp500 = res_c_sp500_list[0]
       sp500_dist_obj = getattr(stats, res_c_sp500['name'])
-      
+
       noise_dist_obj = getattr(stats, res_noise_m['name'])
-      
+
       n_sims = 100000
       sp500_sims = sp500_dist_obj.rvs(*res_c_sp500['params'], size=(n_sims, 12))
       noise_sims = noise_dist_obj.rvs(*res_noise_m['params'], size=(n_sims, 12))
@@ -217,7 +239,8 @@ def analyze():
 
     # De-seasonalize
     def get_cycle_month(d):
-      return ((d.year - start_date.year) * 12 + (d.month - start_date.month)) % 48
+      return ((d.year - start_date.year) * 12 +
+              (d.month - start_date.month)) % 48
 
     cycle_idx = btc_log_ret.index.map(get_cycle_month)
     # Convert to Series for mapping
@@ -242,7 +265,8 @@ def analyze():
       # Fit noise to t, laplace
       mrgbm_residuals = mrgbm_res['residuals']
       print(f"Residual Noise Fitting:")
-      for dist_name, dist in [('t', stats.t), ('laplace', stats.laplace), ('norm', stats.norm)]:
+      for dist_name, dist in [('t', stats.t), ('laplace', stats.laplace),
+                              ('norm', stats.norm)]:
         params = dist.fit(mrgbm_residuals)
         loglik = dist.logpdf(mrgbm_residuals, *params).sum()
         k = len(params)
@@ -263,7 +287,9 @@ def analyze():
     res = asset_model.calculate_mrgbm(asset_prices, dt_daily)
     if res and not np.isnan(res['theta']):
       print(f"{asset} MR-GBM:")
-      print(f"  Theta: {res['theta']:.4f}, Mu: {res['mu']:.4f}, Sigma: {res['sigma']:.4f}")
+      print(
+          f"  Theta: {res['theta']:.4f}, Mu: {res['mu']:.4f}, Sigma: {res['sigma']:.4f}"
+      )
     else:
       print(f"{asset} MR-GBM: No mean reversion detected (theta=NaN)")
 
@@ -284,14 +310,18 @@ def analyze():
     # Monthly resample
     monthly_prices = prices.resample('ME').last()
     if monthly_prices.isnull().any():
-      print(f"{asset} ({start} to {end}) MR-GBM: Missing monthly data points (NaNs found)")
+      print(
+          f"{asset} ({start} to {end}) MR-GBM: Missing monthly data points (NaNs found)"
+      )
       continue
 
     res = asset_model.calculate_mrgbm(monthly_prices, dt_monthly)
 
     if res and not np.isnan(res['theta']):
       print(f"{asset} ({start} to {end}) MR-GBM:")
-      print(f"  Theta: {res['theta']:.4f}, Mu: {res['mu']:.4f}, Sigma: {res['sigma']:.4f}")
+      print(
+          f"  Theta: {res['theta']:.4f}, Mu: {res['mu']:.4f}, Sigma: {res['sigma']:.4f}"
+      )
     else:
       print(f"{asset} ({start} to {end}) MR-GBM: No mean reversion detected")
 
@@ -302,7 +332,8 @@ def analyze():
   # Baseline: Simple GBM (Log-Normal)
   # X_t = log(P_t). dx_t = mu_gbm * dt + sigma_gbm * dW_t
   _btc_div_s = btc_data.pct_change().dropna() + 1.0
-  log_rets = pd.Series(np.log(_btc_div_s.values.astype(float)), index=_btc_div_s.index)
+  log_rets = pd.Series(np.log(_btc_div_s.values.astype(float)),
+                       index=_btc_div_s.index)
   res_baseline = asset_model.fit_normal_log(log_rets)
   print(f"a) Baseline (Log-Normal): BIC={res_baseline['bic']:.2f}")
 

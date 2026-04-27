@@ -18,18 +18,19 @@ logger = logging.getLogger(__name__)
 # 左右対称な分布。極端なテール（暴落など）を学習すると、反対側のテール（暴騰）も
 # 非現実的な確率で発生するように設定されてしまうため、株式リターンのモデリングでは避けるべき分布。
 SYMMETRIC_DISTRIBUTIONS = [
-    stats.cauchy, stats.dweibull, stats.laplace, stats.logistic, stats.t, stats.norm
+    stats.cauchy, stats.dweibull, stats.laplace, stats.logistic, stats.t,
+    stats.norm
 ]
 
 # 左右非対称な分布（または非対称性を表現できる分布）。
 # 現実の株式市場の歪み（負の歪度＝暴落の方が急激で大きい）やファットテールを適切に表現できる。
 ASYMMETRIC_DISTRIBUTIONS = [
     stats.alpha, stats.burr, stats.dgamma, stats.genlogistic, stats.gennorm,
-    stats.hypsecant, stats.invgamma, stats.johnsonsu, stats.loglaplace, stats.skewnorm
+    stats.hypsecant, stats.invgamma, stats.johnsonsu, stats.loglaplace,
+    stats.skewnorm
 ]
 
 ALL_DISTRIBUTIONS = SYMMETRIC_DISTRIBUTIONS + ASYMMETRIC_DISTRIBUTIONS
-
 
 
 def process_returns(df: pd.DataFrame, freq: str) -> pd.DataFrame:
@@ -144,10 +145,11 @@ def find_best_distribution(data: pd.Series,
   return results[:top_n]
 
 
-def find_best_distribution_with_fixed_mean(data: pd.Series,
-                                           distributions: list = ASYMMETRIC_DISTRIBUTIONS,
-                                           bins: int = 100,
-                                           top_n: int = 1):
+def find_best_distribution_with_fixed_mean(
+    data: pd.Series,
+    distributions: list = ASYMMETRIC_DISTRIBUTIONS,
+    bins: int = 100,
+    top_n: int = 1):
   """
   与えられたデータの期待値 (Mean) を維持したまま、distributions内の分布をフィッティングし、
   MSEが小さい上位分布を探索する。
@@ -187,10 +189,10 @@ def find_best_distribution_with_fixed_mean(data: pd.Series,
         warnings.filterwarnings('ignore')
         # まずは制約なしで自由にフィットさせる
         params_raw = distribution.fit(data)
-        
+
         # フィットした分布の理論的平均を計算
         mu_theo = distribution.mean(*params_raw)
-        
+
         # 理論的平均が経験的平均と一致するようにlocをシフトさせる
         # scipy.stats のパラメータは一般に (*shape, loc, scale) なので、
         # 後ろから2番目の loc を調整する。
@@ -204,10 +206,10 @@ def find_best_distribution_with_fixed_mean(data: pd.Series,
         pdf = distribution.pdf(x, *params_shifted)
         if np.any(np.isnan(pdf)) or np.any(np.isinf(pdf)):
           continue
-        
+
         mse = np.mean((y - pdf)**2)
         loglik = distribution.logpdf(data, *params_shifted).sum()
-        
+
         k = len(params_shifted)
         n = len(data)
         aic = 2 * k - 2 * loglik
@@ -222,7 +224,8 @@ def find_best_distribution_with_fixed_mean(data: pd.Series,
             'bic': bic
         })
     except Exception as e:
-      logger.warning(f"Failed to fit/evaluate {distribution.name} with fixed mean: {e}")
+      logger.warning(
+          f"Failed to fit/evaluate {distribution.name} with fixed mean: {e}")
       continue
 
   if not results:

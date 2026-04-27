@@ -70,7 +70,8 @@ def main():
                                                        n_months=years * 12,
                                                        seed=seed)
 
-  zero_risk_asset = ZeroRiskAsset(name=zero_risk_asset_name, yield_rate=zero_risk_yield)
+  zero_risk_asset = ZeroRiskAsset(name=zero_risk_asset_name,
+                                  yield_rate=zero_risk_yield)
 
   spending_rates = [
       (0.3333333, "33.3% (x3)"),
@@ -102,7 +103,9 @@ def main():
   print("各戦略のシミュレーションを実行中...")
   for spending_rate, spending_label in spending_rates:
     annual_cost = initial_money * spending_rate
-    print(f"Processing spending rate: {spending_label} ({count}/{total_combinations})")
+    print(
+        f"Processing spending rate: {spending_label} ({count}/{total_combinations})"
+    )
 
     # 1. キャッシュフロールールの定義
     spend_config = BaseSpendConfig(name="生活費",

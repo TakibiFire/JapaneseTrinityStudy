@@ -46,10 +46,11 @@ def main():
   # 引数の処理
   parser = argparse.ArgumentParser(
       description="Dynamic Spendingの各パラメータでの生存確率をグリッドシミュレーションする")
-  parser.add_argument("--exp_name",
-                      type=str,
-                      default="4p",
-                      help="実験名 (4p, 2.7p, 2.7p_dp, 1p_1.5p_spend)。カンマ区切りで複数指定可能")
+  parser.add_argument(
+      "--exp_name",
+      type=str,
+      default="4p",
+      help="実験名 (4p, 2.7p, 2.7p_dp, 1p_1.5p_spend)。カンマ区切りで複数指定可能")
   args = parser.parse_args()
 
   exp_names = [name.strip() for name in args.exp_name.split(",")]
@@ -225,13 +226,13 @@ def run_experiment(exp_name: str):
           # 支出額のダンプ
           nominal_spends = res.annual_spends
           assert nominal_spends is not None
-          
+
           # 実質支出額の計算
           real_spends = np.zeros_like(nominal_spends)
           for y in range(years):
             cpi_at_year_start = monthly_asset_prices[cpi_name][:, y * 12]
             real_spends[:, y] = nominal_spends[:, y] / cpi_at_year_start
-          
+
           # CSV用に整形 (pathごとに1行)
           for path_idx in range(n_sim):
             spend_row: dict[str, Any] = {

@@ -76,16 +76,14 @@ def run_simulation_for_gender(gender: str, mortality_rates: List[float],
     print(f"[{gender}] 開始年齢 {age} 歳のシミュレーションを実行中...")
 
     # 1. キャッシュフロールールの定義
-    spend_config = BaseSpendConfig(
-        name="生活費",
-        amount=ANNUAL_COST,
-        cpi_name=CPI_NAME
-    )
+    spend_config = BaseSpendConfig(name="生活費",
+                                   amount=ANNUAL_COST,
+                                   cpi_name=CPI_NAME)
     mortality_config = MortalityConfig(name=f"Mortality_{gender}_{age}",
                                        mortality_rates=mortality_rates,
                                        initial_age=age,
                                        payout=1000000.0)
-    
+
     monthly_cashflows = generate_cashflows([spend_config, mortality_config],
                                            monthly_prices,
                                            n_sim=N_SIM,
@@ -121,10 +119,12 @@ def run_simulation_for_gender(gender: str, mortality_rates: List[float],
                     selling_priority=[ACWI_NAME],
                     rebalance_interval=12)
 
-    results[s_off.name] = simulate_strategy(
-        s_off, monthly_prices, monthly_cashflows=monthly_cashflows)
-    results[s_on.name] = simulate_strategy(
-        s_on, monthly_prices, monthly_cashflows=monthly_cashflows)
+    results[s_off.name] = simulate_strategy(s_off,
+                                            monthly_prices,
+                                            monthly_cashflows=monthly_cashflows)
+    results[s_on.name] = simulate_strategy(s_on,
+                                           monthly_prices,
+                                           monthly_cashflows=monthly_cashflows)
 
   return results
 

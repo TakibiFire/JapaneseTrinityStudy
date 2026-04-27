@@ -44,8 +44,7 @@ from src.lib.dynamic_rebalance import (calculate_optimal_strategy,
                                        calculate_safe_target_ratio)
 from src.lib.retired_spending import (SpendingType,
                                       get_retired_spending_multipliers)
-from src.lib.simulation_defaults import (AcwiModelKey,
-                                         get_acwi_fat_tail_config,
+from src.lib.simulation_defaults import (AcwiModelKey, get_acwi_fat_tail_config,
                                          get_cpi_ar12_config)
 
 
@@ -196,21 +195,31 @@ def main():
     if use_dyn_spend:
       # ダイナミックスペンディング (上限3%, 下限0%)
       # BaseSpendConfig には初期値を渡し、CashflowRule にハンドラを登録する
-      ds_handler = DynamicSpending(
-          initial_annual_spend=initial_annual_cost,
-          target_ratio=target_ratio,
-          upper_limit=0.03,
-          lower_limit=0.0)
-      
-      cf_configs.append(BaseSpendConfig(name="base_spend", amount=initial_annual_cost, cpi_name=None))
-      cf_rules.append(CashflowRule(source_name="base_spend", cashflow_type=CashflowType.REGULAR, dynamic_handler=ds_handler))
+      ds_handler = DynamicSpending(initial_annual_spend=initial_annual_cost,
+                                   target_ratio=target_ratio,
+                                   upper_limit=0.03,
+                                   lower_limit=0.0)
+
+      cf_configs.append(
+          BaseSpendConfig(name="base_spend",
+                          amount=initial_annual_cost,
+                          cpi_name=None))
+      cf_rules.append(
+          CashflowRule(source_name="base_spend",
+                       cashflow_type=CashflowType.REGULAR,
+                       dynamic_handler=ds_handler))
     else:
       # 年齢による支出トレンドを適用
       annual_cost_list = [
           initial_annual_cost * m for m in spending_multipliers_by_age
       ]
-      cf_configs.append(BaseSpendConfig(name="base_spend", amount=annual_cost_list, cpi_name=CPI_NAME))
-      cf_rules.append(CashflowRule(source_name="base_spend", cashflow_type=CashflowType.REGULAR))
+      cf_configs.append(
+          BaseSpendConfig(name="base_spend",
+                          amount=annual_cost_list,
+                          cpi_name=CPI_NAME))
+      cf_rules.append(
+          CashflowRule(source_name="base_spend",
+                       cashflow_type=CashflowType.REGULAR))
 
     # キャッシュフロー (年金)
     receipt_start_month = (pension_start - START_AGE) * 12
@@ -220,20 +229,24 @@ def main():
     kiso_annual = KISO_FULL_ANNUAL * reduction_rate
 
     # 厚生年金 (CPI連動)
-    cf_configs.append(PensionConfig(name="Pension_Kousei",
-                                    amount=kousei_annual / 12.0,
-                                    start_month=receipt_start_month,
-                                    cpi_name=CPI_NAME))
-    cf_rules.append(CashflowRule(source_name="Pension_Kousei",
-                                 cashflow_type=CashflowType.REGULAR))
-    
+    cf_configs.append(
+        PensionConfig(name="Pension_Kousei",
+                      amount=kousei_annual / 12.0,
+                      start_month=receipt_start_month,
+                      cpi_name=CPI_NAME))
+    cf_rules.append(
+        CashflowRule(source_name="Pension_Kousei",
+                     cashflow_type=CashflowType.REGULAR))
+
     # 基礎年金 (マクロ経済スライド適用)
-    cf_configs.append(PensionConfig(name="Pension_Kiso",
-                                    amount=kiso_annual / 12.0,
-                                    start_month=receipt_start_month,
-                                    cpi_name=PENSION_CPI_NAME))
-    cf_rules.append(CashflowRule(source_name="Pension_Kiso",
-                                 cashflow_type=CashflowType.REGULAR))
+    cf_configs.append(
+        PensionConfig(name="Pension_Kiso",
+                      amount=kiso_annual / 12.0,
+                      start_month=receipt_start_month,
+                      cpi_name=PENSION_CPI_NAME))
+    cf_rules.append(
+        CashflowRule(source_name="Pension_Kiso",
+                     cashflow_type=CashflowType.REGULAR))
 
     monthly_cashflows = generate_cashflows(cf_configs,
                                            monthly_prices,

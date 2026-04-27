@@ -71,23 +71,21 @@ def main():
         test_cases: (オルカン比率, リバランス間隔, 売却順序, ラベル) のリスト
     """
     # 1. キャッシュフロールールの定義
-    spend_config = BaseSpendConfig(
-        name="生活費",
-        amount=annual_cost_base,
-        cpi_name=cpi_name
-    )
+    spend_config = BaseSpendConfig(name="生活費",
+                                   amount=annual_cost_base,
+                                   cpi_name=cpi_name)
     cashflow_rules = [
         CashflowRule(source_name=spend_config.name,
                      cashflow_type=CashflowType.REGULAR)
     ]
-    monthly_cashflows = generate_cashflows(
-        [spend_config], monthly_asset_prices, n_sim, years * 12)
+    monthly_cashflows = generate_cashflows([spend_config], monthly_asset_prices,
+                                           n_sim, years * 12)
 
     # 2. 戦略(Plan)の定義
     strategies = []
     for stock_ratio, interval, selling_priority, label in test_cases:
       cash_ratio = 1.0 - stock_ratio
-      
+
       initial_asset_ratio: Dict[Union[str, ZeroRiskAsset], float] = {
           acwi_name: stock_ratio
       }
@@ -155,7 +153,7 @@ def main():
   # (オルカン比率, リバランス間隔, 売却順序, ラベル)
   priority_c_s = [cash_asset_name, acwi_name]
   priority_s_c = [acwi_name, cash_asset_name]
-  
+
   exp1_cases = [
       (1.0, 0, [acwi_name], "オルカン 100%"),
       (0.6, 0, priority_c_s, "60% リバなし (現→オ)"),

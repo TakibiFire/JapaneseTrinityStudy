@@ -37,9 +37,9 @@ class DynamicSpending:
   に収まるように調整する。
   """
   initial_annual_spend: float  # 初年度の目標基本支出額 (万円/年)
-  target_ratio: float          # 目標支出率 (純資産に対する割合)
-  upper_limit: float           # 前年比の最大上昇率 (0.03 = +3%)
-  lower_limit: float           # 前年比の最大下降率 (-0.005 = -0.5%)
+  target_ratio: float  # 目標支出率 (純資産に対する割合)
+  upper_limit: float  # 前年比の最大上昇率 (0.03 = +3%)
+  lower_limit: float  # 前年比の最大下降率 (-0.005 = -0.5%)
 
   def evaluate(self, m: int, active_paths: np.ndarray,
                current_net_worth: np.ndarray, tax_cost_m: np.ndarray,
@@ -75,7 +75,8 @@ class DynamicSpending:
     # precomputed_cf_m / precomputed_cf_prev_m が CPI比率に相当する
     cpi_ratio = np.ones(len(nw_active))
     mask_nonzero = precomputed_cf_prev_m[active_paths] > 0
-    cpi_ratio[mask_nonzero] = precomputed_cf_m[active_paths][mask_nonzero] / precomputed_cf_prev_m[active_paths][mask_nonzero]
+    cpi_ratio[mask_nonzero] = precomputed_cf_m[active_paths][
+        mask_nonzero] / precomputed_cf_prev_m[active_paths][mask_nonzero]
 
     # 1. 目標支出額 (Target Withdrawal)
     # ポートフォリオ残高に対する一定割合を目指す。
@@ -107,16 +108,19 @@ class DynamicSpending:
     """
     (Deprecated) 旧エンジン用の計算メソッド。
     """
-    return self.evaluate(
-        m=m, active_paths=active_paths, current_net_worth=net_worth,
-        tax_cost_m=np.zeros_like(net_worth), prev_actual_amount=prev_base_spend_y,
-        other_net_m=other_net_m, precomputed_cf_m=cpi_m, precomputed_cf_prev_m=cpi_m_minus_12
-    )
+    return self.evaluate(m=m,
+                         active_paths=active_paths,
+                         current_net_worth=net_worth,
+                         tax_cost_m=np.zeros_like(net_worth),
+                         prev_actual_amount=prev_base_spend_y,
+                         other_net_m=other_net_m,
+                         precomputed_cf_m=cpi_m,
+                         precomputed_cf_prev_m=cpi_m_minus_12)
 
 
 # ダイナミックリバランス用のコールバック関数
 DynamicRebalanceFn = Callable[[np.ndarray, np.ndarray, float, np.ndarray],
-                               Dict[str, Union[float, np.ndarray]]]
+                              Dict[str, Union[float, np.ndarray]]]
 
 
 @dataclasses.dataclass
@@ -137,7 +141,7 @@ class Strategy:
   # シミュレーション開始時点（1年目の年初）において、「前年の支出実績」として扱う金額。
   # multiplier_fn や DynamicSpending ハンドラが 1年目の支出や行動を決定する際の基準となる。
   initial_prev_net_reg_spend: float = 0.0  # 前年の正味定常支出（支出 - 収入）
-  initial_prev_gross_reg_spend: float = 0.0 # 前年の総定常支出（収入控除前、ライフスタイルコスト）
+  initial_prev_gross_reg_spend: float = 0.0  # 前年の総定常支出（収入控除前、ライフスタイルコスト）
   cashflow_rules: List[CashflowRule] = dataclasses.field(default_factory=list)
 
   def __post_init__(self):
@@ -185,15 +189,14 @@ class SimulationResult:
 # ---------------------------------------------------------------------------
 
 
-def simulate_strategy(
-    strategy: Strategy,
-    monthly_asset_prices: Dict[str, np.ndarray],
-    monthly_cashflows: Optional[Dict[str, np.ndarray]] = None,
-    fallback_n_sim: int = 1000,
-    fallback_total_months: int = 600,
-    debug_indices: Optional[List[int]] = None,
-    exp_regard_interest_tax_as_regular: bool = False,
-    calculate_post_tax: bool = False) -> SimulationResult:
+def simulate_strategy(strategy: Strategy,
+                      monthly_asset_prices: Dict[str, np.ndarray],
+                      monthly_cashflows: Optional[Dict[str, np.ndarray]] = None,
+                      fallback_n_sim: int = 1000,
+                      fallback_total_months: int = 600,
+                      debug_indices: Optional[List[int]] = None,
+                      exp_regard_interest_tax_as_regular: bool = False,
+                      calculate_post_tax: bool = False) -> SimulationResult:
   """
   指定された戦略に従い、資産推移をシミュレーションする。
   
@@ -274,8 +277,12 @@ def simulate_strategy(
   # prev_gross_reg_spend_y: 前年の総年間支出額（実績、収入控除前）
   # annual_net_reg_spend_tracker: 今年の正味年間支出額の累計
   # annual_gross_reg_spend_tracker: 今年の総年間支出額の累計
-  prev_net_reg_spend_y = np.full(n_sim, strategy.initial_prev_net_reg_spend, dtype=np.float64)
-  prev_gross_reg_spend_y = np.full(n_sim, strategy.initial_prev_gross_reg_spend, dtype=np.float64)
+  prev_net_reg_spend_y = np.full(n_sim,
+                                 strategy.initial_prev_net_reg_spend,
+                                 dtype=np.float64)
+  prev_gross_reg_spend_y = np.full(n_sim,
+                                   strategy.initial_prev_gross_reg_spend,
+                                   dtype=np.float64)
   annual_net_reg_spend_tracker = np.zeros(n_sim, dtype=np.float64)
   annual_gross_reg_spend_tracker = np.zeros(n_sim, dtype=np.float64)
 
@@ -329,8 +336,7 @@ def simulate_strategy(
       cf = monthly_cashflows[source]
       if cf.shape != (total_months,) and cf.shape != (n_sim, total_months):
         raise ValueError(
-            f"Cashflow source '{source}' has invalid shape {cf.shape}."
-        )
+            f"Cashflow source '{source}' has invalid shape {cf.shape}.")
 
       if cf.ndim == 1:
         processed_cf = np.broadcast_to(cf, (n_sim, total_months))
@@ -369,8 +375,8 @@ def simulate_strategy(
         annual_net_reg_spend_tracker.fill(0.0)
         annual_gross_reg_spend_tracker.fill(0.0)
         for source in actual_annual_spend_tracker:
-          prev_annual_spend_y[source][active_paths] = actual_annual_spend_tracker[
-              source][active_paths]
+          prev_annual_spend_y[source][
+              active_paths] = actual_annual_spend_tracker[source][active_paths]
           actual_annual_spend_tracker[source].fill(0.0)
 
       # 純資産の計算
@@ -398,12 +404,13 @@ def simulate_strategy(
           other_net_m_val = np.zeros(n_sim, dtype=np.float64)
           for other_rule, other_cf_path in prepared_cashflows:
             if other_rule.source_name != rule.source_name and other_rule.cashflow_type == CashflowType.REGULAR:
-              other_multiplier = extra_cf_multipliers.get(other_rule.source_name, 1.0)
+              other_multiplier = extra_cf_multipliers.get(
+                  other_rule.source_name, 1.0)
               other_impact = other_cf_path[:, m] * other_multiplier
-              other_net_m_val -= other_impact # 収入(正)なら net_m を減らすのでマイナス
+              other_net_m_val -= other_impact  # 収入(正)なら net_m を減らすのでマイナス
 
           cf_m = np.abs(cf_path[:, m])
-          cf_prev = np.abs(cf_path[:, m-12]) if m >= 12 else cf_m
+          cf_prev = np.abs(cf_path[:, m - 12]) if m >= 12 else cf_m
 
           # 注意: ここで prev_gross_reg_spend_y を渡すと、DynamicSpending や SpendAware が
           # 自らの出力実績以外の現金流出（年金保険料など）も前年実績として取り込んでしまい、
@@ -411,11 +418,16 @@ def simulate_strategy(
           # そのため、各ハンドラには必ず「そのルール自身による前年の出力実績」のみを渡します。
           prev_amt = prev_annual_spend_y[rule.source_name]
 
-          dynamic_annual_amount[rule.source_name][active_paths] = rule.dynamic_handler.evaluate(
-              m=m, active_paths=active_paths, current_net_worth=current_net_worth,
-              tax_cost_m=tax_cost_m, prev_actual_amount=prev_amt,
-              other_net_m=other_net_m_val, precomputed_cf_m=cf_m, precomputed_cf_prev_m=cf_prev
-          )[active_paths]
+          dynamic_annual_amount[
+              rule.source_name][active_paths] = rule.dynamic_handler.evaluate(
+                  m=m,
+                  active_paths=active_paths,
+                  current_net_worth=current_net_worth,
+                  tax_cost_m=tax_cost_m,
+                  prev_actual_amount=prev_amt,
+                  other_net_m=other_net_m_val,
+                  precomputed_cf_m=cf_m,
+                  precomputed_cf_prev_m=cf_prev)[active_paths]
 
           # --- DEBUG ---
           if debug_indices is not None and debug_results is not None:
@@ -438,7 +450,7 @@ def simulate_strategy(
     for rule, cf_path in prepared_cashflows:
       source = rule.source_name
       multiplier = extra_cf_multipliers.get(source, 1.0)
-      
+
       if rule.dynamic_handler:
         # 動的ハンドラの結果を月割りにする
         impact = -(dynamic_annual_amount[source] / 12.0)
@@ -454,7 +466,8 @@ def simulate_strategy(
         iso_income_m[impact >= 0] += impact[impact >= 0]
         iso_spend_m[impact < 0] += np.abs(impact[impact < 0])
 
-      actual_annual_spend_tracker[source][active_paths] += np.abs(impact[active_paths])
+      actual_annual_spend_tracker[source][active_paths] += np.abs(
+          impact[active_paths])
 
     # 金融コスト（利息・税金）
     interest_cost_m = strategy.initial_loan * (strategy.yearly_loan_interest /
@@ -493,7 +506,7 @@ def simulate_strategy(
           break
 
         price_m_plus_1 = local_monthly_asset_prices[asset_name][still_short,
-                                                                 m + 1]
+                                                                m + 1]
         asset_val = units[asset_name][still_short] * price_m_plus_1
         sell_amount = np.minimum(asset_val, -cash[still_short])
 
@@ -538,19 +551,20 @@ def simulate_strategy(
           rem_years = (total_months - (m + 1)) / 12.0 + 0.25
           # DRには正味の年間支出を渡す（負の値にならないよう0でクリップ）
           cur_ann_spend = np.maximum(0.0, net_reg_spend_m[reb_paths]) * 12.0
-          
+
           # リバランス時の未払い税金を計算する（正確な Post-tax Net Value を求めるため）
           unrealized_gains_at_rebalance = np.zeros_like(total_net)
           for name in units:
-            asset_price_at_rebalance = local_monthly_asset_prices[name][reb_paths, m + 1]
-            gain = units[name][reb_paths] * asset_price_at_rebalance - units[name][reb_paths] * average_cost[name][reb_paths]
+            asset_price_at_rebalance = local_monthly_asset_prices[name][
+                reb_paths, m + 1]
+            gain = units[name][reb_paths] * asset_price_at_rebalance - units[
+                name][reb_paths] * average_cost[name][reb_paths]
             unrealized_gains_at_rebalance += np.maximum(0.0, gain)
           post_tax_net = total_net - unrealized_gains_at_rebalance * strategy.tax_rate
-          
+
           target_ratios = strategy.dynamic_rebalance_fn(total_net,
                                                         cur_ann_spend,
-                                                        rem_years,
-                                                        post_tax_net)
+                                                        rem_years, post_tax_net)
           # --- DEBUG ---
           if debug_indices is not None and debug_results is not None:
             for idx in debug_indices:
@@ -580,8 +594,8 @@ def simulate_strategy(
             p_subset = local_monthly_asset_prices[name][sell_idx, m + 1]
             u_sell = np.zeros_like(amt)
             u_sell[p_subset > 0] = amt[p_subset > 0] / p_subset[p_subset > 0]
-            yearly_capital_gains[sell_idx] += amt - u_sell * average_cost[name][
-                sell_idx]
+            yearly_capital_gains[
+                sell_idx] += amt - u_sell * average_cost[name][sell_idx]
             current_units[sell_idx] -= u_sell
             cash[sell_idx] += amt
 
@@ -606,9 +620,8 @@ def simulate_strategy(
             if np.any(upd):
               i_upd = buy_idx[upd]
               avg_cost_arr = average_cost[name]
-              avg_cost_arr[i_upd] = (
-                  current_units[i_upd] * avg_cost_arr[i_upd] +
-                  u_buy[upd] * p_subset[upd]) / new_u[upd]
+              avg_cost_arr[i_upd] = (current_units[i_upd] * avg_cost_arr[i_upd]
+                                     + u_buy[upd] * p_subset[upd]) / new_u[upd]
 
             current_units[buy_idx] += u_buy
             cash[buy_idx] -= amt
@@ -650,7 +663,8 @@ def simulate_strategy(
     # 最終的な未払い税金を計算する
     # 1. 最後の年に確定したキャピタルゲインに対する税金（m=11等で処理済みの場合は tax_to_pay に入っている）
     # 2. まだ tax_to_pay に移っていない、確定済みのキャピタルゲインに対する税金
-    unpaid_tax = tax_to_pay + np.maximum(yearly_capital_gains, 0.0) * strategy.tax_rate
+    unpaid_tax = tax_to_pay + np.maximum(yearly_capital_gains,
+                                         0.0) * strategy.tax_rate
 
     # 3. 現在保有している資産の含み益に対する税金
     unrealized_gains = np.zeros(n_sim, dtype=np.float64)
@@ -658,9 +672,9 @@ def simulate_strategy(
       current_price = local_monthly_asset_prices[name][:, total_months]
       gain = u * current_price - u * average_cost[name]
       unrealized_gains += np.maximum(0.0, gain)
-    
+
     tax_on_unrealized = unrealized_gains * strategy.tax_rate
-    
+
     # 全ての税金を引いた保守的な見積もり（Post-tax Net Value）
     post_tax_net_values = net_values - unpaid_tax - tax_on_unrealized
 

@@ -37,59 +37,61 @@ def main() -> None:
   annual_cost_base = 400  # 400万円
   tax_rate_std = 0.20315
   inflation_rate_std = 0.0177
-  
+
   # 信託報酬
-  fee_sp500 = 0.000814   # 0.0814%
-  fee_acwi = 0.0005775   # 0.05775%
+  fee_sp500 = 0.000814  # 0.0814%
+  fee_acwi = 0.0005775  # 0.05775%
 
   # 1. データのパラメータ設定 (data/model_fitting_results_v3.txt より)
   # S&P500 155y Model C (genlogistic)
   # Ann(mu=10.33%, sig=15.03%)
-  sp500_155y_params = (0.5983257553837089, 0.024055922548623175, 0.017141333060447166)
+  sp500_155y_params = (0.5983257553837089, 0.024055922548623175,
+                       0.017141333060447166)
   # S&P500 30y Model C (genlogistic)
   # Ann(mu=11.64%, sig=17.14%)
-  sp500_30y_params = (0.4879653982267047, 0.033214317138593324, 0.017280587830235443)
+  sp500_30y_params = (0.4879653982267047, 0.033214317138593324,
+                      0.017280587830235443)
   # ACWI 18y Model C (johnsonsu)
   # Ann(mu=9.51%, sig=18.30%)
-  acwi_18y_params = (0.5985794609028992, 1.5979947040822444, 0.033828733503047, 0.05883263137905962)
-  
+  acwi_18y_params = (0.5985794609028992, 1.5979947040822444, 0.033828733503047,
+                     0.05883263137905962)
+
   # ACWI Approx
   # ACWI = 1.0269 * SP500 + -0.002907 + noise
   acwi_approx_mult = 1.0269
   acwi_approx_intercept = -0.002907
   # Noise (dweibull): c, loc (intercept as mean shift), scale
   # Ann(mu=7.05%, sig=15.77%)
-  acwi_approx_noise_params = (1.2199932203810953, acwi_approx_intercept, 0.010652296731100462)
+  acwi_approx_noise_params = (1.2199932203810953, acwi_approx_intercept,
+                              0.010652296731100462)
 
   # 2. 資産の定義
   cpi_name = "Japan_CPI_1.77pct"
-  
+
   # 為替リスクの定義 (ドル円 0%, 10.53%)
   fx_name = "USDJPY_0_10.53"
   fx_asset = ForexAsset(name=fx_name,
                         dist=YearlyLogNormalArithmetic(mu=0.0, sigma=0.1053))
-  
+
   assets: List[Union[Asset, DerivedAsset, ForexAsset, CpiAsset]] = []
   assets.append(fx_asset)
 
   # ベース資産の登録
   # 1. S&P500 155yr (共通モデルから取得)
   assets.append(get_acwi_fat_tail_config(AcwiModelKey.BASE_SP500_155Y))
-  
+
   # 2. S&P500 30yr
   assets.append(
       Asset(name="Base_SP500_30y",
             dist=MonthlyLogDist(stats.genlogistic, params=sp500_30y_params),
             trust_fee=0.0,
-            leverage=1)
-  )
+            leverage=1))
   # 3. ACWI 18yr
   assets.append(
       Asset(name="Base_ACWI_18y",
             dist=MonthlyLogDist(stats.johnsonsu, params=acwi_18y_params),
             trust_fee=0.0,
-            leverage=1)
-  )
+            leverage=1))
   # 4. ACWI Approx (共通モデルから取得)
   assets.append(get_acwi_fat_tail_config(AcwiModelKey.BASE_ACWI_APPROX))
 
@@ -107,8 +109,7 @@ def main() -> None:
         DerivedAsset(name=final_name,
                      base=base_name,
                      trust_fee=fee,
-                     forex=fx_name)
-    )
+                     forex=fx_name))
     strategy_names.append(final_name)
 
   cpi_asset = CpiAsset(name=cpi_name,
@@ -117,11 +118,9 @@ def main() -> None:
   assets.append(cpi_asset)
 
   # 3. キャッシュフロールールの定義
-  spend_config = BaseSpendConfig(
-      name="生活費",
-      amount=annual_cost_base,
-      cpi_name=cpi_name
-  )
+  spend_config = BaseSpendConfig(name="生活費",
+                                 amount=annual_cost_base,
+                                 cpi_name=cpi_name)
   cashflow_rules = [
       CashflowRule(source_name=spend_config.name,
                    cashflow_type=CashflowType.REGULAR)
@@ -146,8 +145,8 @@ def main() -> None:
                                                        n_paths=n_sim,
                                                        n_months=n_months,
                                                        seed=seed)
-  monthly_cashflows = generate_cashflows(
-      [spend_config], monthly_asset_prices, n_sim, n_months)
+  monthly_cashflows = generate_cashflows([spend_config], monthly_asset_prices,
+                                         n_sim, n_months)
 
   results = {}
   print("各モデルのシミュレーションを実行中...")
@@ -164,7 +163,8 @@ def main() -> None:
   os.makedirs(data_dir, exist_ok=True)
 
   survival_image_file = os.path.join(img_dir, 'sp500_vs_acwi_comp_survival.svg')
-  distribution_image_file = os.path.join(img_dir, 'sp500_vs_acwi_comp_distribution.svg')
+  distribution_image_file = os.path.join(img_dir,
+                                         'sp500_vs_acwi_comp_distribution.svg')
   html_file = 'temp/sp500_vs_acwi_comp_result.html'
 
   print("結果を保存中...")

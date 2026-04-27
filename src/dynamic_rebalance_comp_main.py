@@ -62,7 +62,8 @@ def main():
   # オルカン: 期待リターン 7%, リスク 15%
   # 為替: 期待リターン 0%, リスク 10.53%
   assets: List[Union[Asset, ForexAsset, CpiAsset]] = [
-      ForexAsset(name=fx_name, dist=YearlyLogNormalArithmetic(mu=0.0, sigma=0.1053)),
+      ForexAsset(name=fx_name,
+                 dist=YearlyLogNormalArithmetic(mu=0.0, sigma=0.1053)),
       Asset(name=acwi_name,
             dist=YearlyLogNormalArithmetic(mu=0.07, sigma=0.15),
             trust_fee=fee_acwi,
@@ -99,13 +100,14 @@ def main():
   # --- 戦略別のコールバック関数生成 ---
 
   # ダイナミック最適比率用のコールバック
-  def dynamic_optimal_fn(net_value: np.ndarray, annual_spend: np.ndarray,
-                         remaining_years: float,
-                         post_tax_net: np.ndarray) -> Dict[str, Union[float, np.ndarray]]:
+  def dynamic_optimal_fn(
+      net_value: np.ndarray, annual_spend: np.ndarray, remaining_years: float,
+      post_tax_net: np.ndarray) -> Dict[str, Union[float, np.ndarray]]:
     # 純資産が0以下になる場合のゼロ除算を防ぐ
     safe_net_value = np.maximum(net_value, 1e-10)
     s_rate = annual_spend / safe_net_value
-    ratio_array = calculate_optimal_strategy(s_rate, remaining_years,
+    ratio_array = calculate_optimal_strategy(s_rate,
+                                             remaining_years,
                                              base_yield=zero_risk_yield,
                                              tax_rate=tax_rate,
                                              inflation_rate=inflation_rate_val)
@@ -113,6 +115,7 @@ def main():
 
   # (110 - 年齢) ルール用のコールバック
   def make_age_rule_fn(start_age: int, total_years: int):
+
     def fn(net_value: np.ndarray, annual_spend: np.ndarray,
            remaining_years: float,
            post_tax_net: np.ndarray) -> Dict[str, Union[float, np.ndarray]]:
@@ -120,6 +123,7 @@ def main():
       current_age = start_age + elapsed_years
       ratio = max(0.0, min(1.0, (110 - current_age) / 100.0))
       return {acwi_name: ratio, zr_name: 1.0 - ratio}
+
     return fn
 
   print("各支出率と目標年数の組み合わせでシミュレーションを実行中...")
@@ -130,10 +134,12 @@ def main():
 
       # 初期時点での最適比率を計算 (固定最適比率用)
       initial_s_arr = np.array([spending_rate])
-      fixed_ratio_val = calculate_optimal_strategy(initial_s_arr, float(target_n),
-                                                   base_yield=zero_risk_yield,
-                                                   tax_rate=tax_rate,
-                                                   inflation_rate=inflation_rate_val)[0]
+      fixed_ratio_val = calculate_optimal_strategy(
+          initial_s_arr,
+          float(target_n),
+          base_yield=zero_risk_yield,
+          tax_rate=tax_rate,
+          inflation_rate=inflation_rate_val)[0]
 
       # テストする戦略のリスト
       test_cases = [
@@ -148,19 +154,19 @@ def main():
       print(f"  - 支出率: {spending_label}")
 
       # 1. キャッシュフロールールの定義
-      spend_config = BaseSpendConfig(
-          name="生活費",
-          amount=annual_cost,
-          cpi_name=cpi_name
-      )
+      spend_config = BaseSpendConfig(name="生活費",
+                                     amount=annual_cost,
+                                     cpi_name=cpi_name)
       cashflow_rules = [
           CashflowRule(source_name=spend_config.name,
                        cashflow_type=CashflowType.REGULAR)
       ]
       # target_n 年分だけスライスして渡す
-      sliced_prices = {k: v[:, :target_n * 12 + 1] for k, v in monthly_asset_prices.items()}
-      monthly_cashflows = generate_cashflows(
-          [spend_config], sliced_prices, n_sim, target_n * 12)
+      sliced_prices = {
+          k: v[:, :target_n * 12 + 1] for k, v in monthly_asset_prices.items()
+      }
+      monthly_cashflows = generate_cashflows([spend_config], sliced_prices,
+                                             n_sim, target_n * 12)
 
       for strategy_name, dynamic_fn, fixed_ratio in test_cases:
         # 初期資産配分の設定
@@ -180,7 +186,8 @@ def main():
             initial_ratio[zr_asset] = 1.0 - r
           else:
             # ダイナミック最適比率の初期時点(T=0)での比率
-            r = calculate_optimal_strategy(np.array([spending_rate]), float(target_n),
+            r = calculate_optimal_strategy(np.array([spending_rate]),
+                                           float(target_n),
                                            base_yield=zero_risk_yield,
                                            tax_rate=tax_rate,
                                            inflation_rate=inflation_rate_val)[0]
@@ -188,24 +195,22 @@ def main():
             initial_ratio[zr_asset] = 1.0 - float(r)
 
         # 戦略の構築
-        strategy = Strategy(
-            name=strategy_name,
-            initial_money=initial_money,
-            initial_loan=0.0,
-            yearly_loan_interest=0.0,
-            initial_asset_ratio=initial_ratio,
-            cashflow_rules=cashflow_rules,
-            tax_rate=tax_rate,
-            selling_priority=[zr_name, acwi_name],
-            rebalance_interval=12,
-            dynamic_rebalance_fn=dynamic_fn
-        )
+        strategy = Strategy(name=strategy_name,
+                            initial_money=initial_money,
+                            initial_loan=0.0,
+                            yearly_loan_interest=0.0,
+                            initial_asset_ratio=initial_ratio,
+                            cashflow_rules=cashflow_rules,
+                            tax_rate=tax_rate,
+                            selling_priority=[zr_name, acwi_name],
+                            rebalance_interval=12,
+                            dynamic_rebalance_fn=dynamic_fn)
 
         # シミュレーション実行
         res = simulate_strategy(strategy,
                                 sliced_prices,
                                 monthly_cashflows=monthly_cashflows)
-        
+
         # target_n 年時点での生存確率を計算
         bankrupt_count = (res.sustained_months < target_n * 12).sum()
         survival_rate = 1.0 - (bankrupt_count / n_sim)

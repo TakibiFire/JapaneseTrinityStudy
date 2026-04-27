@@ -60,26 +60,26 @@ def get_acwi_fat_tail_config(key: AcwiModelKey) -> Union[Asset, DerivedAsset]:
   # ACWI = 1.0269 * SP500 - 0.002907 + noise
   acwi_approx_mult = 1.0269
   acwi_approx_intercept = -0.002907
-  
+
   # 近似に使用するノイズ成分の分布 (dweibull)
   # (c, loc, scale)
   acwi_approx_noise_params = (1.2199932203810953, acwi_approx_intercept,
                               0.010652296731100462)
 
   if key == AcwiModelKey.BASE_SP500_155Y:
-    return Asset(
-        name="Base_SP500_155y",
-        dist=MonthlyLogDist(stats.genlogistic, params=sp500_155y_params),
-        trust_fee=0.0)
+    return Asset(name="Base_SP500_155y",
+                 dist=MonthlyLogDist(stats.genlogistic,
+                                     params=sp500_155y_params),
+                 trust_fee=0.0)
 
   if key == AcwiModelKey.BASE_ACWI_APPROX:
-    return DerivedAsset(
-        name="Base_ACWI_Approx",
-        base="Base_SP500_155y",
-        multiplier=acwi_approx_mult,
-        noise_dist=MonthlyDist(stats.dweibull, params=acwi_approx_noise_params),
-        log_correlation=True,
-        trust_fee=0.0)
+    return DerivedAsset(name="Base_ACWI_Approx",
+                        base="Base_SP500_155y",
+                        multiplier=acwi_approx_mult,
+                        noise_dist=MonthlyDist(stats.dweibull,
+                                               params=acwi_approx_noise_params),
+                        log_correlation=True,
+                        trust_fee=0.0)
 
   raise ValueError(f"Unknown key: {key}")
 

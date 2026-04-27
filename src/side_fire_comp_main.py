@@ -126,37 +126,38 @@ def main():
 
     # Fixed 100% Orukan (Exp-1-A)
     exp1_strategies.append(
-        Strategy(name=f"固定+{label}",
-                 initial_money=INITIAL_MONEY,
-                 initial_loan=0.0,
-                 yearly_loan_interest=0.0,
-                 initial_asset_ratio={ORUKAN_NAME: 1.0},
-                 cashflow_rules=rules,
-                 selling_priority=[ORUKAN_NAME],
-                 rebalance_interval=1,
-                 ))
+        Strategy(
+            name=f"固定+{label}",
+            initial_money=INITIAL_MONEY,
+            initial_loan=0.0,
+            yearly_loan_interest=0.0,
+            initial_asset_ratio={ORUKAN_NAME: 1.0},
+            cashflow_rules=rules,
+            selling_priority=[ORUKAN_NAME],
+            rebalance_interval=1,
+        ))
 
     # Dynamic Rebalance (Exp-1-B)
     exp1_strategies.append(
-        Strategy(name=f"ダイナ+{label}",
-                 initial_money=INITIAL_MONEY,
-                 initial_loan=0.0,
-                 yearly_loan_interest=0.0,
-                 initial_asset_ratio={
-                     ORUKAN_NAME: 1.0,
-                     risk_free_asset: 0.0
-                 },
-                 cashflow_rules=rules,
-                 selling_priority=[RISK_FREE_NAME, ORUKAN_NAME],
-                 rebalance_interval=12,
-                 dynamic_rebalance_fn=dynamic_rebalance_fn,
-                 ))
+        Strategy(
+            name=f"ダイナ+{label}",
+            initial_money=INITIAL_MONEY,
+            initial_loan=0.0,
+            yearly_loan_interest=0.0,
+            initial_asset_ratio={
+                ORUKAN_NAME: 1.0,
+                risk_free_asset: 0.0
+            },
+            cashflow_rules=rules,
+            selling_priority=[RISK_FREE_NAME, ORUKAN_NAME],
+            rebalance_interval=12,
+            dynamic_rebalance_fn=dynamic_rebalance_fn,
+        ))
 
   exp1_results = {}
   for s in exp1_strategies:
-    exp1_results[s.name] = simulate_strategy(s,
-                                             monthly_prices,
-                                             monthly_cashflows=exp1_monthly_cashflows)
+    exp1_results[s.name] = simulate_strategy(
+        s, monthly_prices, monthly_cashflows=exp1_monthly_cashflows)
 
   # サマリー保存
   # 特定の形式のテーブルを作成 (Exp 1)
@@ -177,13 +178,14 @@ def main():
   with open(os.path.join(DATA_DIR, "exp1.md"), "w", encoding="utf-8") as f:
     f.write(exp1_table)
 
-  visualize_and_save(
-      exp1_results,
-      os.path.join(TEMP_DIR, "exp1_temp.html"),
-      distribution_image_file=os.path.join(IMG_DIR, "exp1_distribution.svg"),
-      survival_image_file=os.path.join(IMG_DIR, "exp1_survival.svg"),
-      title="Exp1: Income Level relative to Expenses",
-      open_browser=False)
+  visualize_and_save(exp1_results,
+                     os.path.join(TEMP_DIR, "exp1_temp.html"),
+                     distribution_image_file=os.path.join(
+                         IMG_DIR, "exp1_distribution.svg"),
+                     survival_image_file=os.path.join(IMG_DIR,
+                                                      "exp1_survival.svg"),
+                     title="Exp1: Income Level relative to Expenses",
+                     open_browser=False)
 
   # -------------------------------------------------------------------------
   # Exp 2: Duration vs. Amount (Total 2000M)
@@ -216,10 +218,10 @@ def main():
     amount_val = float(cfg["amount"])
     exp2_cf_configs.append(
         PensionConfig(name=f"Income_{label}",
-                       amount=amount_val,
-                       start_month=0,
-                       end_month=duration_val,
-                       cpi_name=CPI_NAME))
+                      amount=amount_val,
+                      start_month=0,
+                      end_month=duration_val,
+                      cpi_name=CPI_NAME))
 
   exp2_monthly_cashflows = generate_cashflows(exp2_cf_configs,
                                               monthly_prices,
@@ -237,37 +239,38 @@ def main():
 
     # Fixed 100% Orukan
     exp2_strategies.append(
-        Strategy(name=f"固定+  {label}",
-                 initial_money=INITIAL_MONEY,
-                 initial_loan=0.0,
-                 yearly_loan_interest=0.0,
-                 initial_asset_ratio={ORUKAN_NAME: 1.0},
-                 cashflow_rules=rules,
-                 selling_priority=[ORUKAN_NAME],
-                 rebalance_interval=1,
-                 ))
+        Strategy(
+            name=f"固定+  {label}",
+            initial_money=INITIAL_MONEY,
+            initial_loan=0.0,
+            yearly_loan_interest=0.0,
+            initial_asset_ratio={ORUKAN_NAME: 1.0},
+            cashflow_rules=rules,
+            selling_priority=[ORUKAN_NAME],
+            rebalance_interval=1,
+        ))
 
     # Dynamic Rebalance
     exp2_strategies.append(
-        Strategy(name=f"ダイナ+  {label}",
-                 initial_money=INITIAL_MONEY,
-                 initial_loan=0.0,
-                 yearly_loan_interest=0.0,
-                 initial_asset_ratio={
-                     ORUKAN_NAME: 1.0,
-                     risk_free_asset: 0.0
-                 },
-                 cashflow_rules=rules,
-                 selling_priority=[RISK_FREE_NAME, ORUKAN_NAME],
-                 rebalance_interval=12,
-                 dynamic_rebalance_fn=dynamic_rebalance_fn,
-                 ))
+        Strategy(
+            name=f"ダイナ+  {label}",
+            initial_money=INITIAL_MONEY,
+            initial_loan=0.0,
+            yearly_loan_interest=0.0,
+            initial_asset_ratio={
+                ORUKAN_NAME: 1.0,
+                risk_free_asset: 0.0
+            },
+            cashflow_rules=rules,
+            selling_priority=[RISK_FREE_NAME, ORUKAN_NAME],
+            rebalance_interval=12,
+            dynamic_rebalance_fn=dynamic_rebalance_fn,
+        ))
 
   exp2_results = {}
   for s in exp2_strategies:
-    exp2_results[s.name] = simulate_strategy(s,
-                                             monthly_prices,
-                                             monthly_cashflows=exp2_monthly_cashflows)
+    exp2_results[s.name] = simulate_strategy(
+        s, monthly_prices, monthly_cashflows=exp2_monthly_cashflows)
 
   # サマリー保存
   # 特定の形式のテーブルを作成 (Exp 2)
@@ -291,13 +294,14 @@ def main():
   with open(os.path.join(DATA_DIR, "exp2.md"), "w", encoding="utf-8") as f:
     f.write(exp2_table)
 
-  visualize_and_save(
-      exp2_results,
-      os.path.join(TEMP_DIR, "exp2_temp.html"),
-      distribution_image_file=os.path.join(IMG_DIR, "exp2_distribution.svg"),
-      survival_image_file=os.path.join(IMG_DIR, "exp2_survival.svg"),
-      title="Exp2: Duration vs. Amount (Total 2000M)",
-      open_browser=False)
+  visualize_and_save(exp2_results,
+                     os.path.join(TEMP_DIR, "exp2_temp.html"),
+                     distribution_image_file=os.path.join(
+                         IMG_DIR, "exp2_distribution.svg"),
+                     survival_image_file=os.path.join(IMG_DIR,
+                                                      "exp2_survival.svg"),
+                     title="Exp2: Duration vs. Amount (Total 2000M)",
+                     open_browser=False)
 
   print(f"完了。結果を {DATA_DIR} と {IMG_DIR} に保存しました。")
 

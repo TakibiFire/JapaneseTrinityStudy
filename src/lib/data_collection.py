@@ -67,7 +67,8 @@ def fetch_shiller_sp500() -> pd.Series:
   # このズレを修正するため、取得した年・月にさらに +1ヶ月 を加えて正しい日付（月初）にマッピングしている。
   # ----------------------------------
   df['Date'] = pd.to_datetime(df['Year'].astype(str) + '-' +
-                              df['Month'].astype(str).str.zfill(2) + '-01') + pd.DateOffset(months=1)
+                              df['Month'].astype(str).str.zfill(2) +
+                              '-01') + pd.DateOffset(months=1)
 
   # インデックスに設定し、Amount ($)をSeriesとして返す
   df = df.set_index('Date')
@@ -141,5 +142,3 @@ def fetch_asset_data() -> pd.DataFrame:
   combined_data["Date"] = combined_data["Date"].dt.date
 
   return combined_data
-
-

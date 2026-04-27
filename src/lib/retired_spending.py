@@ -27,13 +27,11 @@ BASE_AGES = np.array([34.4, 44.8, 54.1, 67.5, 72.5, AVERAGE_AGE_75PLUS])
 NON_CONSUMPTION_DATA = np.array([90018, 129607, 141647, 41405, 34824, 30558])
 CONSUMPTION_DATA = np.array([280544, 331526, 359951, 311281, 269015, 242840])
 
-
 # 単身世帯の2019年全国家計構造調査に基づくデータポイント
 # https://www.stat.go.jp/data/zenkokukakei/2019/pdf/gaiyou0305.pdf
 SINGLE_2019_BASE_AGES = np.array([25.0, 35.0, 45.0, 55.0, 65.0, 75.0, 85.0])
-SINGLE_2019_CONSUMPTION_DATA = np.array([
-    168552, 222432, 254475, 283725, 258284, 225799, 190818
-])
+SINGLE_2019_CONSUMPTION_DATA = np.array(
+    [168552, 222432, 254475, 283725, 258284, 225799, 190818])
 
 
 def calculate_average_age_75plus() -> float:
@@ -59,7 +57,7 @@ def calculate_average_age_75plus() -> float:
 
 
 def get_retired_spending_values(spending_types: List[SpendingType],
-                               target_ages: np.ndarray) -> np.ndarray:
+                                target_ages: np.ndarray) -> np.ndarray:
   """
   指定された年齢層の支出の絶対値（円）を返す。
 
@@ -120,7 +118,8 @@ def get_retired_spending_values(spending_types: List[SpendingType],
       val_at_60_adj = float(cs_orig(60.0)) - 38125.0
 
       ex_ages = np.insert(BASE_AGES, 3, 60.0)
-      ex_values = np.insert(NON_CONSUMPTION_DATA.astype(float), 3, val_at_60_adj)
+      ex_values = np.insert(NON_CONSUMPTION_DATA.astype(float), 3,
+                            val_at_60_adj)
       ex_values[:3] -= 38125.0
 
       virtual_non_con_ex = ex_values[-1] * 0.9

@@ -48,8 +48,7 @@ from src.lib.dynamic_rebalance import (calculate_optimal_strategy,
                                        calculate_safe_target_ratio)
 from src.lib.retired_spending import (SpendingType,
                                       get_retired_spending_multipliers)
-from src.lib.simulation_defaults import (AcwiModelKey,
-                                         get_acwi_fat_tail_config,
+from src.lib.simulation_defaults import (AcwiModelKey, get_acwi_fat_tail_config,
                                          get_cpi_ar12_config)
 
 
@@ -101,7 +100,9 @@ def main():
     pension_start_ages = [60, 65]
     use_dynamic_spending_list = [False, True]
   elif exp_type == "P60-D1":
-    spend_multipliers = [0.36, 0.5, 0.75, 1.0, 1.2, 1.5, 2.0, 3.0, 4.0, 5.0, 6.0]
+    spend_multipliers = [
+        0.36, 0.5, 0.75, 1.0, 1.2, 1.5, 2.0, 3.0, 4.0, 5.0, 6.0
+    ]
     spending_rules = [2.8, 3.0, 3.33, 3.66, 4.0, 4.33, 4.66, 5.0, 5.5, 6.0, 7.0]
     N_SIM = 2000
     household_sizes = [1]
@@ -221,15 +222,27 @@ def main():
           target_ratio=target_ratio,
           upper_limit=0.03,
           lower_limit=0.0)
-      cf_configs.append(BaseSpendConfig(name="base_spend", amount=initial_annual_cost_wo_pension, cpi_name=None))
-      cf_rules.append(CashflowRule(source_name="base_spend", cashflow_type=CashflowType.REGULAR, dynamic_handler=ds_handler))
+      cf_configs.append(
+          BaseSpendConfig(name="base_spend",
+                          amount=initial_annual_cost_wo_pension,
+                          cpi_name=None))
+      cf_rules.append(
+          CashflowRule(source_name="base_spend",
+                       cashflow_type=CashflowType.REGULAR,
+                       dynamic_handler=ds_handler))
     else:
       # 年齢による支出トレンドを適用
       annual_cost_list = [
-          initial_annual_cost_wo_pension * m for m in spending_multipliers_by_age
+          initial_annual_cost_wo_pension * m
+          for m in spending_multipliers_by_age
       ]
-      cf_configs.append(BaseSpendConfig(name="base_spend", amount=annual_cost_list, cpi_name=CPI_NAME))
-      cf_rules.append(CashflowRule(source_name="base_spend", cashflow_type=CashflowType.REGULAR))
+      cf_configs.append(
+          BaseSpendConfig(name="base_spend",
+                          amount=annual_cost_list,
+                          cpi_name=CPI_NAME))
+      cf_rules.append(
+          CashflowRule(source_name="base_spend",
+                       cashflow_type=CashflowType.REGULAR))
 
     # キャッシュフロー (年金保険料と受給)
     premium_annual, _ = pension_map[(household_size, pension_start)]
@@ -253,9 +266,9 @@ def main():
     kousei_annual = KOUSEI_UNIT_ANNUAL * reduction_rate
     cf_configs.append(
         PensionConfig(name="Pension_Receipt_Kousei",
-                       amount=kousei_annual / 12.0,
-                       start_month=receipt_start_month,
-                       cpi_name=CPI_NAME))
+                      amount=kousei_annual / 12.0,
+                      start_month=receipt_start_month,
+                      cpi_name=CPI_NAME))
     cf_rules.append(
         CashflowRule(source_name="Pension_Receipt_Kousei",
                      cashflow_type=CashflowType.REGULAR))
@@ -264,9 +277,9 @@ def main():
     kiso_annual = KISO_FULL_ANNUAL * reduction_rate
     cf_configs.append(
         PensionConfig(name="Pension_Receipt_Kiso",
-                       amount=kiso_annual / 12.0,
-                       start_month=receipt_start_month,
-                       cpi_name=PENSION_CPI_NAME))
+                      amount=kiso_annual / 12.0,
+                      start_month=receipt_start_month,
+                      cpi_name=PENSION_CPI_NAME))
     cf_rules.append(
         CashflowRule(source_name="Pension_Receipt_Kiso",
                      cashflow_type=CashflowType.REGULAR))

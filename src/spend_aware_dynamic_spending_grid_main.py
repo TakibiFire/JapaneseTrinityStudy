@@ -28,8 +28,7 @@ from src.lib.dp_predictor import DPOptimalStrategyPredictor
 from src.lib.retired_spending import (SpendingType,
                                       get_retired_spending_multipliers,
                                       get_retired_spending_values)
-from src.lib.simulation_defaults import (AcwiModelKey,
-                                         get_acwi_fat_tail_config,
+from src.lib.simulation_defaults import (AcwiModelKey, get_acwi_fat_tail_config,
                                          get_cpi_ar12_config)
 from src.lib.spend_aware_dynamic_spending import SpendAwareDynamicSpending
 
@@ -143,7 +142,7 @@ def main():
                     cpi_name=CPI_NAME))
   cf_rules.append(
       CashflowRule(source_name="Pension_Premium",
-                    cashflow_type=CashflowType.REGULAR))
+                   cashflow_type=CashflowType.REGULAR))
 
   # 年金受給: 60歳から (20年後 = 240ヶ月目から)
   receipt_start_month = max((PENSION_START_AGE - START_AGE) * 12, 0)
@@ -154,7 +153,7 @@ def main():
                     cpi_name=CPI_NAME))
   cf_rules.append(
       CashflowRule(source_name="Pension_Receipt_Kousei",
-                    cashflow_type=CashflowType.REGULAR))
+                   cashflow_type=CashflowType.REGULAR))
 
   cf_configs.append(
       PensionConfig(name="Pension_Receipt_Kiso",
@@ -163,7 +162,7 @@ def main():
                     cpi_name=PENSION_CPI_NAME))
   cf_rules.append(
       CashflowRule(source_name="Pension_Receipt_Kiso",
-                    cashflow_type=CashflowType.REGULAR))
+                   cashflow_type=CashflowType.REGULAR))
 
   monthly_cashflows = generate_cashflows(cf_configs,
                                          monthly_prices,
@@ -201,11 +200,11 @@ def main():
     for strat_name in strategies:
       # 戦略の設定
       current_cf_rules = list(cf_rules)
-      
+
       # FixedSpend (Baseline) の場合は潤沢な資産で実行する
       current_init_money = init_money
       if strat_name == "FixedSpend":
-        current_init_money = 100 * 10000 # 100億円
+        current_init_money = 100 * 10000  # 100億円
 
       if strat_name == "FixedSpend":
         current_cf_rules.append(
@@ -218,7 +217,7 @@ def main():
             p_low=0.85,
             p_high=0.97,
             lower_mult=0.99,  # -1%
-            upper_mult=1.02,   # +2.0%
+            upper_mult=1.02,  # +2.0%
             annual_cost_real=annual_cost_setting,
             dp_predictor=dp_predictor)
         current_cf_rules.append(
@@ -230,7 +229,7 @@ def main():
         ds_handler = DynamicSpending(
             initial_annual_spend=BASE_SPEND_ANNUAL_WO_PENSION,
             target_ratio=rule / 100.0,
-            upper_limit=0.01,   # +1.0%
+            upper_limit=0.01,  # +1.0%
             lower_limit=-0.015  # -1.5%
         )
         current_cf_rules.append(
@@ -255,9 +254,9 @@ def main():
 
       print(f"{strat_name} 実行中...")
       res = simulate_strategy(strategy,
-                             monthly_asset_prices=monthly_prices,
-                             monthly_cashflows=monthly_cashflows)
-      
+                              monthly_asset_prices=monthly_prices,
+                              monthly_cashflows=monthly_cashflows)
+
       res_dict[strat_name] = res
 
       # 1. 生存確率データの蓄積 (visualize.py 用)
@@ -285,19 +284,21 @@ def main():
       rv1 = res_dict.get("DRv2_DSv1")
       rv2 = res_dict.get("DRv2_DSv2")
       rfx = res_dict.get("FixedSpend")
-      
+
       if rv1 is not None and rv2 is not None and rfx is not None:
         prices_cpi = monthly_prices[CPI_NAME]
         for y in range(YEARS):
           # DSv1, DSv2 両戦略が年末時点で生存しているパス
           active_mask = (rv1.sustained_months >= (y + 1) * 12) & \
                         (rv2.sustained_months >= (y + 1) * 12)
-          
+
           if np.any(active_mask):
             for strat_name in strategies:
               res_obj = res_dict[strat_name]
               if res_obj.annual_spends is not None:
-                real_vals = res_obj.annual_spends[active_mask, y] / prices_cpi[active_mask, y * 12]
+                real_vals = res_obj.annual_spends[active_mask,
+                                                  y] / prices_cpi[active_mask,
+                                                                  y * 12]
                 results_spends.append({
                     "rule": rule,
                     "strategy": strat_name,
@@ -310,19 +311,19 @@ def main():
   # 結果の保存
   data_dir = f"data/spend_aware_dynamic_spending"
   os.makedirs(data_dir, exist_ok=True)
-  
+
   df_summary = pd.DataFrame(results_summary)
   df_survival = pd.DataFrame(results_survival_probs)
   df_spends = pd.DataFrame(results_spends)
-  
+
   summary_path = os.path.join(data_dir, f"{args.exp_name}_summary.csv")
   survival_path = os.path.join(data_dir, f"{args.exp_name}_survival.csv")
   spends_path = os.path.join(data_dir, f"{args.exp_name}_spends.csv")
-  
+
   df_summary.to_csv(summary_path, index=False)
   df_survival.to_csv(survival_path, index=False)
   df_spends.to_csv(spends_path, index=False)
-  
+
   print(f"\n結果を保存しました:\n- {summary_path}\n- {survival_path}\n- {spends_path}")
 
 

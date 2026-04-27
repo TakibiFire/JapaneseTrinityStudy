@@ -254,11 +254,11 @@ def main():
       for i in range(len(vals)):
         y_val = i + 1
         v = float(vals[i])
-        
+
         # 境界データ (1.0 や 0.0) の除外フラグ
         if filter_boundary and (v >= 0.999 or v <= 0.001):
           continue
-        
+
         # N_ruin 付近のデータに重みを付ける (V字の底を正確に捉えるため)
         dist = abs(y_val - N_ruin)
         # N_ruin 付近の重みを指数関数的に強化 (1.0 + 10.0*exp(-dist))

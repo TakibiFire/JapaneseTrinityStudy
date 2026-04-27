@@ -99,9 +99,8 @@ def main():
         CashflowRule(source_name=spend_config.name,
                      cashflow_type=CashflowType.REGULAR)
     ]
-    monthly_cashflows = generate_cashflows([spend_config],
-                                           monthly_asset_prices, n_sim,
-                                           max_years * 12)
+    monthly_cashflows = generate_cashflows([spend_config], monthly_asset_prices,
+                                           n_sim, max_years * 12)
 
     strategy = Strategy(name=f"{i+2}. {start_age}歳",
                         initial_money=initial_money,
@@ -136,17 +135,13 @@ def main():
                      open_browser=False)
 
   # 3. Markdownデータの出力
-  formatted_df, _ = create_styled_summary(results,
-                                          quantiles=[
-                                              0.01, 0.10, 0.25, 0.50, 0.75,
-                                              0.90
-                                          ],
-                                          bankruptcy_years=[
-                                              10, 20, 30, 40, 50
-                                          ])
+  formatted_df, _ = create_styled_summary(
+      results,
+      quantiles=[0.01, 0.10, 0.25, 0.50, 0.75, 0.90],
+      bankruptcy_years=[10, 20, 30, 40, 50])
 
   md_table = formatted_df.to_markdown(colalign=("left",) +
-                                     ("right",) * len(formatted_df.columns))
+                                      ("right",) * len(formatted_df.columns))
 
   md_file = os.path.join(data_dir, 'result.md')
   with open(md_file, 'w', encoding='utf-8') as f:

@@ -5,14 +5,11 @@ import numpy as np
 import pytest
 from scipy import stats
 
-from src.lib.asset_generator import (Asset, AssetConfig, CpiAsset,
-                                     DerivedAsset, ForexAsset,
-                                     MonthlyARLogNormal, MonthlyDist,
-                                     MonthlyLogDist, MonthlyLogNormal,
-                                     MonthlySimpleNormal, YearlyLogNormal,
-                                     YearlyLogNormalArithmetic,
-                                     YearlySimpleNormal,
-                                     generate_monthly_asset_prices)
+from src.lib.asset_generator import (
+    Asset, AssetConfig, CpiAsset, DerivedAsset, ForexAsset, MonthlyARLogNormal,
+    MonthlyDist, MonthlyLogDist, MonthlyLogNormal, MonthlySimpleNormal,
+    YearlyLogNormal, YearlyLogNormalArithmetic, YearlySimpleNormal,
+    generate_monthly_asset_prices)
 
 
 def test_distribution_simple_normal():
@@ -121,7 +118,7 @@ def test_distribution_monthly_log_dist():
   seed = 42
 
   returns = dist.generate((n_paths, n_months), seed)
-  
+
   expected_simple_return = np.exp(mu) - 1.0
   np.testing.assert_allclose(returns, expected_simple_return, rtol=1e-5)
 
@@ -132,24 +129,27 @@ def test_engine_derived_log_correlation():
   # DerivedAsset: multiplier 2.0, ノイズ -0.01 (対数リターンのノイズ)
   # 期待される対数リターン = 0.05 * 2.0 - 0.01 = 0.09
   # 期待される単利リターン = exp(0.09) - 1
-  
+
   # 単利リターンが入力されるので、MonthlySimpleNormal でベースを生成
   # 0.05の対数リターンに相当する単利リターン = exp(0.05)-1
   base_simple = np.exp(0.05) - 1.0
-  
+
   configs = [
       Asset(name="Base", dist=MonthlySimpleNormal(base_simple, 0.0)),
-      DerivedAsset(name="Derived",
-                   base="Base",
-                   multiplier=2.0,
-                   noise_dist=MonthlyDist(stats.norm, params=(-0.01, 0.0)), # ノイズはMonthlyDist(対数リターン直接指定)を使う想定
-                   log_correlation=True),
+      DerivedAsset(
+          name="Derived",
+          base="Base",
+          multiplier=2.0,
+          noise_dist=MonthlyDist(
+              stats.norm,
+              params=(-0.01, 0.0)),  # ノイズはMonthlyDist(対数リターン直接指定)を使う想定
+          log_correlation=True),
   ]
   n_paths, n_months = 1, 1
   seed = 42
 
   prices = generate_monthly_asset_prices(configs, n_paths, n_months, seed)
-  
+
   # 初期価格1.0なので、1ヶ月後の価格は (1 + 単利リターン)
   expected_derived_price = np.exp(0.09)
   assert prices["Derived"][0, 1] == pytest.approx(expected_derived_price)
@@ -359,9 +359,9 @@ def test_distribution_monthly_ar_initial_y():
   c, phis, sigma_e = 0.0, [1.0], 0.0
   initial_y = [0.123]
   dist = MonthlyARLogNormal(c=c,
-                             phis=phis,
-                             sigma_e=sigma_e,
-                             initial_y=initial_y)
+                            phis=phis,
+                            sigma_e=sigma_e,
+                            initial_y=initial_y)
   n_paths, n_months = 1, 10
   seed = 42
 

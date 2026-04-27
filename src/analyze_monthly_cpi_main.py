@@ -25,7 +25,7 @@ def load_monthly_cpi(file_path: str, start_year: int = 1970) -> pd.DataFrame:
   # 日付の変換
   df['Date_str'] = df['時点'].str.replace('年', '-').str.replace('月', '')
   df['Date'] = pd.to_datetime(df['Date_str'], format='%Y-%m')
-  
+
   if start_year > 1970:
     df = df[df['Date'] >= f'{start_year}-01-01']
 
@@ -53,7 +53,7 @@ def fit_ar_p(rets: np.ndarray, p: int) -> Tuple[float, float, float]:
   for i in range(1, p + 1):
     X[:, i] = rets[p - i:-i]
 
-  beta, residuals, rank, s = np.linalg.lstsq(X, Y, rcond=None) # type: ignore
+  beta, residuals, rank, s = np.linalg.lstsq(X, Y, rcond=None)  # type: ignore
 
   if residuals.size > 0:
     rss = float(residuals[0])
@@ -72,15 +72,15 @@ def analyze_period(file_path: str, start_year: int):
   df = load_monthly_cpi(file_path, start_year)
   rets = df['log_ret'].to_numpy()
   print(f"\n===== 分析期間: {start_year}年以降 (データ数: {len(rets)}ヶ月) =====")
-  
+
   results = []
   for p in range(13):
     aic, rss, phi1 = fit_ar_p(rets, p)
     results.append({"p": p, "AIC": aic, "RSS": rss, "phi1": phi1})
-  
+
   df_res = pd.DataFrame(results)
   best_idx = df_res['AIC'].idxmin()
-  best_p = int(df_res.loc[best_idx, 'p']) # type: ignore
+  best_p = int(df_res.loc[best_idx, 'p'])  # type: ignore
   print(f"AICによる最適ラグ数: p = {best_p}")
 
   def print_details(p):
@@ -89,7 +89,7 @@ def analyze_period(file_path: str, start_year: int):
     X = np.ones((len(Y), p + 1), dtype=np.float64)
     for i in range(1, p + 1):
       X[:, i] = rets[p - i:-i]
-    beta, _, _, _ = np.linalg.lstsq(X, Y, rcond=None) # type: ignore
+    beta, _, _, _ = np.linalg.lstsq(X, Y, rcond=None)  # type: ignore
     print(f"--- AR({p}) 詳細 ---")
     print(f"  定数項 (c): {beta[0]:.8f}")
     phis = beta[1:]

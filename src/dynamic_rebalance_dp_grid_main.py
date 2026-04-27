@@ -70,17 +70,15 @@ def main():
   os.makedirs(DATA_DIR, exist_ok=True)
 
   # 1. アセット生成
-  world = create_standard_world(
-      n_sim=N_SIM,
-      start_age=START_AGE,
-      end_age=START_AGE + YEARS - 1,
-      retirement_age=60,
-      pension_start_age=60,
-      seed=SEED,
-      tax_rate=TAX_RATE,
-      zero_risk_yield=ZERO_RISK_YIELD,
-      trust_fee=TRUST_FEE
-  )
+  world = create_standard_world(n_sim=N_SIM,
+                                start_age=START_AGE,
+                                end_age=START_AGE + YEARS - 1,
+                                retirement_age=60,
+                                pension_start_age=60,
+                                seed=SEED,
+                                tax_rate=TAX_RATE,
+                                zero_risk_yield=ZERO_RISK_YIELD,
+                                trust_fee=TRUST_FEE)
   monthly_prices = world.monthly_prices
   zr_asset_obj = world.zr_asset_obj
   ORUKAN_NAME = world.ORUKAN_NAME
@@ -135,19 +133,20 @@ def main():
 
     # 取り崩し額 = - 純キャッシュフロー (正の値が引き出しを表す)
     withdraw_m = -total_cf_m
-    
+
     # 年次集計 (万円/年)
     withdraw_y = np.zeros((N_SIM, YEARS), dtype=np.float64)
     for y in range(YEARS):
-      withdraw_y[:, y] = withdraw_m[:, y*12:(y+1)*12].sum(axis=1)
-      
+      withdraw_y[:, y] = withdraw_m[:, y * 12:(y + 1) * 12].sum(axis=1)
+
     # パーセンタイル
     p25 = np.percentile(withdraw_y, 25, axis=0)
     p50 = np.percentile(withdraw_y, 50, axis=0)
     p75 = np.percentile(withdraw_y, 75, axis=0)
-    
+
     results_dump = []
-    for name, p_values in [("spend25p", p25), ("spend50p", p50), ("spend75p", p75)]:
+    for name, p_values in [("spend25p", p25), ("spend50p", p50),
+                           ("spend75p", p75)]:
       row = {
           "spend_multiplier": 1.0,
           "strategy": "dump_withdraw",
@@ -159,7 +158,7 @@ def main():
       for y in range(YEARS):
         row[str(y + 1)] = p_values[y]
       results_dump.append(row)
-      
+
     df_dump = pd.DataFrame(results_dump)
     df_dump.to_csv(CSV_PATH, index=False, encoding="utf-8-sig")
     print(f"完了。結果を {CSV_PATH} に保存しました。")
@@ -295,7 +294,8 @@ def main():
         p50 = np.percentile(res.annual_spends, 50, axis=0)
         p75 = np.percentile(res.annual_spends, 75, axis=0)
 
-        for name, p_values in [("spend25p", p25), ("spend50p", p50), ("spend75p", p75)]:
+        for name, p_values in [("spend25p", p25), ("spend50p", p50),
+                               ("spend75p", p75)]:
           row = base_row.copy()
           row["value_type"] = name
           for year in range(1, YEARS + 1):

@@ -175,9 +175,9 @@ def test_get_a_opt_with_winning_threshold(mock_models_json):
   # ケース1: 資産がしきい値を超える場合 (initial_wealth = 2000.0)
   # A = (2000 - 1068.41583) / 2000 = 931.58417 / 2000 = 0.465792
   a1 = predictor.get_a_opt_with_winning_threshold(36,
-                                                   2000.0,
-                                                   100.0,
-                                                   z_score_for_winning=2.0)
+                                                  2000.0,
+                                                  100.0,
+                                                  z_score_for_winning=2.0)
   assert pytest.approx(a1) == 0.465792
 
   # ケース2: 資産がしきい値を下回る場合 (initial_wealth = 1000.0)

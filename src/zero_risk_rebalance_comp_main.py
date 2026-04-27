@@ -60,7 +60,8 @@ def main():
                                                        n_months=years * 12,
                                                        seed=seed)
 
-  zero_risk_asset = ZeroRiskAsset(name=zero_risk_asset_name, yield_rate=zero_risk_yield)
+  zero_risk_asset = ZeroRiskAsset(name=zero_risk_asset_name,
+                                  yield_rate=zero_risk_yield)
 
   def run_experiment(exp_name: str, exp_title: str, test_cases: List[tuple]):
     """
@@ -72,23 +73,21 @@ def main():
         test_cases: (オルカン比率, リバランス間隔, 売却順序, ラベル) のリスト
     """
     # 1. キャッシュフロールールの定義
-    spend_config = BaseSpendConfig(
-        name="生活費",
-        amount=annual_cost_base,
-        cpi_name=cpi_name
-    )
+    spend_config = BaseSpendConfig(name="生活費",
+                                   amount=annual_cost_base,
+                                   cpi_name=cpi_name)
     cashflow_rules = [
         CashflowRule(source_name=spend_config.name,
                      cashflow_type=CashflowType.REGULAR)
     ]
-    monthly_cashflows = generate_cashflows(
-        [spend_config], monthly_asset_prices, n_sim, years * 12)
+    monthly_cashflows = generate_cashflows([spend_config], monthly_asset_prices,
+                                           n_sim, years * 12)
 
     # 2. 戦略(Plan)の定義
     strategies = []
     for stock_ratio, interval, selling_priority, label in test_cases:
       zr_ratio = 1.0 - stock_ratio
-      
+
       initial_asset_ratio: Dict[Union[str, ZeroRiskAsset], float] = {
           acwi_name: stock_ratio
       }
@@ -155,7 +154,7 @@ def main():
   # 実験1: リバランスの有無と資産比率
   # (オルカン比率, リバランス間隔, 売却順序, ラベル)
   priority_zr_s = [zero_risk_asset_name, acwi_name]
-  
+
   exp1_cases = [
       (1.0, 0, [acwi_name], "オルカン 100%"),
       (0.8, 0, priority_zr_s, "80% リバなし"),

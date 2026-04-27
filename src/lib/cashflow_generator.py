@@ -48,12 +48,12 @@ class CashflowType(Enum):
   # --- REGULAR ---
   # 年間支出計算の「定常予算」に含めるキャッシュフロー。
   # 例：公的年金、定期的な生命保険料、安定した副収入など。
-  # 
+  #
   # 特徴：
   # - DynamicSpending の「前年支出に基づく制限（天井・床）」の基準値に影響する。
   # - DynamicRebalance の「目標年間支出（ポートフォリオに要求する利回り）」を増減させる。
   # - 収入（正の値）の場合、実質的な「生活費」を押し下げる効果がある。
-  # 
+  #
   # 注意点・落とし穴：
   # - 「資産が減った時だけ働く」ような変動の激しい労働収入を REGULAR に設定すると、
   #   働いている年だけ「生活費が極端に低い」と判定される。
@@ -65,17 +65,18 @@ class CashflowType(Enum):
   # --- EXTRAORDINARY ---
   # 独立したキャッシュフローとして扱う「臨時」の収支。
   # 例：相続、車の購入、一時的なお祝い金、緊急の医療費など。
-  # 
+  #
   # 特徴：
   # - ポートフォリオの総資産残高（純資産）には即座に反映される。
   # - しかし、DynamicSpending や DynamicRebalance が参照する「定常的な生活費」
   #   の計算からは除外される（去年の実績にはカウントされない）。
-  # 
+  #
   # 使い分けの指針：
   # - その収支が「将来の生活スタイルの基準」を左右するかどうかで判断する。
   # - 一時的なイベントであれば EXTRAORDINARY を、家計の基礎体力の一部であれば
   #   REGULAR を選択するのが基本。
   EXTRAORDINARY = auto()
+
 
 # 追加キャッシュフローの倍率（条件付き労働など）を決めるコールバック関数
 # 引数:
@@ -85,7 +86,8 @@ class CashflowType(Enum):
 #   - prev_gross_ann_spend: 前年の総年間支出（収入を差し引く前の支出）(n_sim,)
 # 戻り値:
 #   - multiplier: キャッシュフローに乗じる倍率 (n_sim,)
-ExtraCashflowMultiplierFn = Callable[[int, np.ndarray, np.ndarray, np.ndarray], np.ndarray]
+ExtraCashflowMultiplierFn = Callable[[int, np.ndarray, np.ndarray, np.ndarray],
+                                     np.ndarray]
 
 
 @dataclasses.dataclass(frozen=True)
@@ -149,14 +151,16 @@ class PensionConfig(CashflowConfig):
                monthly_prices: Dict[str, np.ndarray]) -> np.ndarray:
     cf = np.zeros(n_months, dtype=np.float64)
     start = max(0, self.start_month)
-    end = min(n_months, self.end_month) if self.end_month is not None else n_months
-    
+    end = min(n_months,
+              self.end_month) if self.end_month is not None else n_months
+
     if start < end:
       cf[start:end] = self.amount
 
     if self.cpi_name:
       if self.cpi_name not in monthly_prices:
-        raise ValueError(f"CPI path '{self.cpi_name}' not found in monthly_prices.")
+        raise ValueError(
+            f"CPI path '{self.cpi_name}' not found in monthly_prices.")
       # monthly_prices[cpi_name] is shape (n_sim, n_months + 1)
       # We take the first n_months elements for the month transitions
       cpi_array = monthly_prices[self.cpi_name][:, :n_months]
@@ -257,7 +261,7 @@ class BaseSpendConfig(CashflowConfig):
   def generate(self, n_sim: int, n_months: int,
                monthly_prices: Dict[str, np.ndarray]) -> np.ndarray:
     cf = np.zeros((n_sim, n_months), dtype=np.float64)
-    
+
     # 年齢別の名目支出額を配列にする
     if isinstance(self.amount, (list, np.ndarray)):
       annual_amounts = np.asarray(self.amount)
@@ -274,7 +278,8 @@ class BaseSpendConfig(CashflowConfig):
 
     if self.cpi_name:
       if self.cpi_name not in monthly_prices:
-        raise ValueError(f"CPI path '{self.cpi_name}' not found in monthly_prices.")
+        raise ValueError(
+            f"CPI path '{self.cpi_name}' not found in monthly_prices.")
       # monthly_prices[cpi_name] is shape (n_sim, n_months + 1)
       cpi_array = monthly_prices[self.cpi_name][:, :n_months]
       cf *= cpi_array

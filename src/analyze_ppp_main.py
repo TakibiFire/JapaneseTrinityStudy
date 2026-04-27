@@ -132,10 +132,12 @@ def main() -> None:
   y_range = slope * x_range + intercept
   df_line = pd.DataFrame({"FX_log_ret": x_range, "CPI_log_ret": y_range})
 
-  line = alt.Chart(df_line).mark_line(color="red").encode(
-      x="FX_log_ret:Q", y="CPI_log_ret:Q")
+  line = alt.Chart(df_line).mark_line(color="red").encode(x="FX_log_ret:Q",
+                                                          y="CPI_log_ret:Q")
 
-  chart = (scatter + line).properties(width=500, height=400, title="為替変動とインフレ率の相関分析")
+  chart = (scatter + line).properties(width=500,
+                                      height=400,
+                                      title="為替変動とインフレ率の相関分析")
 
   output_path = "docs/imgs/ppp_regression.svg"
   chart.save(output_path)
@@ -147,12 +149,14 @@ def main() -> None:
                           value_vars=["CPI_log_ret", "FX_log_ret"],
                           var_name="Type",
                           value_name="Value")
-  
+
   time_chart = alt.Chart(df_melt).mark_line().encode(
       x=alt.X("Year:O", title="年"),
       y=alt.Y("Value:Q", title="変動率"),
-      color="Type:N").properties(width=800, height=300, title="為替変動とインフレ率の時系列推移")
-  
+      color="Type:N").properties(width=800,
+                                 height=300,
+                                 title="為替変動とインフレ率の時系列推移")
+
   output_time_path = "docs/imgs/ppp_timeseries.svg"
   time_chart.save(output_time_path)
   print(f"時系列グラフを保存しました: {output_time_path}")

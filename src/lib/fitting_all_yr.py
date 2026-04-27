@@ -23,8 +23,9 @@ class FeatureSetType(Enum):
   ASSET_SPEND = "asset_spend"
 
 
-def get_features(df: pd.DataFrame,
-                 feature_set_type: FeatureSetType = FeatureSetType.STANDARD) -> pd.DataFrame:
+def get_features(
+    df: pd.DataFrame,
+    feature_set_type: FeatureSetType = FeatureSetType.STANDARD) -> pd.DataFrame:
   """
   特徴量セットを生成する。
 
@@ -71,7 +72,8 @@ def get_features(df: pd.DataFrame,
 def run_fitting_analysis(
     df: pd.DataFrame,
     target_col: str,
-    feature_set_type: FeatureSetType = FeatureSetType.STANDARD) -> List[Dict[str, Any]]:
+    feature_set_type: FeatureSetType = FeatureSetType.STANDARD
+) -> List[Dict[str, Any]]:
   """
   各種回帰モデル（P, Logit / Degree 2, 3）の評価を行い、結果を標準出力に表示する。
 
@@ -102,7 +104,8 @@ def run_fitting_analysis(
 
   results: List[Dict[str, Any]] = []
 
-  def evaluate(name: str, poly_deg: int, interaction_only: bool, use_logit: bool) -> None:
+  def evaluate(name: str, poly_deg: int, interaction_only: bool,
+               use_logit: bool) -> None:
     """
     指定されたパラメータで線形回帰モデルを学習し、R2スコア等を表示・保存する。
 
@@ -113,7 +116,7 @@ def run_fitting_analysis(
         use_logit: Logit空間を使用するか
     """
     poly = PolynomialFeatures(degree=poly_deg,
-                               interaction_only=interaction_only)
+                              interaction_only=interaction_only)
     X_poly = poly.fit_transform(feats)
 
     target = logit_y if use_logit else y_target
@@ -296,13 +299,9 @@ def run_stepwise_fitting_analysis(
 
 
 def run_survival_curve_analysis(
-    df: pd.DataFrame,
-    model: LinearRegression,
-    selected_feats: List[str],
-    poly: PolynomialFeatures,
-    use_logit: bool,
-    target_probs: List[float]
-) -> Tuple[pd.DataFrame, float]:
+    df: pd.DataFrame, model: LinearRegression, selected_feats: List[str],
+    poly: PolynomialFeatures, use_logit: bool,
+    target_probs: List[float]) -> Tuple[pd.DataFrame, float]:
   """
   近似式を用いて特定の生存確率を達成する曲線を生成し、データフレームを返す。
 
@@ -328,7 +327,8 @@ def run_survival_curve_analysis(
   fine_rules = np.arange(2.8, 7.01, 0.1)
 
   # 基準となる支出額 (multiplier=1.0 の時)
-  base_cost = df[np.isclose(df["spend_multiplier"], 1.0)]["initial_annual_cost"].iloc[0]
+  base_cost = df[np.isclose(df["spend_multiplier"],
+                            1.0)]["initial_annual_cost"].iloc[0]
 
   def get_pred_val(s: float, mult: float) -> float:
     """
@@ -382,12 +382,8 @@ def run_survival_curve_analysis(
   return df_plot, float(base_cost)
 
 
-def save_survival_charts(
-    df_plot: pd.DataFrame,
-    base_cost: float,
-    target_probs: List[float],
-    img_dir: str
-) -> None:
+def save_survival_charts(df_plot: pd.DataFrame, base_cost: float,
+                         target_probs: List[float], img_dir: str) -> None:
   """
   生成されたデータから生存確率達成ラインのグラフを作成して保存する。
 
@@ -415,8 +411,10 @@ def save_survival_charts(
                       title='目標生存確率',
                       sort=prob_order,
                       scale=alt.Scale(domain=prob_order)),
-      tooltip=['spending_rule', 'multiplier', 'annual_spend_man', 'initial_money', 'target_prob']
-  ).properties(title="生存確率達成ライン (初期支出率 vs 支出レベル)", width=600, height=400)
+      tooltip=[
+          'spending_rule', 'multiplier', 'annual_spend_man', 'initial_money',
+          'target_prob'
+      ]).properties(title="生存確率達成ライン (初期支出率 vs 支出レベル)", width=600, height=400)
 
   path1 = os.path.join(img_dir, "survival_rule_vs_spend.svg")
   chart1.save(path1)
@@ -434,8 +432,10 @@ def save_survival_charts(
                       title='目標生存確率',
                       sort=prob_order,
                       scale=alt.Scale(domain=prob_order)),
-      tooltip=['spending_rule', 'multiplier', 'annual_spend_man', 'initial_money', 'target_prob']
-  ).properties(title="生存確率達成ライン (総資産 vs 支出レベル)", width=600, height=400)
+      tooltip=[
+          'spending_rule', 'multiplier', 'annual_spend_man', 'initial_money',
+          'target_prob'
+      ]).properties(title="生存確率達成ライン (総資産 vs 支出レベル)", width=600, height=400)
 
   path2 = os.path.join(img_dir, "survival_asset_vs_spend.svg")
   chart2.save(path2)
@@ -453,16 +453,17 @@ def save_survival_charts(
                       title='目標生存確率',
                       sort=prob_order,
                       scale=alt.Scale(domain=prob_order)),
-      tooltip=['spending_rule', 'multiplier', 'annual_spend_man', 'initial_money', 'target_prob']
-  ).properties(title="生存確率達成ライン (総資産 vs 初期支出率)", width=600, height=400)
+      tooltip=[
+          'spending_rule', 'multiplier', 'annual_spend_man', 'initial_money',
+          'target_prob'
+      ]).properties(title="生存確率達成ライン (総資産 vs 初期支出率)", width=600, height=400)
 
   path3 = os.path.join(img_dir, "survival_asset_vs_rule.svg")
   chart3.save(path3)
   print(f"✅ {path3} に保存しました。")
 
 
-def run_rule_of_thumb_analysis(df: pd.DataFrame,
-                               target_col: str,
+def run_rule_of_thumb_analysis(df: pd.DataFrame, target_col: str,
                                target_probs: List[float]) -> None:
   """
   資産と支出額の2つの特徴量のみを用いた簡略式の算出とテーブル出力を行う (Rule of Thumb)。

@@ -61,15 +61,14 @@ def test_calculate_optimal_strategy_dp(mock_models_json):
   rem_years = 50.0
   post_tax_net = total_net.copy()
 
-  res = calculate_optimal_strategy_dp(
-      total_net,
-      cur_ann_spend,
-      rem_years,
-      post_tax_net,
-      dp_predictor=predictor,
-      initial_age=35,
-      use_winning_threshold=True,
-      z_score_for_winning=2.0)
+  res = calculate_optimal_strategy_dp(total_net,
+                                      cur_ann_spend,
+                                      rem_years,
+                                      post_tax_net,
+                                      dp_predictor=predictor,
+                                      initial_age=35,
+                                      use_winning_threshold=True,
+                                      z_score_for_winning=2.0)
 
   assert isinstance(res, np.ndarray)
   assert res.shape == (2,)

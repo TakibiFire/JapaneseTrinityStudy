@@ -132,9 +132,10 @@ def create_survival_probability_chart(
       y=alt.Y('Survival Probability (%):Q',
               title='生存確率 (%)',
               scale=alt.Scale(domain=[y_min, y_max])),
-      color=alt.Color('Strategy:N', legend=alt.Legend(title="戦略",
-                                                      orient='top',
-                                                      labelExpr="split(datum.label, '  ')")),
+      color=alt.Color('Strategy:N',
+                      legend=alt.Legend(title="戦略",
+                                        orient='top',
+                                        labelExpr="split(datum.label, '  ')")),
       tooltip=[
           'Year', 'Strategy',
           alt.Tooltip('Survival Probability (%):Q', format='.1f')
@@ -196,11 +197,13 @@ def visualize_and_save(results: Dict[str, SimulationResult],
   # 1.0 はコード内で0以下を1に変換しているため (1/10000 億円 = 1万円)
   # y軸が対数スケールで、値が 0.0001 (1万円) に張り付いている場合は「破産」とみなす
   threshold = 1.001 / 10000.0
-  
+
   # 各 Quantile ごとに全戦略の最大値を計算
-  q_values = df_plot.pivot(index='Quantile (%)', columns='Strategy', values='Final Value (億円)')
+  q_values = df_plot.pivot(index='Quantile (%)',
+                           columns='Strategy',
+                           values='Final Value (億円)')
   q_max = q_values.max(axis=1)
-  
+
   # 閾値を超える Quantile を見つける
   above_threshold = q_max[q_max > threshold]
   if not above_threshold.empty:
@@ -209,23 +212,26 @@ def visualize_and_save(results: Dict[str, SimulationResult],
     x_min = max(0.0, (x_min_raw // 10) * 10 - 10)
   else:
     x_min = 0
-  
+
   x_max = 100
-  
+
   display_dist_title = distribution_title
   if x_min > 0:
     display_dist_title += f"（運の良さ {x_min:.0f}%以下はほぼ0）"
 
   # Altair チャート描画（線グラフ）
   line_chart = alt.Chart(df_plot).mark_line(point=False).encode(
-      x=alt.X('Quantile (%):Q', title='運の良さ (パーセンタイル %)', scale=alt.Scale(domain=[x_min, x_max])),
+      x=alt.X('Quantile (%):Q',
+              title='運の良さ (パーセンタイル %)',
+              scale=alt.Scale(domain=[x_min, x_max])),
       y=alt.Y('Final Value (億円):Q',
               title='最終評価額(億円), 対数スケール',
               scale=alt.Scale(type='log')),
-      color=alt.Color('Strategy:N', legend=alt.Legend(title="戦略",
-                                                      orient='top',
-                                                      symbolStrokeWidth=3,
-                                                      labelExpr="split(datum.label, '  ')")),
+      color=alt.Color('Strategy:N',
+                      legend=alt.Legend(title="戦略",
+                                        orient='top',
+                                        symbolStrokeWidth=3,
+                                        labelExpr="split(datum.label, '  ')")),
       tooltip=[
           'Quantile (%)', 'Strategy',
           alt.Tooltip('Final Value (億円):Q', format=',.1f')
