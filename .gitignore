@@ -166,7 +166,7 @@ cython_debug/
 .DS_Store
 
 # Internal directories
-tasks/
+archived/
 temp/
 
 # Node.js
