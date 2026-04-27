@@ -242,7 +242,7 @@ class BaseSpendConfig(CashflowConfig):
 
   def __init__(self,
                name: str,
-               amount: Union[float, List[float]],
+               amount: Union[float, List[float], np.ndarray],
                cpi_name: Optional[str] = None):
     """
     Args:
@@ -259,8 +259,8 @@ class BaseSpendConfig(CashflowConfig):
     cf = np.zeros((n_sim, n_months), dtype=np.float64)
     
     # 年齢別の名目支出額を配列にする
-    if isinstance(self.amount, list):
-      annual_amounts = np.array(self.amount)
+    if isinstance(self.amount, (list, np.ndarray)):
+      annual_amounts = np.asarray(self.amount)
     else:
       # 単一の数値の場合は十分な長さの配列にする
       annual_amounts = np.full(n_months // 12 + 1, float(self.amount))

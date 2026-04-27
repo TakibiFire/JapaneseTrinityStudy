@@ -135,7 +135,7 @@ def get_retired_spending_values(spending_types: List[SpendingType],
 def get_retired_spending_multipliers(spending_types: List[SpendingType],
                                      start_age: int,
                                      num_years: int = 50,
-                                     normalize: bool = True) -> List[float]:
+                                     normalize: bool = True) -> np.ndarray:
   """
   指定された開始年齢からの支出の推移を返す。
 
@@ -153,5 +153,5 @@ def get_retired_spending_multipliers(spending_types: List[SpendingType],
 
   if normalize:
     # 開始年齢の値を 1.0 とした倍率を返す
-    return (values / values[0]).tolist()
-  return values.tolist()
+    return values / values[0]
+  return values
