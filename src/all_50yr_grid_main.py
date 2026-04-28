@@ -33,10 +33,6 @@ import pandas as pd
 
 from src.core import (DynamicSpending, Strategy, ZeroRiskAsset,
                       simulate_strategy)
-from src.lib.asset_generator import (AssetConfigType, DerivedAsset, ForexAsset,
-                                     SlideAdjustedCpiAsset,
-                                     YearlyLogNormalArithmetic,
-                                     generate_monthly_asset_prices)
 from src.lib.cashflow_generator import (BaseSpendConfig, CashflowConfig,
                                         CashflowRule, CashflowType,
                                         PensionConfig, generate_cashflows)
@@ -44,8 +40,7 @@ from src.lib.dynamic_rebalance import (calculate_optimal_strategy,
                                        calculate_safe_target_ratio)
 from src.lib.retired_spending import (SpendingType,
                                       get_retired_spending_multipliers)
-from src.lib.simulation_defaults import (AcwiModelKey, get_acwi_fat_tail_config,
-                                         get_cpi_ar12_config)
+from src.lib.world_setup import create_standard_world
 
 
 def main():
@@ -109,42 +104,22 @@ def main():
   os.makedirs(data_dir, exist_ok=True)
 
   # 1. アセット生成
-  # 為替 (USDJPY 0%, 10.53%)
-  fx_asset = ForexAsset(name=FX_NAME,
-                        dist=YearlyLogNormalArithmetic(mu=0.0, sigma=0.1053))
+  world = create_standard_world(
+      n_sim=N_SIM,
+      start_age=START_AGE,
+      end_age=START_AGE + YEARS - 1,
+      retirement_age=60,  # 国民年金は60歳まで
+      pension_start_age=65,  # Dummy, will be overridden in the loop
+      seed=SEED,
+      trust_fee=TRUST_FEE,
+      zero_risk_yield=ZERO_RISK_YIELD)
 
-  # オルカン (共通モデルから取得)
-  base_sp500 = get_acwi_fat_tail_config(AcwiModelKey.BASE_SP500_155Y)
-  base_acwi = get_acwi_fat_tail_config(AcwiModelKey.BASE_ACWI_APPROX)
-
-  # 投資対象としてのオルカン (為替と信託報酬を適用)
-  orukan = DerivedAsset(name=ORUKAN_NAME,
-                        base=base_acwi.name,
-                        trust_fee=TRUST_FEE,
-                        forex=FX_NAME)
-
-  # ゼロリスク資産 (利回り 4%)
-  zr_asset_obj = ZeroRiskAsset(name=ZERO_RISK_NAME, yield_rate=ZERO_RISK_YIELD)
-
-  # CPI (共通モデル)
-  base_cpi = get_cpi_ar12_config(name=CPI_NAME)
-
-  # 年金用CPI (マクロ経済スライド 0.5% 抑制)
-  pension_cpi = SlideAdjustedCpiAsset(
-      name=PENSION_CPI_NAME,
-      base_cpi=CPI_NAME,
-      slide_rate=0.005,
-      slide_end_month=(MACRO_ECONOMIC_SLIDE_END_YEAR - CURRENT_YEAR) * 12)
-
-  configs: List[AssetConfigType] = [
-      fx_asset, base_sp500, base_acwi, orukan, base_cpi, pension_cpi
-  ]
-
-  print(f"価格推移を生成中... (試行回数: {N_SIM}, 期間: {YEARS}年)")
-  monthly_prices = generate_monthly_asset_prices(configs,
-                                                 n_paths=N_SIM,
-                                                 n_months=YEARS * 12,
-                                                 seed=SEED)
+  monthly_prices = world.monthly_prices
+  zr_asset_obj = world.zr_asset_obj
+  ORUKAN_NAME = world.ORUKAN_NAME
+  ZERO_RISK_NAME = world.ZERO_RISK_NAME
+  CPI_NAME = world.CPI_NAME
+  PENSION_CPI_NAME = world.PENSION_CPI_NAME
 
   # 2. グリッドパラメータ
 
