@@ -28,21 +28,16 @@
 
 import argparse
 import os
+from dataclasses import replace
 from itertools import product
 from typing import Any, Dict, List
 
-import numpy as np
 import pandas as pd
 
-from src.core import Strategy, simulate_strategy
-from src.lib.asset_generator import (Asset, AssetConfigType, CpiAsset,
-                                     MonthlyARLogNormal, SlideAdjustedCpiAsset,
-                                     YearlyLogNormalArithmetic,
-                                     generate_monthly_asset_prices)
-from src.lib.cashflow_generator import (BaseSpendConfig, CashflowConfig,
-                                        CashflowRule, CashflowType,
-                                        PensionConfig, generate_cashflows)
-from src.lib.simulation_defaults import get_cpi_ar12_config
+from src.core import simulate_strategy
+from src.lib.scenario_builder import (ConstantSpend, Lifeplan, PensionStatus,
+                                      PredefinedStock, Setup, StrategySpec,
+                                      WorldConfig, create_experiment_setup)
 
 # 設定
 DATA_DIR = "data/pension"
@@ -65,49 +60,29 @@ def main():
 
 def run_experiment(exp_name: str):
   # 共通設定
-  CURRENT_YEAR = 2026
-  MACRO_ECONOMIC_SLIDE_END_YEAR = 2057
   N_SIM = 5000
   YEARS = 60
   SEED = 42
-  CPI_NAME = "Japan_CPI"
-  PENSION_CPI_NAME = "Pension_CPI"
 
   os.makedirs(DATA_DIR, exist_ok=True)
   csv_path = os.path.join(DATA_DIR, f"{exp_name}.csv")
-
-  # 1. アセット生成
-  # オルカン (7%, 15%)
-  orukan = Asset(name="オルカン",
-                 dist=YearlyLogNormalArithmetic(mu=0.07, sigma=0.15))
-
-  # AR(12) CPI (1970年〜)
-  base_cpi = get_cpi_ar12_config(name=CPI_NAME)
-
-  # 年金用CPI (マクロ経済スライド 0.5% 抑制)
-  # 2057年度に終了予定 (2026年から31年 = 372ヶ月)
-  pension_cpi = SlideAdjustedCpiAsset(
-      name=PENSION_CPI_NAME,
-      base_cpi=CPI_NAME,
-      slide_rate=0.005,
-      slide_end_month=(MACRO_ECONOMIC_SLIDE_END_YEAR - CURRENT_YEAR) * 12)
-
-  configs: List[AssetConfigType] = [orukan, base_cpi, pension_cpi]
-
-  print(f"価格推移を生成中... (実験: {exp_name}, 試行回数: {N_SIM}, 期間: {YEARS}年)")
-  monthly_prices = generate_monthly_asset_prices(configs,
-                                                 n_paths=N_SIM,
-                                                 n_months=YEARS * 12,
-                                                 seed=SEED)
 
   # グリッドパラメータ
   initial_money_annual_cost_list = [(5000, 200), (10000, 400), (20000, 800)]
   initial_age_list = [30, 40, 50, 60]
 
   if exp_name == "exp1":
+    # (PensionStatus, p_start_age, label)
     scenarios = [
-        "NoPensionWorld", "PayNoReceive", "Pay_60", "Pay_65", "Pay_70",
-        "Pay_75", "Exempt_60", "Exempt_65", "Unpaid_65"
+        (PensionStatus.NONE, 65, "NoPensionWorld"),
+        (PensionStatus.FULL, 0, "PayNoReceive"),  # p_start_age=0 is dummy
+        (PensionStatus.FULL, 60, "Pay_60"),
+        (PensionStatus.FULL, 65, "Pay_65"),
+        (PensionStatus.FULL, 70, "Pay_70"),
+        (PensionStatus.FULL, 75, "Pay_75"),
+        (PensionStatus.EXEMPT, 60, "Exempt_60"),
+        (PensionStatus.EXEMPT, 65, "Exempt_65"),
+        (PensionStatus.UNPAID, 65, "Unpaid_65"),
     ]
   else:
     print(f"Skipping unknown exp_name: {exp_name}")
@@ -118,161 +93,115 @@ def run_experiment(exp_name: str):
 
   results: List[Dict[str, Any]] = []
 
-  PREMIUM_ANNUAL = 21.5
-  KISO_FULL_ANNUAL = 81.6
-  KOUSEI_UNIT_ANNUAL = 2.736  # 年収500万想定、1年勤務あたりの年金増額
-
   print(f"全 {len(all_combinations)} パターンのシミュレーションを実行中...")
-  for i, ((init_money, annual_cost), init_age,
-          scenario) in enumerate(all_combinations):
+
+  # 各 init_age ごとに WorldConfig が変わるので、大きなループを回すか、
+  # Setup を適切に使う。ここでは init_age ごとに Setup を作るのが素直だが、
+  # create_experiment_setup は複数の WorldConfig を扱えるので、1つの Setup に全部入れる。
+
+  # ダミーのベースライン
+  dummy_lp = Lifeplan(retirement_start_age=30,
+                      base_spend=ConstantSpend(annual_amount=200))
+  dummy_strategy = StrategySpec(
+      initial_money=5000,
+      initial_asset_ratio=((PredefinedStock.SIMPLE_7_15_ORUKAN, 1.0),),
+      selling_priority=(PredefinedStock.SIMPLE_7_15_ORUKAN,))
+  exp_setup = Setup(name="dummy_pension",
+                    world=WorldConfig(n_sim=N_SIM,
+                                      n_years=YEARS,
+                                      start_age=30,
+                                      seed=SEED),
+                    lifeplan=dummy_lp,
+                    strategy=dummy_strategy)
+
+  # すべての実験を追加
+  for (init_money, annual_cost), init_age, (status, p_start,
+                                            label) in all_combinations:
+    # 支出調整: NoPensionWorld 以外は保険料分(21.5万)を生活費から引く
+    # scenario_builder 内の BaseSpend は ConstantSpend.annual_amount をそのまま使う
+    # 旧コードでは current_annual_cost -= PREMIUM_ANNUAL していた
+    actual_annual_cost = float(annual_cost)
+    if status != PensionStatus.NONE:
+      actual_annual_cost -= 21.5
+
+    # PayNoReceive は受給開始年齢を非常に高く設定することで「受給しない」をシミュレート
+    # (または受給額を0にする必要があるが、ここでは受給開始を YEARS+init_age 以降にすればよい)
+    actual_p_start = p_start if label != "PayNoReceive" else (init_age + YEARS +
+                                                              1)
+    # NoPensionWorld の表示上の差分をなくすため 0 に設定
+    if label == "NoPensionWorld":
+      actual_p_start = 0
+
+    world = WorldConfig(n_sim=N_SIM,
+                        n_years=YEARS,
+                        start_age=init_age,
+                        seed=SEED)
+    lp = Lifeplan(base_spend=ConstantSpend(annual_amount=actual_annual_cost),
+                  retirement_start_age=init_age,
+                  pension_status=status,
+                  pension_start_age=actual_p_start)
+    strategy = StrategySpec(
+        initial_money=float(init_money),
+        initial_asset_ratio=((PredefinedStock.SIMPLE_7_15_ORUKAN, 1.0),),
+        selling_priority=(PredefinedStock.SIMPLE_7_15_ORUKAN,))
+
+    exp_setup.add_experiment(
+        name=f"{init_money}_{annual_cost}_{init_age}_{label}",
+        overwrite_world=world,
+        overwrite_lifeplan=lp,
+        overwrite_strategy=strategy)
+
+  # コンパイル実行
+  compiled_exps = create_experiment_setup(exp_setup)
+
+  # 実行と記録 (ベースライン[0]はダミーなので飛ばす)
+  for i, exp in enumerate(compiled_exps[1:]):
     if i % 10 == 0:
       print(f"Progress: {i}/{len(all_combinations)}")
 
-    # 基本支出とキャッシュフローの初期化
-    current_annual_cost = float(annual_cost)
-    cf_configs: List[CashflowConfig] = []
-    extra_cf_names = []
+    # 元のループ変数を取り出す
+    (init_money, annual_cost), init_age, (status, p_start,
+                                          label) = all_combinations[i]
 
-    # 記録用データ
-    pension_start_age = 0
-    kousei_annual_nominal = 0.0
-    kiso_annual_nominal = 0.0
+    res = simulate_strategy(exp.strategy,
+                            exp.monthly_prices,
+                            monthly_cashflows=exp.monthly_cashflows)
 
-    # シナリオ別の設定
-    if scenario == "NoPensionWorld":
-      # 年金制度なし
-      pass
+    # 旧コードと互換性のある nominal 計算 (記録用)
+    # scenario_builder の内部ロジックを再現
+    kousei_unit_annual = 2.736
+    kiso_full_annual = 81.6
+    reduction_rate = 1.0
+    actual_p_start = p_start if label != "PayNoReceive" else 999
+
+    if actual_p_start < 65:
+      reduction_rate = 1.0 - 0.004 * (65 - actual_p_start) * 12
     else:
-      # 他のシナリオは生活費支出を 21.5万(保険料分) 減らす
-      current_annual_cost -= PREMIUM_ANNUAL
+      reduction_rate = 1.0 + 0.007 * (actual_p_start - 65) * 12
 
-      # 国民年金保険料 (Pay シナリオのみ支払い)
-      if "Pay" in scenario:
-        months_to_60 = max(0, (60 - init_age) * 12)
-        if months_to_60 > 0:
-          cf_name = f"Premium_{i}"
-          cf_configs.append(
-              PensionConfig(
-                  name=cf_name,
-                  amount=-(PREMIUM_ANNUAL / 12.0),  # 負のキャッシュフロー
-                  start_month=0,
-                  end_month=months_to_60,
-                  cpi_name=CPI_NAME))
-          extra_cf_names.append(cf_name)
+    kousei_nominal = kousei_unit_annual * (init_age - 22) * reduction_rate
+    if label == "PayNoReceive" or status == PensionStatus.NONE:
+      kousei_nominal = 0.0
 
-      # 年金受給 (PayNoReceive 以外)
-      if scenario != "PayNoReceive":
-        # 受給開始年齢の判定
-        if "_60" in scenario:
-          pension_start_age = 60
-        elif "_65" in scenario:
-          pension_start_age = 65
-        elif "_70" in scenario:
-          pension_start_age = 70
-        elif "_75" in scenario:
-          pension_start_age = 75
-        else:
-          # ここには来ないはずだがデフォルト
-          pension_start_age = 65
+    if status == PensionStatus.FULL and label != "PayNoReceive":
+      kiso_nominal = kiso_full_annual * reduction_rate
+    elif status == PensionStatus.EXEMPT:
+      kiso_nominal = (kiso_full_annual *
+                      (init_age - 22) / 40.0 + kiso_full_annual *
+                      (60 - init_age) / 40.0 * 0.5) * reduction_rate
+    elif status == PensionStatus.UNPAID:
+      kiso_nominal = (kiso_full_annual *
+                      (init_age - 22) / 40.0) * reduction_rate
+    else:
+      kiso_nominal = 0.0
 
-        start_month = max(0, (pension_start_age - init_age) * 12)
-
-        # 受給額倍率の計算
-        if pension_start_age < 65:
-          # 繰り上げ (0.4% / 月 減額)
-          reduction_rate = 1.0 - 0.004 * (65 - pension_start_age) * 12
-        else:
-          # 繰り下げ (0.7% / 月 増額)
-          reduction_rate = 1.0 + 0.007 * (pension_start_age - 65) * 12
-
-        # 厚生年金 (22歳からリタイア開始年齢 N まで加入と想定)
-        kousei_annual_nominal = KOUSEI_UNIT_ANNUAL * (init_age -
-                                                      22) * reduction_rate
-        if kousei_annual_nominal > 0:
-          cf_name = f"Kousei_{i}"
-          cf_configs.append(
-              PensionConfig(name=cf_name,
-                            amount=kousei_annual_nominal / 12.0,
-                            start_month=start_month,
-                            cpi_name=CPI_NAME))
-          extra_cf_names.append(cf_name)
-
-        # 基礎年金
-        if "Pay" in scenario:
-          # 満額受給
-          kiso_annual_nominal = KISO_FULL_ANNUAL * reduction_rate
-        elif "Exempt" in scenario:
-          # 全額免除期間あり (Nから60歳まで免除)
-          kiso_annual_nominal = (KISO_FULL_ANNUAL *
-                                 (init_age - 22) / 40.0 + KISO_FULL_ANNUAL *
-                                 (60 - init_age) / 40.0 * 0.5) * reduction_rate
-        elif "Unpaid" in scenario:
-          # 未納 (Nから60歳まで未納)
-          kiso_annual_nominal = (KISO_FULL_ANNUAL *
-                                 (init_age - 22) / 40.0) * reduction_rate
-        else:
-          raise ValueError(f"Unknown scenario for Kiso calculation: {scenario}")
-
-        if kiso_annual_nominal > 0:
-          cf_name = f"Kiso_{i}"
-          cf_configs.append(
-              PensionConfig(name=cf_name,
-                            amount=kiso_annual_nominal / 12.0,
-                            start_month=start_month,
-                            cpi_name=PENSION_CPI_NAME))
-          extra_cf_names.append(cf_name)
-
-    # 1. キャッシュフロールールの定義 (基本支出)
-    spend_config = BaseSpendConfig(name="生活費",
-                                   amount=current_annual_cost,
-                                   cpi_name=CPI_NAME)
-    cf_configs.append(spend_config)
-
-    # キャッシュフロー生成
-    monthly_cashflows = generate_cashflows(cf_configs,
-                                           monthly_prices,
-                                           n_sim=N_SIM,
-                                           n_months=YEARS * 12)
-
-    # 戦略
-    # TODO: INCLUDE_IN_ANNUAL_SPEND を使うべきだが、backward-compatibility のために ISOLATED を今は使う
-    # 生活費は REGULAR に設定
-    cf_rules = [
-        CashflowRule(source_name=spend_config.name,
-                     cashflow_type=CashflowType.REGULAR)
-    ]
-    cf_rules.extend([
-        CashflowRule(source_name=name, cashflow_type=CashflowType.EXTRAORDINARY)
-        for name in extra_cf_names
-    ])
-
-    strategy = Strategy(name=f"Pattern_{i}",
-                        initial_money=float(init_money),
-                        initial_loan=0.0,
-                        yearly_loan_interest=0.0,
-                        initial_asset_ratio={"オルカン": 1.0},
-                        selling_priority=["オルカン"],
-                        cashflow_rules=cf_rules)
-
-    # シミュレーション
-    res = simulate_strategy(strategy,
-                            monthly_prices,
-                            monthly_cashflows=monthly_cashflows)
-
-    # 生存確率の記録
     row = {
-        "initial_money":
-            init_money,
-        "initial_annual_cost":
-            annual_cost,
-        "initial_age":
-            init_age,
-        "scenario":
-            scenario,
-        "pension_start_age":
-            pension_start_age,
-        "initial_pension_nominal_annual":
-            kousei_annual_nominal + kiso_annual_nominal
+        "initial_money": init_money,
+        "initial_annual_cost": annual_cost,
+        "initial_age": init_age,
+        "scenario": label,
+        "pension_start_age": p_start if label != "PayNoReceive" else 0,
+        "initial_pension_nominal_annual": kousei_nominal + kiso_nominal
     }
     for year in range(1, YEARS + 1):
       bankrupt_count = (res.sustained_months < year * 12).sum()

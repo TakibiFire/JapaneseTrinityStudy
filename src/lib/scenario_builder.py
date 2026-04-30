@@ -55,6 +55,8 @@ class PredefinedStock(Enum):
   ACWI_LOGNORMAL = auto()
   # ACWI の Johnson SU 分布モデル。
   ACWI_JSU = auto()
+  # 算術平均 7%, 標準偏差 15% のシンプルな対数正規分布モデル（為替なし、信託報酬なし）。
+  SIMPLE_7_15_ORUKAN = auto()
 
 
 class PredefinedZeroRisk(Enum):
@@ -567,6 +569,17 @@ def _compile_assets(assets: Set[PredefinedAsset],
                        base="Base_ACWI_LogNormal",
                        trust_fee=0.0005775,
                        forex=fx_name))
+    elif a == PredefinedStock.SIMPLE_7_15_ORUKAN:
+      configs.append(
+          Asset(name="オルカン",
+                dist=YearlyLogNormalArithmetic(mu=0.07, sigma=0.15),
+                trust_fee=0.0,
+                forex=None))
+    elif isinstance(a, PredefinedZeroRisk):
+      # PredefinedZeroRisk はここでは処理しない
+      pass
+    else:
+      raise ValueError(f"未知の株式タイプです: {a}")
 
   # 3. 消費者物価指数 (CPI)
   if world.cpi_type == CpiType.JAPAN_AR12:
@@ -758,7 +771,10 @@ def _build_strategy(variant: _ExperimentVariant, cf_map: Dict[str, str],
     elif asset_enum == PredefinedZeroRisk.ZERO_RISK_4PCT:
       ratio_dict[ZeroRiskAsset("ZERO_RISK_4PCT", 0.04)] = ratio
     elif isinstance(asset_enum, PredefinedStock):
-      ratio_dict[asset_enum.name] = ratio
+      if asset_enum == PredefinedStock.SIMPLE_7_15_ORUKAN:
+        ratio_dict["オルカン"] = ratio
+      else:
+        ratio_dict[asset_enum.name] = ratio
     else:
       raise ValueError(f"未知の資産タイプです: {asset_enum}")
 
@@ -770,7 +786,10 @@ def _build_strategy(variant: _ExperimentVariant, cf_map: Dict[str, str],
     elif a == PredefinedZeroRisk.ZERO_RISK_4PCT:
       priority.append("ZERO_RISK_4PCT")
     elif isinstance(a, PredefinedStock):
-      priority.append(a.name)
+      if a == PredefinedStock.SIMPLE_7_15_ORUKAN:
+        priority.append("オルカン")
+      else:
+        priority.append(a.name)
     else:
       raise ValueError(f"未知の資産タイプです: {a}")
 

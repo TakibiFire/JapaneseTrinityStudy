@@ -641,13 +641,21 @@ def test_unhandled_enum_values(baseline_setup):
         replace(baseline_setup.lifeplan, mortality_gender=invalid_gender),
         baseline_setup.world)
 
+  # 4.5. Unknown Stock Type in Asset Generator
+  class DummyEnum:
+    name = "DUMMY"
+
+  with pytest.raises(ValueError, match="未知の株式タイプです"):
+    invalid_stock = cast(PredefinedStock, DummyEnum())
+    _compile_assets({invalid_stock}, baseline_setup.world)
+
   # 5. PredefinedAsset in _build_strategy (initial_asset_ratio)
   variant = baseline_setup.experiments[0] if baseline_setup.experiments else \
             from_setup_to_variant(baseline_setup)
   # 内部クラスへのアクセスが難しいため、create_experiment_setup を経由するか直接呼ぶ
   # ここでは _build_strategy を直接呼ぶためにモックを準備
   with pytest.raises(ValueError, match="未知の資産タイプです"):
-    invalid_asset = cast(PredefinedStock, -1)
+    invalid_asset = cast(PredefinedStock, DummyEnum())
     bad_strategy = replace(baseline_setup.strategy,
                            initial_asset_ratio=((invalid_asset, 1.0),))
     from src.lib.scenario_builder import _ExperimentVariant
@@ -671,7 +679,7 @@ def test_unhandled_enum_values(baseline_setup):
 
   # 7. selling_priority
   with pytest.raises(ValueError, match="未知の資産タイプです"):
-    invalid_asset = cast(PredefinedStock, -1)
+    invalid_asset = cast(PredefinedStock, DummyEnum())
     bad_strategy = replace(baseline_setup.strategy,
                            selling_priority=(invalid_asset,))
     v = _ExperimentVariant("bad_priority", baseline_setup.lifeplan,
@@ -716,15 +724,19 @@ def test_compile_assets_additional_models(baseline_setup):
   """追加された資産モデル（SP500_30Y, ACWI_18Y 等）が正しく処理されることを確認する。"""
   models = [
       PredefinedStock.SP500_30Y, PredefinedStock.ACWI_18Y,
-      PredefinedStock.ACWI_LOGNORMAL, PredefinedStock.ACWI_JSU
+      PredefinedStock.ACWI_LOGNORMAL, PredefinedStock.ACWI_JSU,
+      PredefinedStock.SIMPLE_7_15_ORUKAN
   ]
   for model in models:
-    baseline_setup.strategy = replace(
-        baseline_setup.strategy,
-        initial_asset_ratio=((model, 1.0),),
-        selling_priority=(model,))
+    baseline_setup.strategy = replace(baseline_setup.strategy,
+                                      initial_asset_ratio=((model, 1.0),),
+                                      selling_priority=(model,))
     compiled = create_experiment_setup(baseline_setup)
-    assert model.name in compiled[0].monthly_prices
+
+    if model == PredefinedStock.SIMPLE_7_15_ORUKAN:
+      assert "オルカン" in compiled[0].monthly_prices
+    else:
+      assert model.name in compiled[0].monthly_prices
 
 
 def test_pension_household_size_doubling(baseline_setup):
