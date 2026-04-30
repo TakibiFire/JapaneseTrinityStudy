@@ -29,22 +29,21 @@
 
 import argparse
 import os
+from dataclasses import replace
 from itertools import product
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Union
 
 import numpy as np
 import pandas as pd
 
-from src.core import (DynamicSpending, Strategy, ZeroRiskAsset,
-                      simulate_strategy)
-from src.lib.cashflow_generator import (BaseSpendConfig, CashflowConfig,
-                                        CashflowRule, CashflowType,
-                                        PensionConfig, generate_cashflows)
-from src.lib.dynamic_rebalance import (calculate_optimal_strategy,
-                                       calculate_safe_target_ratio)
-from src.lib.retired_spending import (SpendingType,
-                                      get_retired_spending_multipliers)
-from src.lib.world_setup import create_standard_world
+from src.core import simulate_strategy
+from src.lib.dynamic_rebalance import calculate_safe_target_ratio
+from src.lib.scenario_builder import (ConstantSpend, CpiType,
+                                      DynamicV1Adjustment, DynamicV1Rebalance,
+                                      FxType, Lifeplan, PensionStatus,
+                                      PredefinedStock, PredefinedZeroRisk,
+                                      Setup, StrategySpec, WorldConfig,
+                                      create_experiment_setup)
 
 
 def main():
@@ -75,17 +74,6 @@ def main():
   YEARS = 55  # 40歳から95歳まで
   START_AGE = 40
   SEED = 42
-  CPI_NAME = "Japan_CPI"
-  PENSION_CPI_NAME = "Pension_CPI"
-  FX_NAME = "USDJPY_0_10.53"
-  ZERO_RISK_NAME = "ゼロリスク資産"
-  ORUKAN_NAME = "オルカン"
-
-  TRUST_FEE = 0.0005775
-  ZERO_RISK_YIELD = 0.04
-  TAX_RATE = 0.20315
-  CURRENT_YEAR = 2026
-  MACRO_ECONOMIC_SLIDE_END_YEAR = 2057
 
   if exp_type == "P-D-RANGE":
     spend_multipliers = [0.36, 0.5, 0.75, 1.0, 1.5, 3.0]
@@ -108,199 +96,104 @@ def main():
 
   os.makedirs(data_dir, exist_ok=True)
 
-  # 1. アセット生成
-  world = create_standard_world(
-      n_sim=N_SIM,
-      start_age=START_AGE,
-      end_age=START_AGE + YEARS - 1,
-      retirement_age=60,  # 国民年金は60歳まで
-      pension_start_age=65,  # Dummy, will be overridden in the loop
-      seed=SEED,
-      trust_fee=TRUST_FEE,
-      zero_risk_yield=ZERO_RISK_YIELD)
-
-  monthly_prices = world.monthly_prices
-  zr_asset_obj = world.zr_asset_obj
-  ORUKAN_NAME = world.ORUKAN_NAME
-  ZERO_RISK_NAME = world.ZERO_RISK_NAME
-  CPI_NAME = world.CPI_NAME
-  PENSION_CPI_NAME = world.PENSION_CPI_NAME
-
-  # 2. グリッドパラメータ
-
-  all_combinations = list(
-      product(household_sizes, pension_start_ages, spend_multipliers,
-              use_dynamic_spending_list, spending_rules))
-
-  # 年金設定の定義 (世帯人数, 受給開始年齢) -> (保険料/年, 受給額/年)
-  # 基礎年金満額: 81.6万, 厚生年金相当: 2.736 * (40 - 22) = 49.248
-  KISO_FULL_ANNUAL = 81.6
-  KOUSEI_UNIT_ANNUAL = 49.2
-  pension_map = {
-      (1, 60): (-20.4, 99.4),
-      (1, 65): (-20.4, 130.8),
-      (2, 60): (-40.7, 161.4),
-      (2, 65): (-40.7, 212.4),
-  }
-
-  results: List[Dict[str, Any]] = []
-
-  # 年齢による支出倍率の取得 (40歳から55年間)
-  # 案A: 年金保険料を除外したトレンドを使用
-  spending_multipliers_by_age = get_retired_spending_multipliers(
-      [SpendingType.CONSUMPTION, SpendingType.NON_CONSUMPTION_EXCLUDE_PENSION],
-      start_age=START_AGE,
-      num_years=YEARS)
-
-  print(f"全 {len(all_combinations)} パターンのシミュレーションを実行中...")
-
   # 初年度支出ベースライン (二人以上世帯の平均)
   # 510万 (42.5万/月*12) - 40歳退職による厚生年金保険料率引分 (457,500円) = 464.3万
   BASE_SPEND_ANNUAL_WO_PENSION = 464.3
 
-  # ダイナミックリバランスの関数
-  def dynamic_rebalance_fn(total_net, annual_spend, rem_years, post_tax_net):
-    s_rate = annual_spend / np.maximum(total_net, 1.0)
-    orukan_ratio = calculate_optimal_strategy(s_rate=s_rate,
-                                              remaining_years=rem_years,
-                                              base_yield=ZERO_RISK_YIELD,
-                                              tax_rate=TAX_RATE,
-                                              inflation_rate=0.0177)
-    return {ORUKAN_NAME: orukan_ratio, ZERO_RISK_NAME: 1.0 - orukan_ratio}
-
   # セーフティな支出率 (DynamicSpending用)
   target_ratio = calculate_safe_target_ratio(YEARS)
 
-  for i, (household_size, pension_start, spend_mult, use_dyn_spend,
-          rule) in enumerate(all_combinations):
-    if i % 10 == 0:
-      print(f"Progress: {i}/{len(all_combinations)}")
+  # 1. ベースライン設定
+  baseline_world = WorldConfig(n_sim=N_SIM,
+                               n_years=YEARS,
+                               start_age=START_AGE,
+                               seed=SEED,
+                               cpi_type=CpiType.JAPAN_AR12,
+                               fx_type=FxType.USDJPY)
 
+  baseline_lifeplan = Lifeplan(
+      base_spend=ConstantSpend(annual_amount=BASE_SPEND_ANNUAL_WO_PENSION),
+      retirement_start_age=40,
+      pension_status=PensionStatus.FULL,
+      pension_start_age=60,
+      household_size=1)
+
+  baseline_strategy = StrategySpec(
+      initial_money=10000.0,
+      initial_asset_ratio=((PredefinedStock.ORUKAN_155, 1.0),
+                           (PredefinedZeroRisk.ZERO_RISK_4PCT, 0.0)),
+      selling_priority=(PredefinedStock.ORUKAN_155,
+                        PredefinedZeroRisk.ZERO_RISK_4PCT),
+      rebalance=DynamicV1Rebalance(
+          risky_asset=PredefinedStock.ORUKAN_155,
+          zero_risk_asset=PredefinedZeroRisk.ZERO_RISK_4PCT,
+          interval_months=12))
+
+  exp_setup = Setup(name="baseline",
+                    world=baseline_world,
+                    lifeplan=baseline_lifeplan,
+                    strategy=baseline_strategy)
+
+  # 2. グリッドパラメータ
+  all_combinations = list(
+      product(household_sizes, pension_start_ages, spend_multipliers,
+              use_dynamic_spending_list, spending_rules))
+
+  for (household_size, pension_start, spend_mult, use_dyn_spend,
+       rule) in all_combinations:
+    # 既存のロジックに従った初期資産と初年度支出の計算
     # 国民年金保険料を正の値にする。支払い量は household_sizeに依存。
-    pension_cost = -pension_map[(household_size, pension_start)][0]
+    # 1人: 20.4万/年, 2人: 40.7万/年
+    pension_cost_annual = 20.4 * (2.0 if household_size >= 2 else 1.0)
     # base_spend_annual は2人世帯の40歳の平均的支出。国民年金保険料を含む。
-    base_spend_annual = (BASE_SPEND_ANNUAL_WO_PENSION + pension_cost)
+    base_spend_annual = (BASE_SPEND_ANNUAL_WO_PENSION + pension_cost_annual)
     # 初年度支出 (国民年金保険料含む) と初期資産
     initial_annual_cost = base_spend_annual * spend_mult
     init_money = initial_annual_cost / (rule / 100.0)
     # 初年度支出, 国民年金保険料含まない。これを initial_cost にする。
-    initial_annual_cost_wo_pension = initial_annual_cost - pension_cost
+    initial_annual_cost_wo_pension = initial_annual_cost - pension_cost_annual
 
-    # 支出とキャッシュフローの設定
-    cf_configs: List[CashflowConfig] = []
-    cf_rules: List[CashflowRule] = []
+    new_lifeplan = replace(baseline_lifeplan,
+                           household_size=household_size,
+                           pension_start_age=pension_start,
+                           base_spend=ConstantSpend(
+                               annual_amount=initial_annual_cost_wo_pension))
 
-    if use_dyn_spend:
-      # ダイナミックスペンディング
-      ds_handler = DynamicSpending(
-          initial_annual_spend=initial_annual_cost_wo_pension,
-          target_ratio=target_ratio,
-          upper_limit=0.03,
-          lower_limit=0.0)
-      cf_configs.append(
-          BaseSpendConfig(name="base_spend",
-                          amount=initial_annual_cost_wo_pension,
-                          cpi_name=None))
-      cf_rules.append(
-          CashflowRule(source_name="base_spend",
-                       cashflow_type=CashflowType.REGULAR,
-                       dynamic_handler=ds_handler))
-    else:
-      # 年齢による支出トレンドを適用
-      annual_cost_list = [
-          initial_annual_cost_wo_pension * m
-          for m in spending_multipliers_by_age
-      ]
-      cf_configs.append(
-          BaseSpendConfig(name="base_spend",
-                          amount=annual_cost_list,
-                          cpi_name=CPI_NAME))
-      cf_rules.append(
-          CashflowRule(source_name="base_spend",
-                       cashflow_type=CashflowType.REGULAR))
+    new_strategy = replace(
+        baseline_strategy,
+        initial_money=float(init_money),
+        spend_adjustment=DynamicV1Adjustment(
+            target_ratio=rule / 100.0, upper_limit=0.03, lower_limit=0.0)
+        if use_dyn_spend else None)
 
-    # キャッシュフロー (年金保険料と受給)
-    premium_annual, _ = pension_map[(household_size, pension_start)]
-
-    # 40歳から60歳までの保険料支払い (20年間 = 240ヶ月)
-    cf_configs.append(
-        PensionConfig(name="Pension_Premium",
-                      amount=premium_annual / 12.0,
-                      start_month=0,
-                      end_month=240,
-                      cpi_name=CPI_NAME))
-    cf_rules.append(
-        CashflowRule(source_name="Pension_Premium",
-                     cashflow_type=CashflowType.REGULAR))
-
-    # 受給開始年齢に基づく受給
-    receipt_start_month = (pension_start - START_AGE) * 12
-    reduction_rate = 0.76 if pension_start == 60 else 1.0
-
-    # 本人厚生年金
-    kousei_annual = KOUSEI_UNIT_ANNUAL * reduction_rate
-    cf_configs.append(
-        PensionConfig(name="Pension_Receipt_Kousei",
-                      amount=kousei_annual / 12.0,
-                      start_month=receipt_start_month,
-                      cpi_name=CPI_NAME))
-    cf_rules.append(
-        CashflowRule(source_name="Pension_Receipt_Kousei",
-                     cashflow_type=CashflowType.REGULAR))
-
-    # 本人基礎年金 (マクロ経済スライド適用)
-    kiso_annual = KISO_FULL_ANNUAL * reduction_rate
-    cf_configs.append(
-        PensionConfig(name="Pension_Receipt_Kiso",
-                      amount=kiso_annual / 12.0,
-                      start_month=receipt_start_month,
-                      cpi_name=PENSION_CPI_NAME))
-    cf_rules.append(
-        CashflowRule(source_name="Pension_Receipt_Kiso",
-                     cashflow_type=CashflowType.REGULAR))
-
-    # 配偶者基礎年金 (2人世帯の場合)
-    if household_size == 2:
-      spouse_kiso_annual = KISO_FULL_ANNUAL * reduction_rate
-      cf_configs.append(
-          PensionConfig(name="Pension_Receipt_Spouse_Kiso",
-                        amount=spouse_kiso_annual / 12.0,
-                        start_month=receipt_start_month,
-                        cpi_name=PENSION_CPI_NAME))
-      cf_rules.append(
-          CashflowRule(source_name="Pension_Receipt_Spouse_Kiso",
-                       cashflow_type=CashflowType.REGULAR))
-
-    monthly_cashflows = generate_cashflows(cf_configs,
-                                           monthly_prices,
-                                           n_sim=N_SIM,
-                                           n_months=YEARS * 12)
-
-    # 戦略
-    strategy = Strategy(
+    exp_setup.add_experiment(
         name=
         f"H{household_size}_P{pension_start}_Mult{spend_mult}_Dyn{use_dyn_spend}_Rule{rule}",
-        initial_money=float(init_money),
-        initial_loan=0.0,
-        yearly_loan_interest=0.0,
-        initial_asset_ratio={
-            ORUKAN_NAME: 1.0,
-            zr_asset_obj: 0.0
-        },
-        tax_rate=TAX_RATE,
-        rebalance_interval=12,
-        dynamic_rebalance_fn=dynamic_rebalance_fn,
-        selling_priority=[ORUKAN_NAME, ZERO_RISK_NAME],
-        record_annual_spend=True,
-        cashflow_rules=cf_rules)
+        overwrite_lifeplan=new_lifeplan,
+        overwrite_strategy=new_strategy)
 
-    # シミュレーション
-    res = simulate_strategy(strategy,
-                            monthly_prices,
-                            monthly_cashflows=monthly_cashflows)
+  # 3. コンパイルとシミュレーション
+  print(f"全 {len(all_combinations)} パターンのシミュレーションを実行中...")
+  compiled_experiments = create_experiment_setup(exp_setup)
 
-    # 結果の記録
-    base_row: Dict[str, Any] = {
+  results: List[Dict[str, Any]] = []
+
+  # ベースラインをスキップし、オリジナルの組み合わせとジップして結果を処理
+  for i, (exp, (household_size, pension_start, spend_mult, use_dyn_spend,
+            rule)) in enumerate(zip(compiled_experiments[1:], all_combinations)):
+    if i % 10 == 0:
+      print(f"Progress: {i}/{len(all_combinations)}")
+
+    res = simulate_strategy(exp.strategy,
+                            exp.monthly_prices,
+                            monthly_cashflows=exp.monthly_cashflows)
+
+    pension_cost_annual = 20.4 * (2.0 if household_size >= 2 else 1.0)
+    base_spend_annual = (BASE_SPEND_ANNUAL_WO_PENSION + pension_cost_annual)
+    initial_annual_cost = base_spend_annual * spend_mult
+    init_money = initial_annual_cost / (rule / 100.0)
+
+    base_row: Dict[str, Union[float, int, str]] = {
         "household_size": household_size,
         "pension_start_age": pension_start,
         "spend_multiplier": spend_mult,
