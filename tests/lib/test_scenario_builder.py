@@ -286,6 +286,25 @@ def test_compile_assets_cpi_fixed_1_77(baseline_setup):
   assert "Japan_CPI" in compiled[0].monthly_prices
 
 
+def test_compile_assets_simple_7_15_fx(baseline_setup):
+  """SIMPLE_7_15_ORUKAN_FX が FxType に応じて正しく処理されることを確認する。"""
+  # 1. 為替なしの場合
+  baseline_setup.world = replace(baseline_setup.world, fx_type=FxType.NONE)
+  baseline_setup.strategy = replace(
+      baseline_setup.strategy,
+      initial_asset_ratio=((PredefinedStock.SIMPLE_7_15_ORUKAN_FX, 1.0),),
+      selling_priority=(PredefinedStock.SIMPLE_7_15_ORUKAN_FX,))
+  compiled_no_fx = create_experiment_setup(baseline_setup)
+  # 為替アセットが含まれていないことを確認
+  assert not any("USDJPY" in k for k in compiled_no_fx[0].monthly_prices.keys())
+
+  # 2. 為替ありの場合
+  baseline_setup.world = replace(baseline_setup.world, fx_type=FxType.USDJPY)
+  compiled_with_fx = create_experiment_setup(baseline_setup)
+  # 為替アセットが含まれていることを確認
+  assert any("USDJPY" in k for k in compiled_with_fx[0].monthly_prices.keys())
+
+
 def test_compile_assets_sp500_155(baseline_setup):
   """PredefinedStock.SP500_155 が正しく処理されることを確認する。"""
   baseline_setup.strategy = replace(

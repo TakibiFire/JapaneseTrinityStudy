@@ -8,22 +8,16 @@
 3. ドル円のリスク・リターン=0.03%, 10.53%
 4. ドル円のリスク・リターン=0%, 9.18%
 5. 為替リスクなし, オルカンのリスクを15%→18.3%に変更 (合成リスクの検証)
-
-出力ファイル:
-- docs/data/forex/result.md: シミュレーション結果のサマリーテーブル
-- docs/imgs/forex/fx_comp_survival.svg: 生存確率の推移グラフ
-- docs/imgs/forex/fx_comp_distribution.svg: 50年後の資産分布グラフ
 """
 
 import os
-from typing import List, Union
+from dataclasses import replace
 
-from src.core import Strategy, simulate_strategy
-from src.lib.asset_generator import (Asset, CpiAsset, DerivedAsset, ForexAsset,
-                                     YearlyLogNormalArithmetic,
-                                     generate_monthly_asset_prices)
-from src.lib.cashflow_generator import (BaseSpendConfig, CashflowRule,
-                                        CashflowType, generate_cashflows)
+from src.core import simulate_strategy
+from src.lib.scenario_builder import (ConstantSpend, CpiType, FxType, Lifeplan,
+                                      PensionStatus, PredefinedStock, Setup,
+                                      StrategySpec, WorldConfig,
+                                      create_experiment_setup)
 from src.lib.visualize import create_styled_summary, visualize_and_save
 
 
@@ -31,119 +25,61 @@ def main():
   # シミュレーション設定
   n_sim = 5000
   years = 50
-  n_months = years * 12
-  seed = 42
+  start_age = 50
   initial_money = 10000
   annual_cost_base = 400
-  tax_rate_std = 0.20315
-  inflation_rate_std = 0.0177
-  trust_fee_std = 0.0005775
 
-  # 共通のCPI資産
-  cpi_name = "Japan_CPI_1.77pct"
-  cpi_asset = CpiAsset(name=cpi_name,
-                       dist=YearlyLogNormalArithmetic(mu=inflation_rate_std,
-                                                      sigma=0.0))
+  # 1. ビルダーの準備
+  world = WorldConfig(n_sim=n_sim,
+                      n_years=years,
+                      start_age=start_age,
+                      cpi_type=CpiType.FIXED_1_77,
+                      fx_type=FxType.NONE)
+  baseline_lifeplan = Lifeplan(
+      base_spend=ConstantSpend(annual_amount=annual_cost_base),
+      retirement_start_age=start_age,
+      pension_status=PensionStatus.NONE)
+  baseline_strategy = StrategySpec(
+      initial_money=initial_money,
+      initial_asset_ratio=((PredefinedStock.SIMPLE_7_15_ORUKAN_FX, 1.0),),
+      selling_priority=(PredefinedStock.SIMPLE_7_15_ORUKAN_FX,))
 
-  # 1. 資産の定義
-  # 為替と資産のパラメータ設定
-  fx_params = [
-      ("為替リスクなし", 0.0, 0.0),
-      ("ドル円_0_10.53", 0.0, 0.1053),
-      ("ドル円_0.03_10.53", 0.0003, 0.1053),
-      ("ドル円_0_9.18", 0.0, 0.0918),
+  exp_setup = Setup(name="baseline",
+                    world=world,
+                    lifeplan=baseline_lifeplan,
+                    strategy=baseline_strategy)
+
+  # 為替と資産のパラメータ設定 (実験1-4)
+  fx_scenarios = [
+      ("1. 為替リスクなし (= ドル円固定)", FxType.NONE),
+      ("2. ドル円 0%, 10.53%", FxType.USDJPY),
+      ("3. ドル円 0.03%, 10.53%", FxType.USDJPY_MU_003_SIGMA_1053),
+      ("4. ドル円 0%, 9.18%", FxType.USDJPY_SIGMA_918),
   ]
 
-  configs: List[Union[Asset, DerivedAsset, ForexAsset, CpiAsset]] = [cpi_asset]
+  for label, fx in fx_scenarios:
+    new_world = replace(world, fx_type=fx)
+    exp_setup.add_experiment(name=label, overwrite_world=new_world)
 
-  # ベースとなる「オルカン(生)」を定義（為替なし、手数料なし）
-  # これを元に DerivedAsset で為替や手数料を適用する
-  base_stock_name = "BaseStock"
-  configs.append(
-      Asset(name=base_stock_name,
-            dist=YearlyLogNormalArithmetic(mu=0.07, sigma=0.15),
-            trust_fee=0,
-            leverage=1))
+  # 実験5: 合成リスク
+  strategy_5 = StrategySpec(
+      initial_money=initial_money,
+      initial_asset_ratio=((PredefinedStock.SIMPLE_7_18_3_ORUKAN_WITH_FEE,
+                            1.0),),
+      selling_priority=(PredefinedStock.SIMPLE_7_18_3_ORUKAN_WITH_FEE,))
+  exp_setup.add_experiment(name="5. 為替リスクなし, オルカンリスク18.3%",
+                           overwrite_strategy=strategy_5)
 
-  # 各為替設定に対する資産と戦略
-  strategies = []
-
-  for i, (fx_label, mu, sigma) in enumerate(fx_params):
-    fx_name = f"Forex_{i}"
-    configs.append(
-        ForexAsset(name=fx_name,
-                   dist=YearlyLogNormalArithmetic(mu=mu, sigma=sigma)))
-
-    asset_name = f"オルカン_{fx_label}"
-    configs.append(
-        DerivedAsset(name=asset_name,
-                     base=base_stock_name,
-                     trust_fee=trust_fee_std,
-                     forex=fx_name))
-
-    strategy_name = f"{i + 1}. {fx_label}"
-    if fx_label == "為替リスクなし":
-      strategy_name = f"{i + 1}. {fx_label} (= ドル円固定)"
-    elif fx_label == "ドル円_0_10.53":
-      strategy_name = f"{i + 1}. ドル円 0%, 10.53%"
-    elif fx_label == "ドル円_0.03_10.53":
-      strategy_name = f"{i + 1}. ドル円 0.03%, 10.53%"
-    elif fx_label == "ドル円_0_9.18":
-      strategy_name = f"{i + 1}. ドル円 0%, 9.18%"
-
-    # 1. キャッシュフロールールの定義
-    spend_config = BaseSpendConfig(name="生活費",
-                                   amount=annual_cost_base,
-                                   cpi_name=cpi_name)
-    cashflow_rules = [
-        CashflowRule(source_name=spend_config.name,
-                     cashflow_type=CashflowType.REGULAR)
-    ]
-
-    strategies.append(
-        Strategy(name=strategy_name,
-                 initial_money=initial_money,
-                 initial_loan=0,
-                 yearly_loan_interest=2.125 / 100,
-                 initial_asset_ratio={asset_name: 1.0},
-                 cashflow_rules=cashflow_rules,
-                 tax_rate=tax_rate_std,
-                 selling_priority=[asset_name]))
-
-  # 5. 合成リスクの検証用 (為替リスクなし, オルカンリスク18.3%)
-  synth_asset_name = "オルカン_合成リスク18.3%"
-  configs.append(
-      Asset(name=synth_asset_name,
-            dist=YearlyLogNormalArithmetic(mu=0.07, sigma=0.183),
-            trust_fee=trust_fee_std,
-            leverage=1))
-
-  strategies.append(
-      Strategy(name="5. 為替リスクなし, オルカンリスク18.3%",
-               initial_money=initial_money,
-               initial_loan=0,
-               yearly_loan_interest=2.125 / 100,
-               initial_asset_ratio={synth_asset_name: 1.0},
-               cashflow_rules=cashflow_rules,
-               tax_rate=tax_rate_std,
-               selling_priority=[synth_asset_name]))
-
-  # 2. シミュレーションの実行
-  print(f"月次価格の推移を生成中 (パス数: {n_sim})...")
-  monthly_asset_prices = generate_monthly_asset_prices(configs,
-                                                       n_paths=n_sim,
-                                                       n_months=n_months,
-                                                       seed=seed)
-  monthly_cashflows = generate_cashflows([spend_config], monthly_asset_prices,
-                                         n_sim, n_months)
+  # コンパイル
+  compiled_experiments = create_experiment_setup(exp_setup)
 
   results = {}
   print("各戦略のシミュレーションを実行中...")
-  for strategy in strategies:
-    res = simulate_strategy(strategy,
-                            monthly_asset_prices,
-                            monthly_cashflows=monthly_cashflows)
-    results[strategy.name] = res
+  for exp in compiled_experiments:
+    if exp.name == "baseline":
+      continue
+    results[exp.name] = simulate_strategy(exp.strategy, exp.monthly_prices,
+                                          exp.monthly_cashflows)
 
   # 3. 可視化と保存
   img_dir = "docs/imgs/forex"
@@ -181,8 +117,6 @@ def main():
   print(f"✅ {md_file} を作成しました。")
   print(f"✅ {survival_image_file} を作成しました。")
   print(f"✅ {distribution_image_file} を作成しました。")
-  print(f"詳細な結果は {html_file} で確認できます。")
-  print(f"open {html_file}")
 
 
 if __name__ == "__main__":

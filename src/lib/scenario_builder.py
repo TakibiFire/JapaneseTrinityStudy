@@ -59,6 +59,10 @@ class PredefinedStock(Enum):
   ACWI_JSU = auto()
   # 算術平均 7%, 標準偏差 15% のシンプルな対数正規分布モデル（為替なし、信託報酬なし）。
   SIMPLE_7_15_ORUKAN = auto()
+  # 算術平均 7%, 標準偏差 15% のシンプルな対数正規分布モデル（為替あり、信託報酬なし）。
+  SIMPLE_7_15_ORUKAN_FX = auto()
+  # 実験用: 算術平均 7%, 標準偏差 18.3% のシンプルな対数正規分布モデル（為替なし、信託報酬 0.05775% 込）。
+  SIMPLE_7_18_3_ORUKAN_WITH_FEE = auto()
 
 
 class PredefinedZeroRisk(Enum):
@@ -117,6 +121,10 @@ class FxType(Enum):
   USDJPY_LOW_RISK = auto()
   # 修正パラメータのUSD/JPYモデル (mu=0.01, sigma=0.10)。
   USDJPY_MODIFIED = auto()
+  # 実験用: 為替変動 0.03%, ボラティリティ 10.53%
+  USDJPY_MU_003_SIGMA_1053 = auto()
+  # 実験用: 為替変動 0%, ボラティリティ 9.18%
+  USDJPY_SIGMA_918 = auto()
 
 
 class PensionStatus(Enum):
@@ -518,6 +526,10 @@ def _compile_assets(assets: Set[PredefinedAsset],
       mu, sigma = 0.0, 0.05
     elif world.fx_type == FxType.USDJPY_MODIFIED:
       mu, sigma = 0.01, 0.10
+    elif world.fx_type == FxType.USDJPY_MU_003_SIGMA_1053:
+      mu, sigma = 0.0003, 0.1053
+    elif world.fx_type == FxType.USDJPY_SIGMA_918:
+      mu, sigma = 0.0, 0.0918
     else:
       raise ValueError(f"未知の為替タイプです: {world.fx_type}")
 
@@ -603,9 +615,21 @@ def _compile_assets(assets: Set[PredefinedAsset],
                        forex=fx_name))
     elif a == PredefinedStock.SIMPLE_7_15_ORUKAN:
       configs.append(
-          Asset(name="SIMPLE_7_15_ORUKAN",
+          Asset(name=a.name,
                 dist=YearlyLogNormalArithmetic(mu=0.07, sigma=0.15),
                 trust_fee=0.0,
+                forex=None))
+    elif a == PredefinedStock.SIMPLE_7_15_ORUKAN_FX:
+      configs.append(
+          Asset(name=a.name,
+                dist=YearlyLogNormalArithmetic(mu=0.07, sigma=0.15),
+                trust_fee=0.0,
+                forex=fx_name))
+    elif a == PredefinedStock.SIMPLE_7_18_3_ORUKAN_WITH_FEE:
+      configs.append(
+          Asset(name=a.name,
+                dist=YearlyLogNormalArithmetic(mu=0.07, sigma=0.183),
+                trust_fee=0.0005775,
                 forex=None))
     elif isinstance(a, PredefinedZeroRisk):
       # PredefinedZeroRisk はここでは処理しない
