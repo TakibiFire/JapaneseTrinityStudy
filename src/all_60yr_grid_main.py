@@ -34,7 +34,7 @@ import pandas as pd
 
 from src.core import simulate_strategy
 from src.lib.dynamic_rebalance import calculate_safe_target_ratio
-from src.lib.scenario_builder import (ConstantSpend, CpiType,
+from src.lib.scenario_builder import (ConstantSpend, CpiType, CurveSpend,
                                       DynamicV1Adjustment, DynamicV1Rebalance,
                                       FxType, Lifeplan, PensionStatus,
                                       PredefinedStock, PredefinedZeroRisk,
@@ -135,16 +135,16 @@ def main():
     initial_annual_cost = BASE_SPEND_ANNUAL * spend_mult
     init_money = initial_annual_cost / (rule / 100.0)
 
-    new_lifeplan = replace(baseline_lifeplan,
-                           pension_start_age=pension_start,
-                           base_spend=ConstantSpend(
-                               annual_amount=initial_annual_cost))
+    new_lifeplan = replace(
+        baseline_lifeplan,
+        pension_start_age=pension_start,
+        base_spend=CurveSpend(first_year_annual_amount=initial_annual_cost))
 
     new_strategy = replace(
         baseline_strategy,
         initial_money=float(init_money),
         spend_adjustment=DynamicV1Adjustment(
-            target_ratio=rule / 100.0, upper_limit=0.03, lower_limit=0.0)
+            target_ratio=target_ratio, upper_limit=0.03, lower_limit=0.0)
         if use_dyn_spend else None)
 
     exp_setup.add_experiment(
@@ -155,7 +155,8 @@ def main():
 
   # 3. コンパイルとシミュレーション
   print(f"全 {len(all_combinations)} パターンのシミュレーションを実行中...")
-  compiled_experiments = create_experiment_setup(exp_setup)
+  compiled_experiments = create_experiment_setup(exp_setup,
+                                                 record_annual_spend=True)
 
   results: List[Dict[str, Any]] = []
 

@@ -34,7 +34,7 @@ import pandas as pd
 
 from src.core import simulate_strategy
 from src.lib.dynamic_rebalance import calculate_safe_target_ratio
-from src.lib.scenario_builder import (ConstantSpend, CpiType,
+from src.lib.scenario_builder import (ConstantSpend, CpiType, CurveSpend,
                                       DynamicV1Adjustment, DynamicV1Rebalance,
                                       FxType, Lifeplan, PensionStatus,
                                       PredefinedStock, PredefinedZeroRisk,
@@ -141,7 +141,7 @@ def main():
     # 既存のロジックに従った初期資産と初年度支出の計算
     # 国民年金保険料を正の値にする。支払い量は household_sizeに依存。
     # 1人: 20.4万/年, 2人: 40.7万/年
-    pension_cost_annual = 20.4 * (2.0 if household_size >= 2 else 1.0)
+    pension_cost_annual = 21.5 * (2.0 if household_size >= 2 else 1.0)
     # base_spend_annual は2人世帯の50歳の平均的支出。国民年金保険料を含む。
     base_spend_annual = (BASE_SPEND_ANNUAL_WO_PENSION + pension_cost_annual)
     # 初年度支出 (国民年金保険料含む) と初期資産
@@ -154,13 +154,14 @@ def main():
         baseline_lifeplan,
         household_size=household_size,
         pension_start_age=pension_start,
-        base_spend=ConstantSpend(annual_amount=initial_annual_cost_wo_pension))
+        base_spend=CurveSpend(
+            first_year_annual_amount=initial_annual_cost_wo_pension))
 
     new_strategy = replace(
         baseline_strategy,
         initial_money=float(init_money),
         spend_adjustment=DynamicV1Adjustment(
-            target_ratio=rule / 100.0, upper_limit=0.03, lower_limit=0.0)
+            target_ratio=target_ratio, upper_limit=0.03, lower_limit=0.0)
         if use_dyn_spend else None)
 
     exp_setup.add_experiment(
@@ -171,7 +172,8 @@ def main():
 
   # 3. コンパイルとシミュレーション
   print(f"全 {len(all_combinations)} パターンのシミュレーションを実行中...")
-  compiled_experiments = create_experiment_setup(exp_setup)
+  compiled_experiments = create_experiment_setup(exp_setup,
+                                                 record_annual_spend=True)
 
   results: List[Dict[str, Any]] = []
 
@@ -186,7 +188,7 @@ def main():
                             exp.monthly_prices,
                             monthly_cashflows=exp.monthly_cashflows)
 
-    pension_cost_annual = 20.4 * (2.0 if household_size >= 2 else 1.0)
+    pension_cost_annual = 21.5 * (2.0 if household_size >= 2 else 1.0)
     base_spend_annual = (BASE_SPEND_ANNUAL_WO_PENSION + pension_cost_annual)
     initial_annual_cost = base_spend_annual * spend_mult
     init_money = initial_annual_cost / (rule / 100.0)

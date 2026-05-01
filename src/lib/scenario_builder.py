@@ -482,7 +482,7 @@ def _compile_assets(assets: Set[PredefinedAsset],
   configs: List[AssetConfigType] = []
 
   # 1. 為替 (シード値の一貫性のために最初に追加)
-  fx_name = None
+  fx_name: Optional[str] = None
   if world.fx_type != FxType.NONE:
     if world.fx_type == FxType.USDJPY:
       mu, sigma = 0.0, 0.1053
@@ -661,6 +661,7 @@ def _compile_lifeplan(lp: Lifeplan, world: WorldConfig) -> _CompiledLifeplan:
     # 22歳から retirement_start_age まで厚生年金に加入、年収500万を想定
     kousei_unit_annual = 2.736
     kiso_full_annual = 81.6
+    # 国民年金保険料 (FY2026 value is 17,920/mo = ~21.5万円/yr)
     premium_annual = 21.5
 
     # 1. 保険料支払い (60歳まで)
