@@ -20,37 +20,21 @@
 成功判定の定義:
 1. 破産せずにシミュレーション期間（50年間）を終える
 2. シミュレーション期間中に死亡する (死亡＝成功)
-
-TODO:
-
-Regarding the regression in `mortality_comp_main.py`:
-
-My hypothesis is that the **random number sequence for mortality draws has shifted**. 
-
-In `mortality_comp_main.py`, `MortalityConfig` uses the global `np.random.rand()` state. This state is whatever remains after `generate_monthly_asset_prices` (which sets `SEED=42`) is called. If there has been *any* change in the number of random draws during asset generation (even if the assets themselves look the same), the sequence of "who dies when" will shift.
-
-Because death in this script is marked by a massive 100億円 payout (`payout=1000000.0`), even a small shift in *when* or *if* a few paths die will cause:
-1.  **Significant jumps in Median Assets** (as seen in the diff: 378億円 -> 357億円), because the median is heavily influenced by these artificial payouts.
-2.  **Small changes in Survival Probability**, as different paths are now being "saved" by death at different times.
-
-Since the logic of `ISOLATED` correctly mirrors the old engine's behavior of excluding extra cashflows from the core spending calculations, this shift in results is likely an artifact of the simulation's sensitivity to the random state rather than a logic error.
 """
 
 import os
-from typing import Dict, List, Union
+from dataclasses import replace
+from typing import Dict, List
 
 import altair as alt
 import numpy as np
 import pandas as pd
 
-from src.core import Strategy, simulate_strategy
-from src.lib.asset_generator import (Asset, CpiAsset, ForexAsset,
-                                     YearlyLogNormalArithmetic,
-                                     generate_monthly_asset_prices)
-from src.lib.cashflow_generator import (BaseSpendConfig, CashflowConfig,
-                                        CashflowRule, CashflowType,
-                                        MortalityConfig, generate_cashflows)
-from src.lib.life_table import FEMALE_MORTALITY_RATES, MALE_MORTALITY_RATES
+from src.core import simulate_strategy
+from src.lib.scenario_builder import (ConstantSpend, CpiType, FxType, Gender,
+                                      Lifeplan, PensionStatus, PredefinedStock,
+                                      Setup, StrategySpec, WorldConfig,
+                                      create_experiment_setup)
 from src.lib.visualize import (create_styled_summary,
                                create_survival_probability_chart)
 
@@ -59,143 +43,110 @@ IMG_DIR = "docs/imgs/mortality/"
 DATA_DIR = "docs/data/mortality/"
 
 
-def run_simulation_for_gender(gender: str, mortality_rates: List[float],
-                              monthly_prices: Dict, common_params: Dict):
-  N_SIM = common_params['N_SIM']
-  YEARS = common_params['YEARS']
-  INITIAL_MONEY = common_params['INITIAL_MONEY']
-  ANNUAL_COST = common_params['ANNUAL_COST']
-  TAX_RATE = common_params['TAX_RATE']
-  ACWI_NAME = common_params['ACWI_NAME']
-  CPI_NAME = common_params['CPI_NAME']
-
-  start_ages = [40, 50, 60, 70]
-  results = {}
-
-  for age in start_ages:
-    print(f"[{gender}] 開始年齢 {age} 歳のシミュレーションを実行中...")
-
-    # 1. キャッシュフロールールの定義
-    spend_config = BaseSpendConfig(name="生活費",
-                                   amount=ANNUAL_COST,
-                                   cpi_name=CPI_NAME)
-    mortality_config = MortalityConfig(name=f"Mortality_{gender}_{age}",
-                                       mortality_rates=mortality_rates,
-                                       initial_age=age,
-                                       payout=1000000.0)
-
-    monthly_cashflows = generate_cashflows([spend_config, mortality_config],
-                                           monthly_prices,
-                                           n_sim=N_SIM,
-                                           n_months=YEARS * 12)
-
-    # 2. 戦略(Plan)の定義
-    base_rules = [
-        CashflowRule(source_name=spend_config.name,
-                     cashflow_type=CashflowType.REGULAR)
-    ]
-    mortality_rules = base_rules + [
-        CashflowRule(source_name=mortality_config.name,
-                     cashflow_type=CashflowType.EXTRAORDINARY)
-    ]
-
-    s_off = Strategy(name=f"{gender}_Age{age}_OFF",
-                     initial_money=INITIAL_MONEY,
-                     initial_loan=0.0,
-                     yearly_loan_interest=0.0,
-                     initial_asset_ratio={ACWI_NAME: 1.0},
-                     cashflow_rules=base_rules,
-                     tax_rate=TAX_RATE,
-                     selling_priority=[ACWI_NAME],
-                     rebalance_interval=12)
-
-    s_on = Strategy(name=f"{gender}_Age{age}_ON",
-                    initial_money=INITIAL_MONEY,
-                    initial_loan=0.0,
-                    yearly_loan_interest=0.0,
-                    initial_asset_ratio={ACWI_NAME: 1.0},
-                    cashflow_rules=mortality_rules,
-                    tax_rate=TAX_RATE,
-                    selling_priority=[ACWI_NAME],
-                    rebalance_interval=12)
-
-    results[s_off.name] = simulate_strategy(s_off,
-                                            monthly_prices,
-                                            monthly_cashflows=monthly_cashflows)
-    results[s_on.name] = simulate_strategy(s_on,
-                                           monthly_prices,
-                                           monthly_cashflows=monthly_cashflows)
-
-  return results
-
-
 def main():
   # 共通設定
-  N_SIM = 5000
-  YEARS = 50
-  SEED = 42
-  INITIAL_MONEY = 10000.0
-  ANNUAL_COST = 400.0
-  TAX_RATE = 0.20315
-  FEE_ACWI = 0.0005775
-  INFLATION_RATE = 0.0177
-
-  CPI_NAME = "Japan_CPI_1.77pct"
-  FX_NAME = "USDJPY_0_10.53"
-  ACWI_NAME = "オルカン"
-
-  common_params = {
-      'N_SIM': N_SIM,
-      'YEARS': YEARS,
-      'INITIAL_MONEY': INITIAL_MONEY,
-      'ANNUAL_COST': ANNUAL_COST,
-      'TAX_RATE': TAX_RATE,
-      'ACWI_NAME': ACWI_NAME,
-      'CPI_NAME': CPI_NAME
-  }
+  n_sim = 5000
+  years = 50
+  seed = 42
+  initial_money = 10000.0
+  annual_cost = 400.0
 
   os.makedirs(IMG_DIR, exist_ok=True)
   os.makedirs(DATA_DIR, exist_ok=True)
 
-  # 1. アセット生成
-  assets: List[Union[Asset, ForexAsset, CpiAsset]] = [
-      ForexAsset(name=FX_NAME,
-                 dist=YearlyLogNormalArithmetic(mu=0.0, sigma=0.1053)),
-      Asset(name=ACWI_NAME,
-            dist=YearlyLogNormalArithmetic(mu=0.07, sigma=0.15),
-            trust_fee=FEE_ACWI,
-            forex=FX_NAME),
-      CpiAsset(name=CPI_NAME,
-               dist=YearlyLogNormalArithmetic(mu=INFLATION_RATE, sigma=0.0))
-  ]
+  # 1. 宣言型APIによるシナリオ構築
+  baseline_world = WorldConfig(n_sim=n_sim,
+                               n_years=years,
+                               start_age=40,
+                               seed=seed,
+                               cpi_type=CpiType.FIXED_1_77,
+                               fx_type=FxType.USDJPY)
 
-  print(f"月次価格推移を生成中 (n_sim={N_SIM}, years={YEARS})...")
-  monthly_prices = generate_monthly_asset_prices(assets,
-                                                 n_paths=N_SIM,
-                                                 n_months=YEARS * 12,
-                                                 seed=SEED)
+  baseline_lifeplan = Lifeplan(
+      retirement_start_age=40,
+      base_spend=ConstantSpend(annual_amount=annual_cost),
+      pension_status=PensionStatus.NONE,
+      mortality_gender=None)
 
-  # 2. シミュレーション実行
-  male_results = run_simulation_for_gender("Male", MALE_MORTALITY_RATES,
-                                           monthly_prices, common_params)
-  female_results = run_simulation_for_gender("Female", FEMALE_MORTALITY_RATES,
-                                             monthly_prices, common_params)
+  baseline_strategy = StrategySpec(
+      initial_money=initial_money,
+      initial_asset_ratio=((PredefinedStock.ORUKAN_155, 1.0),),
+      selling_priority=(PredefinedStock.ORUKAN_155,),
+      rebalance=None,
+      spend_adjustment=None)
+
+  exp_setup = Setup(name="baseline",
+                    world=baseline_world,
+                    lifeplan=baseline_lifeplan,
+                    strategy=baseline_strategy)
+
+  start_ages = [40, 50, 60, 70]
+  for age in start_ages:
+    # 男性
+    # 死亡率考慮なし
+    exp_setup.add_experiment(name=f"Male_Age{age}_OFF",
+                             overwrite_world=replace(baseline_world,
+                                                     start_age=age),
+                             overwrite_lifeplan=replace(
+                                 baseline_lifeplan,
+                                 retirement_start_age=age,
+                                 mortality_gender=None))
+    # 死亡率考慮あり
+    exp_setup.add_experiment(name=f"Male_Age{age}_ON",
+                             overwrite_world=replace(baseline_world,
+                                                     start_age=age),
+                             overwrite_lifeplan=replace(
+                                 baseline_lifeplan,
+                                 retirement_start_age=age,
+                                 mortality_gender=Gender.MALE))
+
+    # 女性
+    # 死亡率考慮なし
+    exp_setup.add_experiment(name=f"Female_Age{age}_OFF",
+                             overwrite_world=replace(baseline_world,
+                                                     start_age=age),
+                             overwrite_lifeplan=replace(
+                                 baseline_lifeplan,
+                                 retirement_start_age=age,
+                                 mortality_gender=None))
+    # 死亡率考慮あり
+    exp_setup.add_experiment(name=f"Female_Age{age}_ON",
+                             overwrite_world=replace(baseline_world,
+                                                     start_age=age),
+                             overwrite_lifeplan=replace(
+                                 baseline_lifeplan,
+                                 retirement_start_age=age,
+                                 mortality_gender=Gender.FEMALE))
+
+  # 2. コンパイルと実行
+  compiled_experiments = create_experiment_setup(exp_setup)
+
+  results = {}
+  print("シミュレーションを実行中...")
+  # ベースラインは結果に含めない
+  for exp in compiled_experiments[1:]:
+    results[exp.name] = simulate_strategy(
+        exp.strategy,
+        exp.monthly_prices,
+        monthly_cashflows=exp.monthly_cashflows)
 
   # 3. 可視化とデータ保存
 
   # 全結果のサマリー
-  all_results = {**male_results, **female_results}
-  formatted_df, _ = create_styled_summary(all_results,
+  formatted_df, _ = create_styled_summary(results,
                                           bankruptcy_years=[10, 20, 30, 40, 50])
   with open(os.path.join(DATA_DIR, "result.md"), "w", encoding="utf-8") as f:
     f.write(formatted_df.to_markdown())
 
   # 比較チャート作成
-  create_comparison_chart(male_results, "male", YEARS)
-  create_comparison_chart(female_results, "female", YEARS)
+  male_results = {k: v for k, v in results.items() if k.startswith("Male")}
+  female_results = {k: v for k, v in results.items() if k.startswith("Female")}
+
+  create_comparison_chart(male_results, "male", years)
+  create_comparison_chart(female_results, "female", years)
 
   # ヒートマップ作成
-  create_combined_heatmaps(male_results, female_results, [40, 50, 60, 70])
+  create_combined_heatmaps(male_results, female_results, start_ages)
 
   print(f"完了。結果を {DATA_DIR} と {IMG_DIR} に保存しました。")
 
@@ -211,6 +162,8 @@ def create_comparison_chart(results: Dict, gender_label: str, years: int):
 
   plot_data = []
   for original_name, japanese_name in target_strategies.items():
+    if original_name not in results:
+      continue
     res = results[original_name]
     sustained = res.sustained_months
     for y in range(years + 1):
@@ -220,6 +173,9 @@ def create_comparison_chart(results: Dict, gender_label: str, years: int):
           'Strategy': japanese_name,
           'Survival Probability (%)': survival_rate
       })
+
+  if not plot_data:
+    return
 
   df_plot = pd.DataFrame(plot_data)
 
