@@ -559,14 +559,42 @@ def test_create_experiment_setup_resolves_spend_aware_dp_rebalance(
     assert compiled[0].strategy.dynamic_rebalance_fn is not None
 
 
-def test_create_experiment_setup_resolves_dynamic_v1_adjustment(baseline_setup):
-  """DynamicV1Adjustment が動的支出ハンドラを注入することを確認する。"""
+def test_create_experiment_setup_resolves_dynamic_v1_adjustment_default_spend(
+    baseline_setup):
+  """DynamicV1Adjustment が指定されない場合、ライフプランの初期支出額を基準にすることを確認する。"""
   baseline_setup.strategy = replace(
       baseline_setup.strategy,
       spend_adjustment=DynamicV1Adjustment(target_ratio=0.04))
   compiled = create_experiment_setup(baseline_setup)
-  assert len(compiled) == 1
-  assert compiled[0].strategy.cashflow_rules[0].dynamic_handler is not None
+  handler = compiled[0].strategy.cashflow_rules[0].dynamic_handler
+  from src.core import DynamicSpending
+  assert isinstance(handler, DynamicSpending)
+  # ConstantSpend(480) なので、handler の初期支出も 480 になるはず
+  assert handler.initial_annual_spend == 480.0
+
+
+def test_create_experiment_setup_resolves_dynamic_v1_adjustment_with_initial_spend(
+    baseline_setup):
+  """DynamicV1Adjustment が指定された initial_annual_spend を注入することを確認する。"""
+  baseline_setup.strategy = replace(
+      baseline_setup.strategy,
+      spend_adjustment=DynamicV1Adjustment(target_ratio=0.04,
+                                           initial_annual_spend=123.45))
+  compiled = create_experiment_setup(baseline_setup)
+  handler = compiled[0].strategy.cashflow_rules[0].dynamic_handler
+  from src.core import DynamicSpending
+  assert isinstance(handler, DynamicSpending)
+  assert handler.initial_annual_spend == 123.45
+
+
+def test_create_experiment_setup_with_record_annual_spend(baseline_setup):
+  """create_experiment_setup の record_annual_spend フラグが Strategy に伝播することを確認する。"""
+  compiled = create_experiment_setup(baseline_setup, record_annual_spend=True)
+  assert compiled[0].strategy.record_annual_spend is True
+
+  compiled_false = create_experiment_setup(baseline_setup,
+                                           record_annual_spend=False)
+  assert compiled_false[0].strategy.record_annual_spend is False
 
 
 def test_create_experiment_setup_resolves_spend_aware_adjustment(
@@ -592,9 +620,9 @@ def test_create_experiment_setup_resolves_spend_aware_adjustment(
     assert isinstance(handler, SpendAwareDynamicSpending)
     # 統計データのカーブが渡されていることを確認 (Constant 1.0 ではないはず)
     assert len(handler.annual_cost_real) == baseline_setup.world.n_years
-    assert not np.allclose(handler.annual_cost_real, 1.0)
-    # 最初の要素は正規化されているので 1.0
-    assert np.isclose(handler.annual_cost_real[0], 1.0)
+    assert not np.allclose(handler.annual_cost_real, 480.0)
+    # 最初の要素は指定した 480.0 にスケーリングされているはず
+    assert np.isclose(handler.annual_cost_real[0], 480.0)
 
 
 def test_compile_lifeplan_curve_spend_no_normalization(baseline_setup):
@@ -661,7 +689,7 @@ def test_unhandled_enum_values(baseline_setup):
     from src.lib.scenario_builder import _ExperimentVariant
     v = _ExperimentVariant("bad", baseline_setup.lifeplan, bad_strategy,
                            baseline_setup.world)
-    _build_strategy(v, {"BaseSpend": "bs"}, {}, {}, np.ones(10))
+    _build_strategy(v, {"BaseSpend": "bs"}, {}, {}, np.ones(10), False)
 
   # 6. PredefinedZeroRisk in dr_fn
   with pytest.raises(ValueError, match="リバランスの振り分け先に指定できない資産です"):
@@ -671,7 +699,7 @@ def test_unhandled_enum_values(baseline_setup):
     v = _ExperimentVariant("bad_reb", baseline_setup.lifeplan, bad_strategy,
                            baseline_setup.world)
     compiled_strat = _build_strategy(v, {"BaseSpend": "bs"}, {}, {},
-                                     np.ones(10))
+                                     np.ones(10), False)
     # ここで dr_fn を実行する必要がある
     dr_fn = compiled_strat.dynamic_rebalance_fn
     assert dr_fn is not None
@@ -684,7 +712,7 @@ def test_unhandled_enum_values(baseline_setup):
                            selling_priority=(invalid_asset,))
     v = _ExperimentVariant("bad_priority", baseline_setup.lifeplan,
                            bad_strategy, baseline_setup.world)
-    _build_strategy(v, {"BaseSpend": "bs"}, {}, {}, np.ones(10))
+    _build_strategy(v, {"BaseSpend": "bs"}, {}, {}, np.ones(10), False)
 
   # 8. Invalid BaseSpend
   with pytest.raises(ValueError, match="未知の支出タイプです"):
@@ -700,7 +728,7 @@ def test_unhandled_enum_values(baseline_setup):
                            spend_adjustment=invalid_adj)
     v = _ExperimentVariant("bad_adj", baseline_setup.lifeplan, bad_strategy,
                            baseline_setup.world)
-    _build_strategy(v, {"BaseSpend": "bs"}, {}, {}, np.ones(10))
+    _build_strategy(v, {"BaseSpend": "bs"}, {}, {}, np.ones(10), False)
 
 
 def from_setup_to_variant(setup: Setup):

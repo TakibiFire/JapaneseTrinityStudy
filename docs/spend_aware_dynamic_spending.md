@@ -5,6 +5,11 @@ DO NOT DELETE:
 
 python3 src/spend_aware_dynamic_spending_grid_main.py --exp_name v1_v2_comp
 python3 src/analyze_spend_aware_dynamic_spending_main.py --exp_name v1_v2_comp
+
+Debug:
+src/investigate_dsv1_dsv2.py
+
+TODO: This file needs to be rewritten because the bug was found.
 -->
 
 [ライフプランに基づく動的資産配分（進化版ダイナミックリバランス）](spend_aware_dynamic_rebalance.md)では、全世界株式（オルカン）と無リスク資産の配分を「将来の支出や収入に合わせて」さらに最適化する手法を紹介しました。その副産物としてシミュレーションを全部行わなくても将来の生存確率を予測できる関数を手に入れました。

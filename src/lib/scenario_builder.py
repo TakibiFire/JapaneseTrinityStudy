@@ -141,6 +141,8 @@ class DynamicV1Adjustment:
   upper_limit: float = 0.01
   # 前年のインフレ調整後支出に対する最大減少率。
   lower_limit: float = -0.015
+  # 初期年額引き出し額。指定がない場合は初期支出額が使用されます。
+  initial_annual_spend: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -380,7 +382,9 @@ class CompiledExperiment:
   monthly_cashflows: Dict[str, np.ndarray]
 
 
-def create_experiment_setup(setup: Setup) -> List[CompiledExperiment]:
+def create_experiment_setup(
+    setup: Setup,
+    record_annual_spend: bool = False) -> List[CompiledExperiment]:
   """
   Setup 宣言を受け取り、重複する計算を排除しながら、各実験に対応する実行可能な CompiledExperiment のリストを生成する。
   """
@@ -460,7 +464,8 @@ def create_experiment_setup(setup: Setup) -> List[CompiledExperiment]:
     cf_map = lp_cf_names_dict[s.lifeplan]
     real_cost = lp_real_cost_dict[s.lifeplan]
 
-    strategy = _build_strategy(s, cf_map, prices, cashflows, real_cost)
+    strategy = _build_strategy(s, cf_map, prices, cashflows, real_cost,
+                               record_annual_spend)
     compiled_experiments.append(
         CompiledExperiment(name=s.name,
                            strategy=strategy,
@@ -501,11 +506,10 @@ def _compile_assets(assets: Set[PredefinedAsset],
       added_base_assets.add("Base_SP500_155y")
 
   # ORUKAN_155, ACWI_JSU, ACWI_18Y は Base_ACWI_Approx に依存
-  if any(a in assets
-         for a in [
-             PredefinedStock.ORUKAN_155, PredefinedStock.ACWI_JSU,
-             PredefinedStock.ACWI_18Y
-         ]):
+  if any(a in assets for a in [
+      PredefinedStock.ORUKAN_155, PredefinedStock.ACWI_JSU,
+      PredefinedStock.ACWI_18Y
+  ]):
     ensure_base_sp500_155y()
     base = get_acwi_fat_tail_config(AcwiModelKey.BASE_ACWI_APPROX)
     if base.name not in added_base_assets:
@@ -635,8 +639,8 @@ def _compile_lifeplan(lp: Lifeplan, world: WorldConfig) -> _CompiledLifeplan:
         BaseSpendConfig(name="BaseSpend",
                         amount=lp.base_spend.annual_amount,
                         cpi_name=cpi_name))
-    # ConstantSpend の場合、実質コストのカーブは全期間 1.0 (ベース額に対する倍率)
-    real_cost_curve = np.ones(world.n_years)
+    # ConstantSpend の場合、実質コストのカーブは全期間 annual_amount
+    real_cost_curve = np.full(world.n_years, lp.base_spend.annual_amount)
   elif isinstance(lp.base_spend, CurveSpend):
     multipliers = get_retired_spending_multipliers(
         spending_types=list(lp.base_spend.spending_types),
@@ -648,7 +652,7 @@ def _compile_lifeplan(lp: Lifeplan, world: WorldConfig) -> _CompiledLifeplan:
         BaseSpendConfig(name="BaseSpend",
                         amount=(multipliers * base_amount).tolist(),
                         cpi_name=cpi_name))
-    real_cost_curve = multipliers
+    real_cost_curve = multipliers * base_amount
   else:
     raise ValueError(f"未知の支出タイプです: {lp.base_spend}")
 
@@ -758,7 +762,8 @@ def _compile_lifeplan(lp: Lifeplan, world: WorldConfig) -> _CompiledLifeplan:
 def _build_strategy(variant: _ExperimentVariant, cf_map: Dict[str, str],
                     prices: Dict[str, np.ndarray], cashflows: Dict[str,
                                                                    np.ndarray],
-                    annual_cost_real: np.ndarray) -> Strategy:
+                    annual_cost_real: np.ndarray,
+                    record_annual_spend: bool) -> Strategy:
   """_ExperimentVariant から Strategy オブジェクトを構築する。"""
   spec = variant.strategy
   world = variant.world
@@ -885,8 +890,11 @@ def _build_strategy(variant: _ExperimentVariant, cf_map: Dict[str, str],
       if rule.source_name == base_spend_rule_name:
         handler: CashflowDynamicHandler
         if isinstance(spec.spend_adjustment, DynamicV1Adjustment):
+          init_spend = spec.spend_adjustment.initial_annual_spend
+          if init_spend is None:
+            init_spend = float(annual_cost_real[0])
           handler = DynamicSpending(
-              initial_annual_spend=0,
+              initial_annual_spend=init_spend,
               target_ratio=spec.spend_adjustment.target_ratio,
               upper_limit=spec.spend_adjustment.upper_limit,
               lower_limit=spec.spend_adjustment.lower_limit)
@@ -914,4 +922,7 @@ def _build_strategy(variant: _ExperimentVariant, cf_map: Dict[str, str],
                   tax_rate=world.tax_rate,
                   rebalance_interval=rebalance_interval,
                   dynamic_rebalance_fn=dynamic_rebalance_fn,
+                  record_annual_spend=record_annual_spend,
+                  initial_prev_net_reg_spend=0.0,
+                  initial_prev_gross_reg_spend=0.0,
                   cashflow_rules=rules)
