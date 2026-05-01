@@ -593,7 +593,7 @@ def _compile_assets(assets: Set[PredefinedAsset],
                        forex=fx_name))
     elif a == PredefinedStock.SIMPLE_7_15_ORUKAN:
       configs.append(
-          Asset(name="オルカン",
+          Asset(name="SIMPLE_7_15_ORUKAN",
                 dist=YearlyLogNormalArithmetic(mu=0.07, sigma=0.15),
                 trust_fee=0.0,
                 forex=None))
@@ -811,10 +811,7 @@ def _build_strategy(variant: _ExperimentVariant, cf_map: Dict[str, str],
     elif asset_enum == PredefinedZeroRisk.ZERO_RISK_4PCT:
       ratio_dict[ZeroRiskAsset("ZERO_RISK_4PCT", 0.04)] = ratio
     elif isinstance(asset_enum, PredefinedStock):
-      if asset_enum == PredefinedStock.SIMPLE_7_15_ORUKAN:
-        ratio_dict["オルカン"] = ratio
-      else:
-        ratio_dict[asset_enum.name] = ratio
+      ratio_dict[asset_enum.name] = ratio
     else:
       raise ValueError(f"未知の資産タイプです: {asset_enum}")
 
@@ -826,10 +823,7 @@ def _build_strategy(variant: _ExperimentVariant, cf_map: Dict[str, str],
     elif a == PredefinedZeroRisk.ZERO_RISK_4PCT:
       priority.append("ZERO_RISK_4PCT")
     elif isinstance(a, PredefinedStock):
-      if a == PredefinedStock.SIMPLE_7_15_ORUKAN:
-        priority.append("オルカン")
-      else:
-        priority.append(a.name)
+      priority.append(a.name)
     else:
       raise ValueError(f"未知の資産タイプです: {a}")
 

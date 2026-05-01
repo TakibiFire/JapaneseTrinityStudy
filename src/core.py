@@ -586,7 +586,11 @@ def simulate_strategy(strategy: Strategy,
           price_for_sell = local_monthly_asset_prices[name][reb_paths, m + 1]
           current_units = units[name]
           current_asset_val = current_units[reb_paths] * price_for_sell
-          diff = current_asset_val - total_net * target_ratios[name]
+          try:
+            diff = current_asset_val - total_net * target_ratios[name]
+          except KeyError as e:
+            print(f"target_ratios={target_ratios}")
+            raise e
           sell_mask = diff > 1e-8
           if np.any(sell_mask):
             sell_idx = np.where(reb_paths)[0][sell_mask]

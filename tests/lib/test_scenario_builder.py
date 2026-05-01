@@ -762,7 +762,7 @@ def test_compile_assets_additional_models(baseline_setup):
     compiled = create_experiment_setup(baseline_setup)
 
     if model == PredefinedStock.SIMPLE_7_15_ORUKAN:
-      assert "オルカン" in compiled[0].monthly_prices
+      assert "SIMPLE_7_15_ORUKAN" in compiled[0].monthly_prices
     else:
       assert model.name in compiled[0].monthly_prices
 
