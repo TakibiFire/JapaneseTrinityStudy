@@ -13,14 +13,16 @@
 """
 
 import os
-from typing import Dict, List, Union
+from dataclasses import replace
+from typing import Dict, List, Tuple, Union
 
-from src.core import Strategy, ZeroRiskAsset, simulate_strategy
-from src.lib.asset_generator import (Asset, CpiAsset, ForexAsset,
-                                     YearlyLogNormalArithmetic,
-                                     generate_monthly_asset_prices)
-from src.lib.cashflow_generator import (BaseSpendConfig, CashflowRule,
-                                        CashflowType, generate_cashflows)
+from src.core import simulate_strategy
+from src.lib.scenario_builder import (ConstantSpend, CpiType,
+                                      DynamicV1Rebalance, FixedRebalance,
+                                      Lifeplan, PensionStatus, PredefinedAsset,
+                                      PredefinedStock, PredefinedZeroRisk,
+                                      Setup, StrategySpec, WorldConfig,
+                                      create_experiment_setup)
 from src.lib.visualize import create_styled_summary, visualize_and_save
 
 
@@ -28,91 +30,72 @@ def main():
   # シミュレーション設定
   n_sim = 5000
   years = 50
-  seed = 42
+  start_age = 50
   initial_money = 10000
   annual_cost_base = 400
-  tax_rate = 0.20315
-  inflation_rate_std = 0.0177
-  fee_acwi = 0.0005775
-  zero_risk_yield = 0.04
 
-  # 共通アセット名
-  cpi_name = "Japan_CPI_1.77pct"
-  fx_name = "USDJPY_0_10.53"
-  acwi_name = "オルカン"
-  zero_risk_asset_name = "無リスク資産(4%)"
+  # 1. シナリオビルダーの準備
+  world = WorldConfig(n_sim=n_sim,
+                      n_years=years,
+                      start_age=start_age,
+                      cpi_type=CpiType.FIXED_1_77)
+  baseline_lifeplan = Lifeplan(
+      base_spend=ConstantSpend(annual_amount=annual_cost_base),
+      retirement_start_age=start_age,
+      pension_status=PensionStatus.NONE)
+  # baseline_strategy は実験ごとに大きく変わるので、ここではプレースホルダ
+  baseline_strategy = StrategySpec(
+      initial_money=initial_money,
+      initial_asset_ratio=((PredefinedStock.SIMPLE_7_15_ORUKAN, 1.0),),
+      selling_priority=(PredefinedStock.SIMPLE_7_15_ORUKAN,))
 
-  # 資産モデル設定
-  ork_dist = YearlyLogNormalArithmetic(mu=0.07, sigma=0.15)
-  fx_dist = YearlyLogNormalArithmetic(mu=0.0, sigma=0.1053)
-
-  # 1. 価格推移の生成
-  assets: List[Union[Asset, ForexAsset, CpiAsset]] = [
-      ForexAsset(name=fx_name, dist=fx_dist),
-      Asset(name=acwi_name, dist=ork_dist, trust_fee=fee_acwi, forex=fx_name),
-      CpiAsset(name=cpi_name,
-               dist=YearlyLogNormalArithmetic(mu=inflation_rate_std, sigma=0.0))
-  ]
-
-  print("月次価格の推移を生成中...")
-  monthly_asset_prices = generate_monthly_asset_prices(assets,
-                                                       n_paths=n_sim,
-                                                       n_months=years * 12,
-                                                       seed=seed)
-
-  zero_risk_asset = ZeroRiskAsset(name=zero_risk_asset_name,
-                                  yield_rate=zero_risk_yield)
-
-  def run_experiment(exp_name: str, exp_title: str, test_cases: List[tuple]):
+  def run_experiment(exp_name: str,
+                     exp_title: str,
+                     test_cases: List[tuple],
+                     is_dynamic: bool = False):
     """
     指定されたテストケースでシミュレーションを実行し、結果を保存する。
-    
-    Args:
-        exp_name: 実験の識別名
-        exp_title: 実験のタイトル
-        test_cases: (オルカン比率, リバランス間隔, 売却順序, ラベル) のリスト
     """
-    # 1. キャッシュフロールールの定義
-    spend_config = BaseSpendConfig(name="生活費",
-                                   amount=annual_cost_base,
-                                   cpi_name=cpi_name)
-    cashflow_rules = [
-        CashflowRule(source_name=spend_config.name,
-                     cashflow_type=CashflowType.REGULAR)
-    ]
-    monthly_cashflows = generate_cashflows([spend_config], monthly_asset_prices,
-                                           n_sim, years * 12)
+    exp_setup = Setup(name="baseline",
+                      world=world,
+                      lifeplan=baseline_lifeplan,
+                      strategy=baseline_strategy)
 
-    # 2. 戦略(Plan)の定義
-    strategies = []
-    for stock_ratio, interval, selling_priority, label in test_cases:
+    for stock_ratio, interval, selling_priority_enums, label in test_cases:
       zr_ratio = 1.0 - stock_ratio
-
-      initial_asset_ratio: Dict[Union[str, ZeroRiskAsset], float] = {
-          acwi_name: stock_ratio
-      }
+      ratios: List[Tuple[PredefinedAsset, float]] = []
+      if stock_ratio > 0:
+        ratios.append((PredefinedStock.SIMPLE_7_15_ORUKAN, stock_ratio))
       if zr_ratio > 0:
-        initial_asset_ratio[zero_risk_asset] = zr_ratio
+        ratios.append((PredefinedZeroRisk.ZERO_RISK_4PCT, zr_ratio))
 
-      strategies.append(
-          Strategy(name=label,
-                   initial_money=initial_money,
-                   initial_loan=0,
-                   yearly_loan_interest=0.0,
-                   initial_asset_ratio=initial_asset_ratio,
-                   cashflow_rules=cashflow_rules,
-                   tax_rate=tax_rate,
-                   selling_priority=selling_priority,
-                   rebalance_interval=interval))
+      rebalance: Union[FixedRebalance, DynamicV1Rebalance, None] = None
+      if interval > 0:
+        if is_dynamic:
+          rebalance = DynamicV1Rebalance(
+              risky_asset=PredefinedStock.SIMPLE_7_15_ORUKAN,
+              zero_risk_asset=PredefinedZeroRisk.ZERO_RISK_4PCT,
+              interval_months=interval)
+        else:
+          rebalance = FixedRebalance(interval_months=interval)
 
-    # 3. シミュレーションの実行
+      new_strategy = StrategySpec(
+          initial_money=initial_money,
+          initial_asset_ratio=tuple(ratios),
+          selling_priority=tuple(selling_priority_enums),
+          rebalance=rebalance)
+      exp_setup.add_experiment(name=label, overwrite_strategy=new_strategy)
+
+    # コンパイル
+    compiled_experiments = create_experiment_setup(exp_setup)
+
     results = {}
     print(f"[{exp_title}] 各戦略のシミュレーションを実行中...")
-    for strategy in strategies:
-      res = simulate_strategy(strategy,
-                              monthly_asset_prices,
-                              monthly_cashflows=monthly_cashflows)
-      results[strategy.name] = res
+    for exp in compiled_experiments:
+      if exp.name == "baseline":
+        continue
+      results[exp.name] = simulate_strategy(exp.strategy, exp.monthly_prices,
+                                            exp.monthly_cashflows)
 
     # 可視化と保存
     img_dir = "docs/imgs/zero_risk_rebalance"
@@ -152,17 +135,23 @@ def main():
     print(f"✅ {distribution_image_file} を作成しました。")
 
   # 実験1: リバランスの有無と資産比率
-  # (オルカン比率, リバランス間隔, 売却順序, ラベル)
-  priority_zr_s = [zero_risk_asset_name, acwi_name]
+  # (オルカン比率, リバランス間隔, 売却順序Enums, ラベル)
+  priority_zr_s = [
+      PredefinedZeroRisk.ZERO_RISK_4PCT, PredefinedStock.SIMPLE_7_15_ORUKAN
+  ]
 
+  # 実験1の「リバ毎年」は FixedRebalance
   exp1_cases = [
-      (1.0, 0, [acwi_name], "オルカン 100%"),
+      (1.0, 0, [PredefinedStock.SIMPLE_7_15_ORUKAN], "オルカン 100%"),
       (0.8, 0, priority_zr_s, "80% リバなし"),
       (0.8, 12, priority_zr_s, "80% リバ毎年"),
       (0.6, 0, priority_zr_s, "60% リバなし"),
       (0.6, 12, priority_zr_s, "60% リバ毎年"),
   ]
-  run_experiment("rebalance_effect", "実験1: リバランスの有無と資産比率", exp1_cases)
+  run_experiment("rebalance_effect",
+                 "実験1: リバランスの有無と資産比率",
+                 exp1_cases,
+                 is_dynamic=False)
 
   # 実験2: リバランスの頻度による影響
   # 売却順序は「無リスク資産を先に使う」で固定
@@ -175,7 +164,10 @@ def main():
       (0.6, 60, priority_zr_s, "リバ5年"),
       (0.6, 0, priority_zr_s, "リバなし"),
   ]
-  run_experiment("rebalance_freq", "実験2: リバランスの頻度", exp2_cases)
+  run_experiment("rebalance_freq",
+                 "実験2: リバランスの頻度",
+                 exp2_cases,
+                 is_dynamic=False)
 
 
 if __name__ == "__main__":

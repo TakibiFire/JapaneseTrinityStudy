@@ -305,6 +305,15 @@ class Lifeplan:
 
 
 @dataclass(frozen=True)
+class FixedRebalance:
+  """
+  初期の資産配分比率を維持する固定比率のリバランス。
+  """
+  # リバランスの間隔
+  interval_months: int = 12
+
+
+@dataclass(frozen=True)
 class StrategySpec:
   """
   投資資産の運用および取り崩し戦略の高レベルな宣言。
@@ -320,7 +329,8 @@ class StrategySpec:
   initial_asset_ratio: Tuple[Tuple[PredefinedAsset, float], ...]
   selling_priority: Tuple[PredefinedAsset, ...]
 
-  rebalance: Union[DynamicV1Rebalance, SpendAwareDPRebalance, None] = None
+  rebalance: Union[FixedRebalance, DynamicV1Rebalance, SpendAwareDPRebalance,
+                   None] = None
   spend_adjustment: Union[DynamicV1Adjustment, SpendAwareAdjustment,
                           None] = None
 
@@ -618,13 +628,16 @@ def _compile_assets(assets: Set[PredefinedAsset],
   elif world.cpi_type == CpiType.FIXED_2_0:
     configs.append(CpiAsset("Japan_CPI", YearlyLogNormalArithmetic(0.02, 0.0)))
   elif world.cpi_type == CpiType.FIXED_2_44:
-    configs.append(CpiAsset("Japan_CPI", YearlyLogNormalArithmetic(0.0244, 0.0)))
+    configs.append(CpiAsset("Japan_CPI", YearlyLogNormalArithmetic(0.0244,
+                                                                   0.0)))
   elif world.cpi_type == CpiType.FIXED_2_0_VOL_2_0:
     configs.append(CpiAsset("Japan_CPI", YearlyLogNormalArithmetic(0.02, 0.02)))
   elif world.cpi_type == CpiType.FIXED_2_0_VOL_4_13:
-    configs.append(CpiAsset("Japan_CPI", YearlyLogNormalArithmetic(0.02, 0.0413)))
+    configs.append(
+        CpiAsset("Japan_CPI", YearlyLogNormalArithmetic(0.02, 0.0413)))
   elif world.cpi_type == CpiType.FIXED_2_44_VOL_4_13:
-    configs.append(CpiAsset("Japan_CPI", YearlyLogNormalArithmetic(0.0244, 0.0413)))
+    configs.append(
+        CpiAsset("Japan_CPI", YearlyLogNormalArithmetic(0.0244, 0.0413)))
   elif world.cpi_type == CpiType.JAPAN_AR12_1981:
     configs.append(get_cpi_ar12_1981_config("Japan_CPI"))
   else:
@@ -855,7 +868,10 @@ def _build_strategy(variant: _ExperimentVariant, cf_map: Dict[str, str],
   rebalance_interval = 0
   dynamic_rebalance_fn = None
   if spec.rebalance:
-    if isinstance(spec.rebalance, DynamicV1Rebalance):
+    if isinstance(spec.rebalance, FixedRebalance):
+      rebalance_interval = spec.rebalance.interval_months
+      # dynamic_rebalance_fn は None のまま（初期配分が維持される）
+    elif isinstance(spec.rebalance, DynamicV1Rebalance):
       rebalance_interval = spec.rebalance.interval_months
 
       # 必要に応じて dynamic_rebalance_fn を設定

@@ -9,9 +9,10 @@ import pytest
 from src.core import Strategy
 from src.lib.scenario_builder import (ConstantSpend, CpiType, CurveSpend,
                                       DynamicV1Adjustment, DynamicV1Rebalance,
-                                      FxType, Gender, Lifeplan, PensionStatus,
-                                      PredefinedStock, PredefinedZeroRisk,
-                                      Setup, SpendAwareAdjustment,
+                                      FixedRebalance, FxType, Gender, Lifeplan,
+                                      PensionStatus, PredefinedStock,
+                                      PredefinedZeroRisk, Setup,
+                                      SpendAwareAdjustment,
                                       SpendAwareDPRebalance, StrategySpec,
                                       WorldConfig, create_experiment_setup)
 
@@ -839,6 +840,27 @@ def test_compile_assets_cpi_ar12(baseline_setup):
   # JAPAN_AR12 mu: 0.013804591522419654, sigma: 0.019047852337144365
   assert np.isclose(mu, 0.0138, atol=1e-4)
   assert np.isclose(sigma, 0.0190, atol=1e-4)
+
+
+def test_create_experiment_setup_resolves_fixed_rebalance(baseline_setup):
+  """FixedRebalance が Strategy に反映され、リバランス関数が注入されないことを確認する。"""
+  baseline_setup.strategy = replace(
+      baseline_setup.strategy,
+      initial_asset_ratio=((PredefinedStock.ORUKAN_155, 0.6),
+                           (PredefinedZeroRisk.CASH, 0.4)),
+      selling_priority=(PredefinedZeroRisk.CASH, PredefinedStock.ORUKAN_155),
+      rebalance=FixedRebalance(interval_months=12))
+  compiled = create_experiment_setup(baseline_setup)
+  strategy = compiled[0].strategy
+  assert strategy.rebalance_interval == 12
+  assert strategy.dynamic_rebalance_fn is None
+
+  # 初期配分が正しく設定されていることを確認
+  # ORUKAN_155: 0.6, CASH: 0.4
+  assert strategy.initial_asset_ratio["ORUKAN_155"] == 0.6
+  cash_key = next(k for k in strategy.initial_asset_ratio.keys()
+                  if hasattr(k, "name") and k.name == "CASH")
+  assert strategy.initial_asset_ratio[cash_key] == 0.4
 
 
 def test_compile_assets_cpi_ar12_1981(baseline_setup):
