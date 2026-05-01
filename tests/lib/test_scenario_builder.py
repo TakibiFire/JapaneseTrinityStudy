@@ -576,10 +576,10 @@ def test_create_experiment_setup_resolves_dynamic_v1_adjustment_default_spend(
 def test_create_experiment_setup_resolves_dynamic_v1_adjustment_with_initial_spend(
     baseline_setup):
   """DynamicV1Adjustment が指定された initial_annual_spend を注入することを確認する。"""
-  baseline_setup.strategy = replace(
-      baseline_setup.strategy,
-      spend_adjustment=DynamicV1Adjustment(target_ratio=0.04,
-                                           initial_annual_spend=123.45))
+  baseline_setup.strategy = replace(baseline_setup.strategy,
+                                    spend_adjustment=DynamicV1Adjustment(
+                                        target_ratio=0.04,
+                                        initial_annual_spend=123.45))
   compiled = create_experiment_setup(baseline_setup)
   handler = compiled[0].strategy.cashflow_rules[0].dynamic_handler
   from src.core import DynamicSpending
@@ -796,3 +796,63 @@ def test_pension_household_size_doubling(baseline_setup):
   spouse_kiso_arr = cashflows[spouse_kiso_rule.source_name]
   # 81.6 / 12 = 6.8
   assert np.allclose(spouse_kiso_arr[0, 180:], 81.6 / 12.0)
+
+
+@pytest.mark.parametrize("cpi_type, expected_mu, expected_sigma", [
+    (CpiType.FIXED_1_0, 0.01, 0.0),
+    (CpiType.FIXED_1_5, 0.015, 0.0),
+    (CpiType.FIXED_2_0, 0.02, 0.0),
+    (CpiType.FIXED_2_44, 0.0244, 0.0),
+    (CpiType.FIXED_2_0_VOL_2_0, 0.02, 0.02),
+    (CpiType.FIXED_2_0_VOL_4_13, 0.02, 0.0413),
+    (CpiType.FIXED_2_44_VOL_4_13, 0.0244, 0.0413),
+])
+def test_compile_assets_cpi_variants(baseline_setup, cpi_type, expected_mu,
+                                     expected_sigma):
+  """追加された CPI バリアント (FIXED_1_0 等) が正しく処理されることを確認する。"""
+  baseline_setup.world = replace(baseline_setup.world,
+                                 cpi_type=cpi_type,
+                                 n_sim=100)
+  compiled = create_experiment_setup(baseline_setup)
+  prices = compiled[0].monthly_prices["Japan_CPI"]
+  returns = np.diff(np.log(prices), axis=1)
+
+  if expected_sigma == 0:
+    expected_log_mu = np.log(1 + expected_mu) / 12
+    assert np.isclose(np.mean(returns), expected_log_mu, atol=1e-5)
+  else:
+    assert np.isclose(np.std(returns) * np.sqrt(12), expected_sigma, atol=0.01)
+
+
+def test_compile_assets_cpi_ar12(baseline_setup):
+  """JAPAN_AR12 が正しく処理されることを確認する。"""
+  baseline_setup.world = replace(baseline_setup.world,
+                                 cpi_type=CpiType.JAPAN_AR12,
+                                 n_sim=5000,
+                                 seed=42)
+  compiled = create_experiment_setup(baseline_setup)
+  prices = compiled[0].monthly_prices["Japan_CPI"]
+  returns = np.diff(np.log(prices), axis=1)
+  mu = np.mean(returns) * 12
+  sigma = np.std(returns) * np.sqrt(12)
+  # Observe values
+  # JAPAN_AR12 mu: 0.013804591522419654, sigma: 0.019047852337144365
+  assert np.isclose(mu, 0.0138, atol=1e-4)
+  assert np.isclose(sigma, 0.0190, atol=1e-4)
+
+
+def test_compile_assets_cpi_ar12_1981(baseline_setup):
+  """JAPAN_AR12_1981 が正しく処理されることを確認する。"""
+  baseline_setup.world = replace(baseline_setup.world,
+                                 cpi_type=CpiType.JAPAN_AR12_1981,
+                                 n_sim=5000,
+                                 seed=42)
+  compiled = create_experiment_setup(baseline_setup)
+  prices = compiled[0].monthly_prices["Japan_CPI"]
+  returns = np.diff(np.log(prices), axis=1)
+  mu = np.mean(returns) * 12
+  sigma = np.std(returns) * np.sqrt(12)
+  # Observe values
+  # JAPAN_AR12_1981 mu: 0.008471597082895313, sigma: 0.013307771701059729
+  assert np.isclose(mu, 0.0085, atol=1e-4)
+  assert np.isclose(sigma, 0.0133, atol=1e-4)

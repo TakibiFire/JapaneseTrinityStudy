@@ -14,7 +14,8 @@ import scipy.stats as stats
 
 from src.core import DynamicSpending, Strategy, ZeroRiskAsset
 from src.lib.asset_generator import (Asset, AssetConfigType, CpiAsset,
-                                     DerivedAsset, ForexAsset, MonthlyLogDist,
+                                     DerivedAsset, ForexAsset,
+                                     MonthlyARLogNormal, MonthlyLogDist,
                                      MonthlyLogNormal, SlideAdjustedCpiAsset,
                                      YearlyLogNormalArithmetic,
                                      generate_monthly_asset_prices)
@@ -30,6 +31,7 @@ from src.lib.retired_spending import (SpendingType,
                                       get_retired_spending_multipliers)
 from src.lib.simulation_defaults import (AcwiModelKey,
                                          get_acwi_fat_tail_config,
+                                         get_cpi_ar12_1981_config,
                                          get_cpi_ar12_config)
 from src.lib.spend_aware_dynamic_spending import SpendAwareDynamicSpending
 
@@ -81,6 +83,22 @@ class CpiType(Enum):
   FIXED_1_77 = auto()
   # インフレなし (0%)。
   FIXED_0 = auto()
+  # 実験用: インフレ率 1.0% (ボラティリティ 0)
+  FIXED_1_0 = auto()
+  # 実験用: インフレ率 1.5% (ボラティリティ 0)
+  FIXED_1_5 = auto()
+  # 実験用: インフレ率 2.0% (ボラティリティ 0)
+  FIXED_2_0 = auto()
+  # 実験用: 歴史的平均 2.44% (ボラティリティ 0)
+  FIXED_2_44 = auto()
+  # 実験用: 平均 2.0%, ボラティリティ 2.0%
+  FIXED_2_0_VOL_2_0 = auto()
+  # 実験用: 平均 2.0%, 歴史的標準偏差 4.13%
+  FIXED_2_0_VOL_4_13 = auto()
+  # 実験用: 歴史的平均 2.44%, 歴史的標準偏差 4.13%
+  FIXED_2_44_VOL_4_13 = auto()
+  # 実験用: AR(12) 粘着性モデル (1981年〜)
+  JAPAN_AR12_1981 = auto()
 
 
 class FxType(Enum):
@@ -593,6 +611,22 @@ def _compile_assets(assets: Set[PredefinedAsset],
                                                                    0.0)))
   elif world.cpi_type == CpiType.FIXED_0:
     configs.append(CpiAsset("Japan_CPI", YearlyLogNormalArithmetic(0.0, 0.0)))
+  elif world.cpi_type == CpiType.FIXED_1_0:
+    configs.append(CpiAsset("Japan_CPI", YearlyLogNormalArithmetic(0.01, 0.0)))
+  elif world.cpi_type == CpiType.FIXED_1_5:
+    configs.append(CpiAsset("Japan_CPI", YearlyLogNormalArithmetic(0.015, 0.0)))
+  elif world.cpi_type == CpiType.FIXED_2_0:
+    configs.append(CpiAsset("Japan_CPI", YearlyLogNormalArithmetic(0.02, 0.0)))
+  elif world.cpi_type == CpiType.FIXED_2_44:
+    configs.append(CpiAsset("Japan_CPI", YearlyLogNormalArithmetic(0.0244, 0.0)))
+  elif world.cpi_type == CpiType.FIXED_2_0_VOL_2_0:
+    configs.append(CpiAsset("Japan_CPI", YearlyLogNormalArithmetic(0.02, 0.02)))
+  elif world.cpi_type == CpiType.FIXED_2_0_VOL_4_13:
+    configs.append(CpiAsset("Japan_CPI", YearlyLogNormalArithmetic(0.02, 0.0413)))
+  elif world.cpi_type == CpiType.FIXED_2_44_VOL_4_13:
+    configs.append(CpiAsset("Japan_CPI", YearlyLogNormalArithmetic(0.0244, 0.0413)))
+  elif world.cpi_type == CpiType.JAPAN_AR12_1981:
+    configs.append(get_cpi_ar12_1981_config("Japan_CPI"))
   else:
     raise ValueError(f"未知の CPI タイプです: {world.cpi_type}")
 
