@@ -28,7 +28,8 @@ from src.lib.cashflow_generator import (BaseSpendConfig, CashflowRule,
 from src.lib.dp_predictor import DPOptimalStrategyPredictor
 from src.lib.dynamic_rebalance import calculate_optimal_strategy
 from src.lib.dynamic_rebalance_dp import calculate_optimal_strategy_dp
-from src.lib.retired_spending import SpendingType, get_retired_spending_values
+from src.lib.retired_spending import (SpendingType,
+                                      get_annual_retired_spending_values)
 from src.lib.world_setup import create_standard_world
 
 
@@ -91,12 +92,8 @@ def main():
   spending_types = [
       SpendingType.CONSUMPTION, SpendingType.NON_CONSUMPTION_EXCLUDE_PENSION
   ]
-  spending_multipliers_by_age = world.spending_monthly_values
-  base_spending_monthly = get_retired_spending_values(
-      spending_types, target_ages=np.array([float(START_AGE)]))[0]
-  # NOW: Use Japanese comment.
-  # get_retired_spending_values returns monthly yen. Convert to annual man-yen.
-  BASE_SPEND_ANNUAL_WO_PENSION = base_spending_monthly * 12.0 / 10000.0
+  BASE_SPEND_ANNUAL_WO_PENSION = get_annual_retired_spending_values(
+      spending_types, start_age=START_AGE, num_years=1)[0]
 
   # 年金設定: 1人世帯, 年金開始60歳
   PENSION_PREMIUM_ANNUAL = 20.4
@@ -105,12 +102,9 @@ def main():
   cf_rules = world.cf_rules
 
   # 基本支出の設定 (年齢による変動とCPI連動)
-  annual_cost_setting = [
-      (val * 12.0 / 10000.0) for val in spending_multipliers_by_age
-  ]
   cf_configs.append(
       BaseSpendConfig(name="BaseSpend",
-                      amount=annual_cost_setting,
+                      amount=world.annual_spending_values,
                       cpi_name=CPI_NAME))
   cf_rules.append(
       CashflowRule(source_name="BaseSpend", cashflow_type=CashflowType.REGULAR))

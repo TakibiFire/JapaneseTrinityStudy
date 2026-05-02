@@ -15,8 +15,9 @@ from src.lib.asset_generator import (AssetConfigType, DerivedAsset, ForexAsset,
 from src.lib.cashflow_generator import (CashflowConfig, PensionConfig,
                                         generate_cashflows)
 from src.lib.retired_spending import (SpendingType,
-                                      get_retired_spending_multipliers)
-from src.lib.simulation_defaults import (AcwiModelKey, get_acwi_fat_tail_config,
+                                      get_annual_retired_spending_values)
+from src.lib.simulation_defaults import (AcwiModelKey,
+                                         get_acwi_fat_tail_config,
                                          get_cpi_ar12_config)
 
 # 共有アセット名の定数
@@ -45,8 +46,8 @@ class WorldSetup:
   cf_configs: List[CashflowConfig]
   # キャッシュフロールールのリスト
   cf_rules: List[CashflowRule]
-  # 年齢別の月間支出（名目、円） (years,)
-  spending_monthly_values: np.ndarray
+  # 年齢別の年支出（名目、万円） (years,)
+  annual_spending_values: np.ndarray
   # 無リスク資産オブジェクト
   zr_asset_obj: ZeroRiskAsset
   # シミュレーション年数
@@ -185,18 +186,17 @@ def create_standard_world(
                    cashflow_type=CashflowType.REGULAR))
 
   # 3. 支出設定
-  # 年齢による月額支出（名目ベースライン、円）の取得
-  spending_monthly_values = get_retired_spending_multipliers(
+  # 年齢による年支出（名目ベースライン、万円）の取得
+  annual_spending_values = get_annual_retired_spending_values(
       [SpendingType.CONSUMPTION, SpendingType.NON_CONSUMPTION_EXCLUDE_PENSION],
       start_age=start_age,
-      num_years=years,
-      normalize=False)
+      num_years=years)
 
   return WorldSetup(
       monthly_prices=monthly_prices,
       cf_configs=cf_configs,
       cf_rules=cf_rules,
-      spending_monthly_values=spending_monthly_values,
+      annual_spending_values=annual_spending_values,
       zr_asset_obj=zr_asset_obj,
       years=years,
       tax_rate=tax_rate,

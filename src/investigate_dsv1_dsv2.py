@@ -16,7 +16,8 @@ from dataclasses import replace
 import numpy as np
 
 from src.core import simulate_strategy
-from src.lib.retired_spending import SpendingType, get_retired_spending_values
+from src.lib.retired_spending import (SpendingType,
+                                      get_annual_retired_spending_values)
 from src.lib.scenario_builder import (CurveSpend, DynamicV1Adjustment, FxType,
                                       Lifeplan, PensionStatus, PredefinedStock,
                                       PredefinedZeroRisk, Setup,
@@ -34,11 +35,11 @@ def main():
   MODELS_PATH = "data/optimal_strategy_v2_models.json"
   CPI_NAME = "Japan_CPI"
 
-  spending_types = (SpendingType.CONSUMPTION,
-                    SpendingType.NON_CONSUMPTION_EXCLUDE_PENSION)
-  base_spending_monthly = get_retired_spending_values(
-      list(spending_types), target_ages=np.array([float(START_AGE)]))[0]
-  BASE_SPEND_ANNUAL_WO_PENSION = base_spending_monthly * 12.0 / 10000.0
+  spending_types = [
+      SpendingType.CONSUMPTION, SpendingType.NON_CONSUMPTION_EXCLUDE_PENSION
+  ]
+  BASE_SPEND_ANNUAL_WO_PENSION = get_annual_retired_spending_values(
+      spending_types, start_age=START_AGE, num_years=1)[0]
 
   baseline_world = WorldConfig(n_sim=N_SIM,
                                n_years=YEARS,
@@ -128,7 +129,9 @@ def main():
     v1_spend = res1.annual_spends[target_idx]
     v2_spend = res2.annual_spends[target_idx]
 
-    print(f"Year | CPI | Fixed Real | DSv1 Real | DSv2 Real | Fixed Nom | DSv1 Nom | DSv2 Nom")
+    print(
+        f"Year | CPI | Fixed Real | DSv1 Real | DSv2 Real | Fixed Nom | DSv1 Nom | DSv2 Nom"
+    )
     for y in range(min(YEARS, len(v1_spend))):
       cpi_y = cpi[y + 1] if y + 1 < len(cpi) else cpi[-1]
       print(

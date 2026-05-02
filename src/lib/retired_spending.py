@@ -24,14 +24,16 @@ class SpendingType(Enum):
 # 家計調査報告のデータポイント
 # https://www.stat.go.jp/data/kakei/sokuhou/tsuki/pdf/fies_gaikyo2024.pdf
 BASE_AGES = np.array([34.4, 44.8, 54.1, 67.5, 72.5, AVERAGE_AGE_75PLUS])
-NON_CONSUMPTION_DATA = np.array([90018, 129607, 141647, 41405, 34824, 30558])
-CONSUMPTION_DATA = np.array([280544, 331526, 359951, 311281, 269015, 242840])
+NON_CONSUMPTION_DATA = np.array([90018, 129607, 141647, 41405, 34824, 30558
+                                ]) * 12.0 / 10000.0
+CONSUMPTION_DATA = np.array([280544, 331526, 359951, 311281, 269015, 242840
+                            ]) * 12.0 / 10000.0
 
 # 単身世帯の2019年全国家計構造調査に基づくデータポイント
 # https://www.stat.go.jp/data/zenkokukakei/2019/pdf/gaiyou0305.pdf
 SINGLE_2019_BASE_AGES = np.array([25.0, 35.0, 45.0, 55.0, 65.0, 75.0, 85.0])
 SINGLE_2019_CONSUMPTION_DATA = np.array(
-    [168552, 222432, 254475, 283725, 258284, 225799, 190818])
+    [168552, 222432, 254475, 283725, 258284, 225799, 190818]) * 12.0 / 10000.0
 
 
 def calculate_average_age_75plus() -> float:
@@ -56,18 +58,23 @@ def calculate_average_age_75plus() -> float:
   return age_sum / pop_sum
 
 
-def get_retired_spending_values(spending_types: List[SpendingType],
-                                target_ages: np.ndarray) -> np.ndarray:
+def get_annual_retired_spending_values(spending_types: List[SpendingType],
+                                       start_age: int,
+                                       num_years: int) -> np.ndarray:
   """
-  指定された年齢層の支出の絶対値（円）を返す。
+  指定された開始年齢からの年支出の推移 (万円) を返す。
 
   Args:
-    spending_types: 支出の種類
-    target_ages: 対象年齢の numpy 配列
+    spending_types: 支出の種類 (CONSUMPTION, NON_CONSUMPTION, NON_CONSUMPTION_EXCLUDE_PENSION) のリスト
+    start_age: 開始年齢
+    num_years: 取得する年数 (デフォルト 50)
+    normalize: 開始年齢時を1.0とするかどうか (デフォルト True)
 
   Returns:
-    支出の絶対値の numpy 配列。
+    年支出（単位：万円）リスト。
   """
+  target_ages = np.arange(start_age, start_age + num_years)
+
   # 仮想データポイントの追加 (端部の安定化)
   last_age = BASE_AGES[-1]
   virtual_age = last_age + (last_age - BASE_AGES[-2])
@@ -103,8 +110,7 @@ def get_retired_spending_values(spending_types: List[SpendingType],
       # この中には、世帯主の厚生年金保険料が含まれています。配偶者は第3号被保険者と仮定するため、直接の支払いはありません。
       # 世帯主の年収を一定の500万円と仮定した場合、年金保険料の計算は以下の通りです。
       # * 厚生年金保険料率は固定で18.3%。労使折半により、従業員（世帯主）負担は 9.15%。
-      # * 年間保険料 = 5,000,000円 × 9.15% = 457,500円
-      # * 月額保険料 = 457,500円 ÷ 12ヶ月 = 38,125円
+      # * 年間保険料 = 5,000,000円 × 9.15% = 457,500円  (45.75万)
       #
       # スプライン補間を滑らかにするため、以下の手順で補間用データを作成します：
       # 1. 元の非消費支出データから 60 歳時点の値を推計し、そこから 38,125 円を引いた点を新たなデータポイントとして追加。
@@ -115,12 +121,12 @@ def get_retired_spending_values(spending_types: List[SpendingType],
       non_con_full = np.append(NON_CONSUMPTION_DATA, virtual_non_con)
       cs_orig = CubicSpline(ages_orig, non_con_full, bc_type='natural')
 
-      val_at_60_adj = float(cs_orig(60.0)) - 38125.0
+      val_at_60_adj = float(cs_orig(60.0)) - 45.75
 
       ex_ages = np.insert(BASE_AGES, 3, 60.0)
       ex_values = np.insert(NON_CONSUMPTION_DATA.astype(float), 3,
                             val_at_60_adj)
-      ex_values[:3] -= 38125.0
+      ex_values[:3] -= 45.75
 
       virtual_non_con_ex = ex_values[-1] * 0.9
       ages_ex = np.append(ex_ages, virtual_age)
@@ -131,26 +137,22 @@ def get_retired_spending_values(spending_types: List[SpendingType],
   return total_values
 
 
-def get_retired_spending_multipliers(spending_types: List[SpendingType],
-                                     start_age: int,
-                                     num_years: int = 50,
-                                     normalize: bool = True) -> np.ndarray:
+def get_annual_retired_spending_multipliers(spending_types: List[SpendingType],
+                                            start_age: int,
+                                            num_years: int) -> np.ndarray:
   """
-  指定された開始年齢からの支出の推移を返す。
+  指定された開始年齢からの支出の推移を、開始年を1.0とした倍率として返す。
 
   Args:
     spending_types: 支出の種類 (CONSUMPTION, NON_CONSUMPTION, NON_CONSUMPTION_EXCLUDE_PENSION) のリスト
     start_age: 開始年齢
-    num_years: 取得する年数 (デフォルト 50)
-    normalize: 開始年齢時を1.0とするかどうか (デフォルト True)
+    num_years: 取得する年数
 
   Returns:
-    支出（月額、単位：円）または倍率のリスト。
+    倍率のリスト。
   """
-  target_ages = np.arange(start_age, start_age + num_years)
-  values = get_retired_spending_values(spending_types, target_ages)
+  values = get_annual_retired_spending_values(spending_types, start_age,
+                                              num_years)
 
-  if normalize:
-    # 開始年齢の値を 1.0 とした倍率を返す
-    return values / values[0]
-  return values
+  # 開始年齢の値を 1.0 とした倍率を返す
+  return values / values[0]

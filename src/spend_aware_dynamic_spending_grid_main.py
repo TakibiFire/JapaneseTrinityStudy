@@ -18,7 +18,8 @@ import numpy as np
 import pandas as pd
 
 from src.core import SimulationResult, simulate_strategy
-from src.lib.retired_spending import SpendingType, get_retired_spending_values
+from src.lib.retired_spending import (SpendingType,
+                                      get_annual_retired_spending_values)
 from src.lib.scenario_builder import (CurveSpend, DynamicV1Adjustment, FxType,
                                       Lifeplan, PensionStatus, PredefinedStock,
                                       PredefinedZeroRisk, Setup,
@@ -44,12 +45,11 @@ def main():
   CPI_NAME = "Japan_CPI"
 
   # ベースラインの支出額 (月額合計 -> 年額合計)
-  spending_types = (SpendingType.CONSUMPTION,
-                    SpendingType.NON_CONSUMPTION_EXCLUDE_PENSION)
-  base_spending_monthly = get_retired_spending_values(
-      list(spending_types), target_ages=np.array([float(START_AGE)]))[0]
-  BASE_SPEND_ANNUAL_WO_PENSION = base_spending_monthly * 12.0 / 10000.0
-
+  spending_types = [
+      SpendingType.CONSUMPTION, SpendingType.NON_CONSUMPTION_EXCLUDE_PENSION
+  ]
+  BASE_SPEND_ANNUAL_WO_PENSION = get_annual_retired_spending_values(
+      spending_types, start_age=START_AGE, num_years=1)[0]
   # 年金設定 (旧コードの値を再現するために PensionStatus.FULL をベースに調整)
   # 旧コード: PREMIUM=20.4, TOTAL=99.4, KISO=81.6*0.76=62.016, KOUSEI=37.384
   # scenario_builder: PREMIUM=21.5, KISO=81.6*0.76=62.016, KOUSEI=2.736*(40-22)*0.76=37.428
@@ -116,10 +116,11 @@ def main():
                                           lower_mult=0.985,
                                           upper_mult=1.01)
       elif strat_name == "DRv2_DSv1":
-        adjustment = DynamicV1Adjustment(target_ratio=rule / 100.0,
-                                         upper_limit=0.01,
-                                         lower_limit=-0.015,
-                                         initial_annual_spend=BASE_SPEND_ANNUAL_WO_PENSION)
+        adjustment = DynamicV1Adjustment(
+            target_ratio=rule / 100.0,
+            upper_limit=0.01,
+            lower_limit=-0.015,
+            initial_annual_spend=BASE_SPEND_ANNUAL_WO_PENSION)
 
       new_strategy = replace(new_strategy, spend_adjustment=adjustment)
 
@@ -176,7 +177,7 @@ def main():
         rv1, exp1 = rv1_tup
         rv2, exp2 = rv2_tup
         prices_cpi = exp1.monthly_prices[CPI_NAME]
-        
+
         for y in range(YEARS):
           # DSv1, DSv2 両戦略が年末時点で生存しているパス
           active_mask = (rv1.sustained_months >= (y + 1) * 12) & \

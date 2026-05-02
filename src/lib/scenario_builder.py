@@ -28,7 +28,8 @@ from src.lib.dynamic_rebalance import calculate_optimal_strategy
 from src.lib.dynamic_rebalance_dp import calculate_optimal_strategy_dp
 from src.lib.life_table import FEMALE_MORTALITY_RATES, MALE_MORTALITY_RATES
 from src.lib.retired_spending import (SpendingType,
-                                      get_retired_spending_multipliers)
+                                      get_annual_retired_spending_multipliers,
+                                      get_annual_retired_spending_values)
 from src.lib.simulation_defaults import (AcwiModelKey,
                                          get_acwi_fat_tail_config,
                                          get_cpi_ar12_1981_config,
@@ -713,17 +714,26 @@ def _compile_lifeplan(lp: Lifeplan, world: WorldConfig) -> _CompiledLifeplan:
     # ConstantSpend の場合、実質コストのカーブは全期間 annual_amount
     real_cost_curve = np.full(world.n_years, lp.base_spend.annual_amount)
   elif isinstance(lp.base_spend, CurveSpend):
-    multipliers = get_retired_spending_multipliers(
-        spending_types=list(lp.base_spend.spending_types),
-        start_age=world.start_age,
-        num_years=world.n_years,
-        normalize=(lp.base_spend.first_year_annual_amount is not None))
-    base_amount = lp.base_spend.first_year_annual_amount or 1.0
-    configs.append(
-        BaseSpendConfig(name="BaseSpend",
-                        amount=(multipliers * base_amount).tolist(),
-                        cpi_name=cpi_name))
-    real_cost_curve = multipliers * base_amount
+    if lp.base_spend.first_year_annual_amount is not None:
+      spend_multipliers = get_annual_retired_spending_multipliers(
+          spending_types=list(lp.base_spend.spending_types),
+          start_age=world.start_age,
+          num_years=world.n_years)
+      base_amount = lp.base_spend.first_year_annual_amount
+      real_cost_curve = spend_multipliers * base_amount
+      configs.append(
+          BaseSpendConfig(name="BaseSpend",
+                          amount=real_cost_curve.tolist(),
+                          cpi_name=cpi_name))
+    else:
+      real_cost_curve = get_annual_retired_spending_values(
+          spending_types=list(lp.base_spend.spending_types),
+          start_age=world.start_age,
+          num_years=world.n_years)
+      configs.append(
+          BaseSpendConfig(name="BaseSpend",
+                          amount=real_cost_curve.tolist(),
+                          cpi_name=cpi_name))
   else:
     raise ValueError(f"未知の支出タイプです: {lp.base_spend}")
 

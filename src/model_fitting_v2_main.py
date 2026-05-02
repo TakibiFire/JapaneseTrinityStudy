@@ -228,7 +228,7 @@ def main():
                                          monthly_prices,
                                          n_sim=n_sim,
                                          n_months=world.years * 12)
-  spending_monthly_values = world.spending_monthly_values
+  annual_spending_values = world.annual_spending_values
 
   # 2. Backward DP
   models: Dict[str, Any] = {
@@ -256,8 +256,8 @@ def main():
     cpi_path = monthly_prices[CPI_NAME][:, start_m:end_m]
 
     monthly_net_spend = np.zeros((n_sim, 12))
-    # 基本支出 (万円/月) = 統計値月額(円) / 10000 * CPI倍率
-    monthly_spend_base = spending_monthly_values[year_idx] / 10000.0
+    # 基本支出 (万円/月) = 統計値年額(万円) / 12 * CPI倍率
+    monthly_spend_base = annual_spending_values[year_idx] / 12.0
     monthly_net_spend += monthly_spend_base * cpi_path
 
     # 年金等

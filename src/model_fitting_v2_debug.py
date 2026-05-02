@@ -38,8 +38,9 @@ from src.lib.cashflow_generator import (CashflowConfig, PensionConfig,
                                         generate_cashflows)
 from src.lib.dp_predictor import DPOptimalStrategyPredictor
 from src.lib.retired_spending import (SpendingType,
-                                      get_retired_spending_multipliers)
-from src.lib.simulation_defaults import (AcwiModelKey, get_acwi_fat_tail_config,
+                                      get_annual_retired_spending_values)
+from src.lib.simulation_defaults import (AcwiModelKey,
+                                         get_acwi_fat_tail_config,
                                          get_cpi_ar12_config)
 
 # 共通定数
@@ -126,11 +127,10 @@ def main():
                     start_month=(60 - START_AGE) * 12,
                     cpi_name=PENSION_CPI_NAME))
 
-  spending_monthly_values = get_retired_spending_multipliers(
+  annual_spending_values = get_annual_retired_spending_values(
       [SpendingType.CONSUMPTION, SpendingType.NON_CONSUMPTION_EXCLUDE_PENSION],
       start_age=START_AGE,
-      num_years=YEARS,
-      normalize=False)
+      num_years=YEARS)
   monthly_cashflows = generate_cashflows(cf_configs,
                                          monthly_prices,
                                          n_sim=n_sim,
@@ -159,7 +159,7 @@ def main():
       sm = y_idx * 12
       em = (y_idx + 1) * 12
       cp = monthly_prices[CPI_NAME][p_idx, sm:em]
-      msb = spending_monthly_values[y_idx] / 10000.0
+      msb = annual_spending_values[y_idx] / 12.0  # COMMENT: Is this correct?
       mns = msb * cp
       pp = monthly_cashflows["Pension_Premium_Kiso"][p_idx, sm:em]
       pk = monthly_cashflows["Pension_Receipt_Kousei"][p_idx, sm:em]
@@ -193,7 +193,7 @@ def main():
 
       # path_idx の monthly_net_spend を再計算
       cp = monthly_prices[CPI_NAME][path_idx, sm:em]
-      msb = spending_monthly_values[y_idx] / 10000.0
+      msb = annual_spending_values[y_idx] / 12.0
       mns = msb * cp
       pp = monthly_cashflows["Pension_Premium_Kiso"][path_idx, sm:em]
       pk = monthly_cashflows["Pension_Receipt_Kousei"][path_idx, sm:em]
@@ -257,7 +257,7 @@ def main():
   cpi_path = monthly_prices[CPI_NAME][:, start_m:end_m]
 
   monthly_net_spend = np.zeros((n_sim, 12))
-  monthly_spend_base = spending_monthly_values[year_idx] / 10000.0
+  monthly_spend_base = annual_spending_values[year_idx] / 12.0
   monthly_net_spend += monthly_spend_base * cpi_path
 
   p_premium = monthly_cashflows["Pension_Premium_Kiso"][:, start_m:end_m]
@@ -288,7 +288,7 @@ def main():
   next_start_m = next_year_idx * 12
   next_end_m = (next_year_idx + 1) * 12
   next_cpi_path = monthly_prices[CPI_NAME][:, next_start_m:next_end_m]
-  next_monthly_spend_base = spending_monthly_values[next_year_idx] / 10000.0
+  next_monthly_spend_base = annual_spending_values[next_year_idx] / 12.0
   next_p_premium = monthly_cashflows[
       "Pension_Premium_Kiso"][:, next_start_m:next_end_m]
   next_p_kousei = monthly_cashflows[
