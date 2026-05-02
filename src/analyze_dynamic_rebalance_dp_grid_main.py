@@ -10,7 +10,6 @@ Example:
 """
 
 import os
-from typing import Dict, List
 
 import altair as alt
 import pandas as pd
@@ -127,9 +126,7 @@ def main():
   if os.path.exists(DATA_PATH):
     df_all = pd.read_csv(DATA_PATH)
     df_survival = df_all[df_all["value_type"] == "survival"].copy()
-    #run_survival_analysis(df_survival)
-    # 元のファイルに支出データが含まれている場合の互換性維持
-    #run_percentile_analysis(df_all)
+    run_survival_analysis(df_survival)
 
   # 2. dump_withdraw.csv の分析
   if os.path.exists(WITHDRAW_DATA_PATH):
