@@ -33,8 +33,8 @@ from sklearn.isotonic import IsotonicRegression
 
 from src.core import (CashflowRule, CashflowType, Strategy, ZeroRiskAsset,
                       simulate_strategy)
-from src.lib.asset_generator import generate_monthly_asset_prices
-from src.lib.cashflow_generator import generate_cashflows
+from src.lib.scenario_builder import (CompiledExperiment,
+                                      create_experiment_setup)
 from src.lib.world_setup import create_standard_world
 
 # 共通定数
@@ -44,19 +44,13 @@ YEARS = END_AGE - START_AGE
 SEED = 42
 
 # アセット名
-ORUKAN_NAME = "オルカン"
-ZERO_RISK_NAME = "ゼロリスク資産"
-FX_NAME = "USDJPY_0_10.53"
+ORUKAN_NAME = "ORUKAN_155"
+ZERO_RISK_NAME = "ZERO_RISK_4PCT"
 CPI_NAME = "Japan_CPI"
-PENSION_CPI_NAME = "Pension_CPI"
 
 # パラメータ
-TRUST_FEE = 0.0005775
-ZERO_RISK_YIELD = 0.04
 TAX_RATE = 0.20315
-CURRENT_YEAR = 2026
-MACRO_ECONOMIC_SLIDE_END_YEAR = 2057
-EFFECTIVE_ZERO_RISK_YIELD = ZERO_RISK_YIELD * (1.0 - TAX_RATE)
+EFFECTIVE_ZERO_RISK_YIELD = 0.04 * (1.0 - TAX_RATE)
 
 
 def adaptive_sample(evaluate_fn: Any,
@@ -184,21 +178,21 @@ def main():
                 ] if args.debug_paths else []
 
   # 1. アセットとキャッシュフローの生成
-  world = create_standard_world(n_sim=n_sim,
+  setup = create_standard_world(n_sim=n_sim,
                                 start_age=START_AGE,
                                 end_age=END_AGE - 1,
-                                retirement_age=60,
+                                retirement_start_age=40,
                                 pension_start_age=60,
-                                seed=SEED,
-                                tax_rate=TAX_RATE,
-                                zero_risk_yield=ZERO_RISK_YIELD,
-                                trust_fee=TRUST_FEE)
-  monthly_prices = world.monthly_prices
-  zr_asset_obj = world.zr_asset_obj
-  ORUKAN_NAME = world.ORUKAN_NAME
-  ZERO_RISK_NAME = world.ZERO_RISK_NAME
-  CPI_NAME = world.CPI_NAME
-  PENSION_CPI_NAME = world.PENSION_CPI_NAME
+                                seed=SEED)
+  exp = create_experiment_setup(setup)[0]
+
+  monthly_prices = exp.monthly_prices
+  monthly_cashflows = exp.monthly_cashflows
+  cf_map = exp.cf_name_map
+  # 注: 支出の統計的な成長率を計算するために exp.annual_cost_real (BaseSpendの実質推移)
+  # を使用することも検討可能ですが、現在は過去の挙動との整合性のために使用していません。
+
+  zr_asset_obj = ZeroRiskAsset(ZERO_RISK_NAME, 0.04)
 
   print(f"Generating asset prices for {YEARS} years, {n_sim} paths...")
 
@@ -223,12 +217,59 @@ def main():
       f"CPI Stats: mu={cpi_annual_mu:.4f}, sigma={cpi_annual_sigma:.4f}, unexpected_jump={unexpected_cpi_jump:.4f}"
   )
 
-  print("Generating cashflows...")
-  monthly_cashflows = generate_cashflows(world.cf_configs,
-                                         monthly_prices,
-                                         n_sim=n_sim,
-                                         n_months=world.years * 12)
-  annual_spending_values = world.annual_spending_values
+  print("Analyzing cashflows...")
+  # 各年齢のキャッシュフローデータを抽出
+  # age -> y_withdraw_n (np.ndarray)
+  age_cashflow_data: Dict[int, np.ndarray] = {}
+
+  for age in range(START_AGE, END_AGE):
+    year_idx = age - START_AGE
+    start_m = year_idx * 12
+    end_m = (year_idx + 1) * 12
+
+    monthly_net_spend = np.zeros((n_sim, 12))
+    # 基本支出のハッシュ化された名前を取得
+    base_spend_key = cf_map["BaseSpend"]
+    # 支出額 (名目) は monthly_cashflows に負の値で入っている。
+    # 単位は 万円/月
+    monthly_net_spend -= monthly_cashflows[base_spend_key][:, start_m:end_m]
+
+    if args.debug_level >= 3 and age == args.debug_age:
+      print(
+          f"    [Age {age} Debug] Logical: BaseSpend, Hashed: {base_spend_key}")
+      print(
+          f"    [Age {age} Debug] BaseSpend (Month 0, path 0): {monthly_cashflows[base_spend_key][0, start_m]:.2f}"
+      )
+      # If age >= 95, dump all monthly_net_spend for each path.
+      if age >= 95:
+        print(
+            f"    [Age {age} Debug] Path 0 full monthly_net_spend (reversed sign):"
+        )
+        print(monthly_cashflows[base_spend_key][0, start_m:end_m])
+
+    # 年金等 (ハッシュ化された名前で検索)
+    pension_total = np.zeros((n_sim, 12))
+    for logical_name in ["PensionPremium", "PensionKousei", "PensionKiso"]:
+      hashed_name = cf_map.get(logical_name)
+      if hashed_name and hashed_name in monthly_cashflows:
+        # PensionConfig.generate() は名目万円/月を返す。
+        # 収入は正、保険料は負の値。
+        cf_array = monthly_cashflows[hashed_name][:, start_m:end_m]
+        pension_total += cf_array
+        if args.debug_level >= 3 and age == args.debug_age:
+          print(
+              f"    [Age {age} Debug] Logical: {logical_name}, Hashed: {hashed_name}"
+          )
+          print(f"    [Age {age} Debug] {logical_name} Path 0 full:")
+          print(cf_array[0, :])
+
+    monthly_net_spend -= pension_total
+    # 各パスの年間合計正味支出 (Withdrawal amount) 万円/年
+    age_cashflow_data[age] = np.sum(np.maximum(0, monthly_net_spend), axis=1)
+    if args.debug_level >= 3 and age == args.debug_age:
+      print(
+          f"    [Age {age} Debug] monthly_net_spend (sum(max(0, ...)), path 0): {age_cashflow_data[age][0]:.2f}"
+      )
 
   # 2. Backward DP
   models: Dict[str, Any] = {
@@ -255,24 +296,15 @@ def main():
     end_m = (year_idx + 1) * 12
     cpi_path = monthly_prices[CPI_NAME][:, start_m:end_m]
 
-    monthly_net_spend = np.zeros((n_sim, 12))
-    # 基本支出 (万円/月) = 統計値年額(万円) / 12 * CPI倍率
-    monthly_spend_base = annual_spending_values[year_idx] / 12.0
-    monthly_net_spend += monthly_spend_base * cpi_path
-
-    # 年金等
-    pension_total = np.zeros((n_sim, 12))
-    for name in [
-        "Pension_Premium_Kiso", "Pension_Receipt_Kousei", "Pension_Receipt_Kiso"
-    ]:
-      if name in monthly_cashflows:
-        pension_total += monthly_cashflows[name][:, start_m:end_m]
-
-    monthly_net_spend -= pension_total
-
     # 各パスの年間合計正味支出 (Withdrawal amount)
-    y_withdraw_n = np.sum(np.maximum(0, monthly_net_spend),
-                          axis=1)  # shape (n_sim,)
+    y_withdraw_n = age_cashflow_data[age]
+    if args.debug_level >= 3 and age == args.debug_age:
+      print(
+          f"    [Age {age} Debug] y_withdraw_n (mean): {np.mean(y_withdraw_n):.2f}"
+      )
+      print(
+          f"    [Age {age} Debug] y_withdraw_n (path 0): {y_withdraw_n[0]:.2f}")
+
     # 全パスの平均支出額を記録（実験スクリプトでの投影に使用）
     avg_y_withdraw_n = float(np.mean(y_withdraw_n))
 
@@ -290,11 +322,6 @@ def main():
 
     if args.debug_level >= 2:
       print(f"  [Level 2 Info] Cashflow:")
-      print(
-          f"    Avg Base Spend (Month 0): {monthly_spend_base * np.mean(cpi_path[:,0]):.2f} 万円/月"
-      )
-      print(
-          f"    Avg Pension (Month 0): {np.mean(pension_total[:,0]):.2f} 万円/月")
       print(f"    Avg Y_withdraw_n (Yearly): {np.mean(y_withdraw_n):.2f} 万円/年")
 
     # R (支出率) と A (オルカン比率) のグリッド
@@ -315,7 +342,8 @@ def main():
         depth: Optional[int] = None,
         reason: str = "",
         segment: Optional[Tuple[float, float]] = None,
-        segment_a_opts: Optional[Tuple[float, float]] = None
+        segment_a_opts: Optional[Tuple[float, float]] = None,
+        zr_asset_obj=zr_asset_obj
     ) -> Tuple[float, float, Dict[float, float], float, float]:
       # キャッシュにあればそれを返す (浮動小数点の誤差を考慮して丸める)
       r_key = round(r, 6)
@@ -373,7 +401,25 @@ def main():
             if k != ZERO_RISK_NAME
         }
 
-        year_cf = {"Net_Spend": -monthly_net_spend}  # 支出は負で渡す
+        # この年齢の正味支出（名目）を再現する
+        # y_withdraw_n は年間の合計だが、simulate_strategy は月次の cf を必要とする
+        # ここでは、元の monthly_net_spend をそのまま使用する
+        year_idx = age - START_AGE
+        start_m_local = year_idx * 12
+        end_m_local = (year_idx + 1) * 12
+
+        # monthly_net_spend を再計算 (evaluate_r 内で y_withdraw_n を使うためではなく、月次を渡すため)
+        m_net_spend = np.zeros((n_sim, 12))
+        m_net_spend -= monthly_cashflows[
+            cf_map["BaseSpend"]][:, start_m_local:end_m_local]
+        p_total = np.zeros((n_sim, 12))
+        for ln in ["PensionPremium", "PensionKousei", "PensionKiso"]:
+          hn = cf_map.get(ln)
+          if hn and hn in monthly_cashflows:
+            p_total += monthly_cashflows[hn][:, start_m_local:end_m_local]
+        m_net_spend -= p_total
+
+        year_cf = {"Net_Spend": -m_net_spend}  # 支出は負で渡す
         strategy.cashflow_rules = [
             CashflowRule(source_name="Net_Spend",
                          cashflow_type=CashflowType.REGULAR)
@@ -472,7 +518,7 @@ def main():
                   f"        Path {p_idx}: X_next={x_next[p_idx]:.2f}, Y_next(exp)={y_next_expected:.2f}, R_next(exp)={r_next_expected:.4f}, P_surv={survival[p_idx]:.4f}"
               )
 
-        # 全パス의 平均生存確率
+        # 全パスの 平均生存確率
         avg_survival = float(np.mean(survival))
         survivals_per_a[a] = avg_survival
         # 生存確率が同じ（例：共に1.0）場合は、より高いオルカン比率 A を選択する（tie-break）

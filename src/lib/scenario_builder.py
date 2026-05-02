@@ -417,6 +417,11 @@ class CompiledExperiment:
   monthly_prices: Dict[str, np.ndarray]
   # 生成されたキャッシュフロー（年金等）。Dict キーはソース名、値は shape (n_sim, n_months) の配列。
   monthly_cashflows: Dict[str, np.ndarray]
+  # 論理キャッシュフロー名からハッシュ化されたキャッシュフロー名へのマップ。
+  cf_name_map: Dict[str, str] = field(default_factory=dict)
+  # 統計データに基づく、インフレ調整前の実質支出額の推移 (万円/年)。
+  # これは「支出（BaseSpend）」のみの合計であり、年金などの収入は含まれない。
+  annual_cost_real: Optional[np.ndarray] = None
 
 
 def create_experiment_setup(
@@ -507,7 +512,9 @@ def create_experiment_setup(
         CompiledExperiment(name=s.name,
                            strategy=strategy,
                            monthly_prices=prices,
-                           monthly_cashflows=cashflows))
+                           monthly_cashflows=cashflows,
+                           cf_name_map=cf_map,
+                           annual_cost_real=real_cost))
 
   return compiled_experiments
 
@@ -687,7 +694,7 @@ class _CompiledLifeplan:
   Lifeplan のコンパイル結果を保持する内部用データクラス。
   """
   configs: List[CashflowConfig]
-  # 統計データに基づく、インフレ調整前の実質支出額の推移。
+  # 統計データに基づく、インフレ調整前の実質支出額の推移 (万円/年)
   real_cost_curve: np.ndarray
 
 

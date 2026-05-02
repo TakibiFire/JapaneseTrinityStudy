@@ -17,19 +17,17 @@
 
 import argparse
 import os
+from dataclasses import replace
 from typing import Any, Dict, List
 
 import numpy as np
 import pandas as pd
 
-from src.core import Strategy, ZeroRiskAsset, simulate_strategy
-from src.lib.cashflow_generator import (BaseSpendConfig, CashflowRule,
-                                        CashflowType, generate_cashflows)
-from src.lib.dp_predictor import DPOptimalStrategyPredictor
-from src.lib.dynamic_rebalance import calculate_optimal_strategy
-from src.lib.dynamic_rebalance_dp import calculate_optimal_strategy_dp
-from src.lib.retired_spending import (SpendingType,
-                                      get_annual_retired_spending_values)
+from src.core import simulate_strategy
+from src.lib.scenario_builder import (DynamicV1Rebalance, FixedRebalance,
+                                      PredefinedStock, PredefinedZeroRisk,
+                                      SpendAwareDPRebalance, StrategySpec,
+                                      create_experiment_setup)
 from src.lib.world_setup import create_standard_world
 
 
@@ -53,71 +51,33 @@ def main():
   CSV_PATH = os.path.join(DATA_DIR, f"{EXP_NAME}.csv")
   MODELS_PATH = "data/optimal_strategy_v2_models.json"
 
-  # 資産名
-  CPI_NAME = "Japan_CPI"
-  PENSION_CPI_NAME = "Pension_CPI"
-  FX_NAME = "USDJPY_0_10.53"
-  ZERO_RISK_NAME = "ゼロリスク資産"
-  ORUKAN_NAME = "オルカン"
-
-  # 定数
-  TRUST_FEE = 0.0005775
-  ZERO_RISK_YIELD = 0.04
-  TAX_RATE = 0.20315
-  CURRENT_YEAR = 2026
-  MACRO_ECONOMIC_SLIDE_END_YEAR = 2057
-  INFLATION_RATE = 0.0177  # V1計算用
-
   os.makedirs(DATA_DIR, exist_ok=True)
 
-  # 1. アセット生成
-  world = create_standard_world(n_sim=N_SIM,
+  # 1. セットアップの構築
+  setup = create_standard_world(n_sim=N_SIM,
                                 start_age=START_AGE,
                                 end_age=START_AGE + YEARS - 1,
-                                retirement_age=60,
+                                retirement_start_age=40,
                                 pension_start_age=60,
-                                seed=SEED,
-                                tax_rate=TAX_RATE,
-                                zero_risk_yield=ZERO_RISK_YIELD,
-                                trust_fee=TRUST_FEE)
-  monthly_prices = world.monthly_prices
-  zr_asset_obj = world.zr_asset_obj
-  ORUKAN_NAME = world.ORUKAN_NAME
-  ZERO_RISK_NAME = world.ZERO_RISK_NAME
-  CPI_NAME = world.CPI_NAME
-  PENSION_CPI_NAME = world.PENSION_CPI_NAME
+                                seed=SEED)
 
-  # 2. キャッシュフローと支出の準備
-  # ベースラインの支出額 (月額合計 -> 年額合計)
-  spending_types = [
-      SpendingType.CONSUMPTION, SpendingType.NON_CONSUMPTION_EXCLUDE_PENSION
+  # 2. グリッドループ
+  spending_rules = [3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 7.0]
+  strategies_to_compare = [
+      "オルカン100%", "無リスク100%", "固定最適比率", "一般的な最適リバランス", "支出に合わせた最適リバランス"
   ]
-  BASE_SPEND_ANNUAL_WO_PENSION = get_annual_retired_spending_values(
-      spending_types, start_age=START_AGE, num_years=1)[0]
 
-  # 年金設定: 1人世帯, 年金開始60歳
-  PENSION_PREMIUM_ANNUAL = 20.4
-
-  cf_configs = world.cf_configs
-  cf_rules = world.cf_rules
-
-  # 基本支出の設定 (年齢による変動とCPI連動)
-  cf_configs.append(
-      BaseSpendConfig(name="BaseSpend",
-                      amount=world.annual_spending_values,
-                      cpi_name=CPI_NAME))
-  cf_rules.append(
-      CashflowRule(source_name="BaseSpend", cashflow_type=CashflowType.REGULAR))
-
-  monthly_cashflows = generate_cashflows(cf_configs,
-                                         monthly_prices,
-                                         n_sim=N_SIM,
-                                         n_months=YEARS * 12)
+  # 基本支出（統計値）を取得するために、一度コンパイルして情報を抽出する
+  # (モデルフィッティングとの整合性を保つためのリファレンスとして使用)
+  base_exp = create_experiment_setup(setup)[0]
+  # annual_cost_real is in man-yen/year. [0] is the start_age value.
+  initial_annual_cost_man_yen = base_exp.annual_cost_real[0]
 
   # dump_withdraw モードの処理
   if EXP_NAME == "dump_withdraw":
     print("dump_withdraw モード: キャッシュフローを解析して支出額をダンプします。")
     total_months = YEARS * 12
+    monthly_cashflows = base_exp.monthly_cashflows
 
     # キャッシュフローの合算 (名目、万円)
     # monthly_cashflows には負の値（支出）と正の値（収入）の両方が含まれている
@@ -158,143 +118,115 @@ def main():
     print(f"完了。結果を {CSV_PATH} に保存しました。")
     return
 
-  # DP予測器の準備
-  dp_predictor = DPOptimalStrategyPredictor(MODELS_PATH)
-
-  # 3. グリッドループ
-  spending_rules = [3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 7.0]
-  strategies_to_compare = [
-      "オルカン100%", "無リスク100%", "固定最適比率", "一般的な最適リバランス", "支出に合わせた最適リバランス"
-  ]
-
-  results: List[Dict[str, Any]] = []
-
-  print(
-      f"全 {len(spending_rules) * len(strategies_to_compare)} パターンのシミュレーションを実行中..."
-  )
-
-  it = 0
-  total_its = len(spending_rules) * len(strategies_to_compare)
+  # グリッドシミュレーション用の実験を Setup に追加
   for rule in spending_rules:
     # 初期資産の計算
-    # 支出倍率 spend_mult = 1.0 固定
-    base_spend_annual = BASE_SPEND_ANNUAL_WO_PENSION + PENSION_PREMIUM_ANNUAL
-    initial_annual_cost = base_spend_annual  # spend_mult=1.0
-    init_money = initial_annual_cost / (rule / 100.0)
-    initial_annual_cost_wo_pension = initial_annual_cost - PENSION_PREMIUM_ANNUAL
+    init_money = initial_annual_cost_man_yen / (rule / 100.0)
 
     for strat_name in strategies_to_compare:
-      if it % 10 == 0:
-        print(f"Progress: {it}/{total_its}")
-      it += 1
+      spec = StrategySpec(
+          initial_money=init_money,
+          initial_asset_ratio=((PredefinedStock.ORUKAN_155, 1.0),
+                               (PredefinedZeroRisk.ZERO_RISK_4PCT, 0.0)),
+          selling_priority=(PredefinedStock.ORUKAN_155,
+                            PredefinedZeroRisk.ZERO_RISK_4PCT))
 
-      # 戦略に応じた動的リバランス関数の定義
       if strat_name == "オルカン100%":
-
-        def dynamic_rebalance_fn(total_net, annual_spend, rem_years,
-                                 post_tax_net):
-          return {ORUKAN_NAME: 1.0, ZERO_RISK_NAME: 0.0}
-
+        spec = replace(spec, rebalance=FixedRebalance())
       elif strat_name == "無リスク100%":
-
-        def dynamic_rebalance_fn(total_net, annual_spend, rem_years,
-                                 post_tax_net):
-          return {ORUKAN_NAME: 0.0, ZERO_RISK_NAME: 1.0}
-
+        spec = replace(spec,
+                       initial_asset_ratio=((PredefinedStock.ORUKAN_155, 0.0),
+                                            (PredefinedZeroRisk.ZERO_RISK_4PCT,
+                                             1.0)),
+                       rebalance=FixedRebalance())
       elif strat_name == "固定最適比率":
-        fixed_ratio = calculate_optimal_strategy(
-            s_rate=np.array([rule / 100.0]),
-            remaining_years=YEARS,
-            base_yield=ZERO_RISK_YIELD,
-            tax_rate=TAX_RATE,
-            inflation_rate=INFLATION_RATE)[0]
-        print(f"Rule {rule}%: 固定最適比率 = {fixed_ratio:.4f}")
-
-        def dynamic_rebalance_fn(total_net, annual_spend, rem_years,
-                                 post_tax_net):
-          return {ORUKAN_NAME: fixed_ratio, ZERO_RISK_NAME: 1.0 - fixed_ratio}
-
+        # FixedRebalance で初期配分を維持。
+        # 比率自体は内部で calculate_optimal_strategy を呼ぶ V1Rebalance か、
+        # あるいはここで計算して initial_asset_ratio に設定する。
+        # 以前のスクリプトの挙動（rule に基づく固定比率）を再現するため、ここで計算。
+        from src.lib.dynamic_rebalance import calculate_optimal_strategy
+        fixed_ratio = calculate_optimal_strategy(s_rate=np.array([rule / 100.0
+                                                                 ]),
+                                                 remaining_years=YEARS,
+                                                 base_yield=0.04,
+                                                 tax_rate=0.20315,
+                                                 inflation_rate=0.0177)[0]
+        spec = replace(spec,
+                       initial_asset_ratio=((PredefinedStock.ORUKAN_155,
+                                             fixed_ratio),
+                                            (PredefinedZeroRisk.ZERO_RISK_4PCT,
+                                             1.0 - fixed_ratio)),
+                       rebalance=FixedRebalance())
       elif strat_name == "一般的な最適リバランス":
+        spec = replace(spec,
+                       rebalance=DynamicV1Rebalance(
+                           risky_asset=PredefinedStock.ORUKAN_155,
+                           zero_risk_asset=PredefinedZeroRisk.ZERO_RISK_4PCT))
+      elif strat_name == "支出に合わせた最適リバランス":
+        spec = replace(spec,
+                       rebalance=SpendAwareDPRebalance(
+                           risky_asset=PredefinedStock.ORUKAN_155,
+                           zero_risk_asset=PredefinedZeroRisk.ZERO_RISK_4PCT,
+                           model_name=MODELS_PATH))
 
-        def dynamic_rebalance_fn(total_net, annual_spend, rem_years,
-                                 post_tax_net):
-          s_rate = annual_spend / np.maximum(total_net, 1.0)
-          ratio = calculate_optimal_strategy(s_rate=s_rate,
-                                             remaining_years=rem_years,
-                                             base_yield=ZERO_RISK_YIELD,
-                                             tax_rate=TAX_RATE,
-                                             inflation_rate=INFLATION_RATE)
-          return {ORUKAN_NAME: ratio, ZERO_RISK_NAME: 1.0 - ratio}
+      setup.add_experiment(name=f"{strat_name}_Rule{rule}",
+                           overwrite_strategy=spec)
 
-      else:  # 支出に合わせた最適リバランス
+  # 実験の実行
+  print(f"全 {len(setup.experiments)} パターンのシミュレーションをコンパイル中...")
+  compiled_exps = create_experiment_setup(setup, record_annual_spend=True)
 
-        def dynamic_rebalance_fn(total_net, annual_spend, rem_years,
-                                 post_tax_net):
-          # 年齢の補正: core.py で rem_years に足されているバッファ (0.25) を引き、
-          # 経過年数 (elapsed_years) を正確に算出する。
-          # リバランスは年始に行われるため、これから始まる年度の年齢を使用する。
-          elapsed_years = int(round(YEARS - (rem_years - 0.25)))
-          predict_age = START_AGE + elapsed_years
+  results: List[Dict[str, Any]] = []
+  total_its = len(compiled_exps) - 1  # ベースラインを除く
+  print(f"シミュレーション実行中...")
 
-          # 勝利しきい値を考慮した最適な株式比率を予測
-          # annual_spend は前月の支出を12倍したもの（Y_{N-1} の近似）
-          predict_age = int(round(START_AGE + (YEARS - (rem_years - 0.25))))
-          ratio = dp_predictor.get_a_opt_with_winning_threshold(
-              predict_age, post_tax_net, annual_spend)
+  for i, exp in enumerate(compiled_exps):
+    if i == 0:
+      continue  # ベースライン (standard_world) はスキップ
 
-          return {ORUKAN_NAME: ratio, ZERO_RISK_NAME: 1.0 - ratio}
+    if i % 10 == 0:
+      print(f"Progress: {i}/{total_its}")
 
-      strategy = Strategy(name=f"{strat_name}_Rule{rule}",
-                          initial_money=float(init_money),
-                          initial_loan=0.0,
-                          yearly_loan_interest=0.0,
-                          initial_asset_ratio={
-                              ORUKAN_NAME: 1.0,
-                              zr_asset_obj: 0.0
-                          },
-                          tax_rate=TAX_RATE,
-                          rebalance_interval=12,
-                          dynamic_rebalance_fn=dynamic_rebalance_fn,
-                          selling_priority=[ORUKAN_NAME, ZERO_RISK_NAME],
-                          record_annual_spend=True,
-                          cashflow_rules=cf_rules)
+    # 実験名から戦略名とルールを復元 (パース)
+    # 形式: "{strat_name}_Rule{rule}"
+    name_parts = exp.name.split("_Rule")
+    strat_name = name_parts[0]
+    rule = float(name_parts[1])
 
-      res = simulate_strategy(strategy,
-                              monthly_prices,
-                              monthly_cashflows=monthly_cashflows)
+    res = simulate_strategy(exp.strategy, exp.monthly_prices,
+                            exp.monthly_cashflows)
 
-      # 結果の記録 (共通項目)
-      base_row = {
-          "spend_multiplier": 1.0,
-          "strategy": strat_name,
-          "spending_rule": rule,
-          "initial_money": init_money,
-          "initial_annual_cost": initial_annual_cost,
-      }
+    # 結果の記録 (共通項目)
+    base_row = {
+        "spend_multiplier": 1.0,
+        "strategy": strat_name,
+        "spending_rule": rule,
+        "initial_money": exp.strategy.initial_money,
+        "initial_annual_cost": initial_annual_cost_man_yen,
+    }
 
-      # 1. 生存確率
-      row_survival = base_row.copy()
-      row_survival["value_type"] = "survival"
-      for year in range(1, YEARS + 1):
-        bankrupt_count = (res.sustained_months < year * 12).sum()
-        survival_rate = 1.0 - (bankrupt_count / N_SIM)
-        row_survival[str(year)] = survival_rate
-      results.append(row_survival)
+    # 1. 生存確率
+    row_survival = base_row.copy()
+    row_survival["value_type"] = "survival"
+    for year in range(1, YEARS + 1):
+      bankrupt_count = (res.sustained_months < year * 12).sum()
+      survival_rate = 1.0 - (bankrupt_count / N_SIM)
+      row_survival[str(year)] = survival_rate
+    results.append(row_survival)
 
-      # 2. 支出額の統計 (特定の条件のみ記録)
-      # 元の実験結果と整合性を保つため、4.0% ルールの「支出に合わせた最適リバランス」のみ記録する
-      if res.annual_spends is not None and rule == 4.0 and strat_name == "支出に合わせた最適リバランス":
-        p25 = np.percentile(res.annual_spends, 25, axis=0)
-        p50 = np.percentile(res.annual_spends, 50, axis=0)
-        p75 = np.percentile(res.annual_spends, 75, axis=0)
+    # 2. 支出額の統計 (特定の条件のみ記録)
+    if res.annual_spends is not None and rule == 4.0 and strat_name == "支出に合わせた最適リバランス":
+      p25 = np.percentile(res.annual_spends, 25, axis=0)
+      p50 = np.percentile(res.annual_spends, 50, axis=0)
+      p75 = np.percentile(res.annual_spends, 75, axis=0)
 
-        for name, p_values in [("spend25p", p25), ("spend50p", p50),
-                               ("spend75p", p75)]:
-          row = base_row.copy()
-          row["value_type"] = name
-          for year in range(1, YEARS + 1):
-            row[str(year)] = p_values[year - 1]
-          results.append(row)
+      for stat_name, p_values in [("spend25p", p25), ("spend50p", p50),
+                                  ("spend75p", p75)]:
+        row = base_row.copy()
+        row["value_type"] = stat_name
+        for year in range(1, YEARS + 1):
+          row[str(year)] = p_values[year - 1]
+        results.append(row)
 
   # CSV保存
   df = pd.DataFrame(results)
