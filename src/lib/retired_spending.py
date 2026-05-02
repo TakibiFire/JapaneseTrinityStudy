@@ -68,7 +68,6 @@ def get_annual_retired_spending_values(spending_types: List[SpendingType],
     spending_types: 支出の種類 (CONSUMPTION, NON_CONSUMPTION, NON_CONSUMPTION_EXCLUDE_PENSION) のリスト
     start_age: 開始年齢
     num_years: 取得する年数 (デフォルト 50)
-    normalize: 開始年齢時を1.0とするかどうか (デフォルト True)
 
   Returns:
     年支出（単位：万円）リスト。
