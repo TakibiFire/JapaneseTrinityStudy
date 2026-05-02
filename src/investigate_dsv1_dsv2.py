@@ -35,11 +35,10 @@ def main():
   MODELS_PATH = "data/optimal_strategy_v2_models.json"
   CPI_NAME = "Japan_CPI"
 
-  spending_types = [
-      SpendingType.CONSUMPTION, SpendingType.NON_CONSUMPTION_EXCLUDE_PENSION
-  ]
+  spending_types = (SpendingType.CONSUMPTION,
+                    SpendingType.NON_CONSUMPTION_EXCLUDE_PENSION)
   BASE_SPEND_ANNUAL_WO_PENSION = get_annual_retired_spending_values(
-      spending_types, start_age=START_AGE, num_years=1)[0]
+      list(spending_types), start_age=START_AGE, num_years=1)[0]
 
   baseline_world = WorldConfig(n_sim=N_SIM,
                                n_years=YEARS,

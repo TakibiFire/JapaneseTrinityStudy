@@ -45,11 +45,10 @@ def main():
   CPI_NAME = "Japan_CPI"
 
   # ベースラインの支出額 (月額合計 -> 年額合計)
-  spending_types = [
-      SpendingType.CONSUMPTION, SpendingType.NON_CONSUMPTION_EXCLUDE_PENSION
-  ]
+  spending_types = (SpendingType.CONSUMPTION,
+                    SpendingType.NON_CONSUMPTION_EXCLUDE_PENSION)
   BASE_SPEND_ANNUAL_WO_PENSION = get_annual_retired_spending_values(
-      spending_types, start_age=START_AGE, num_years=1)[0]
+      list(spending_types), start_age=START_AGE, num_years=1)[0]
   # 年金設定 (旧コードの値を再現するために PensionStatus.FULL をベースに調整)
   # 旧コード: PREMIUM=20.4, TOTAL=99.4, KISO=81.6*0.76=62.016, KOUSEI=37.384
   # scenario_builder: PREMIUM=21.5, KISO=81.6*0.76=62.016, KOUSEI=2.736*(40-22)*0.76=37.428
