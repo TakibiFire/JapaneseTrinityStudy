@@ -86,9 +86,11 @@ def create_styled_summary(
 
 
 def create_survival_probability_chart(
-    results: Dict[str, SimulationResult],
+    results: Optional[Dict[str, SimulationResult]] = None,
     max_years: int = 50,
-    height: int = 250) -> Tuple[pd.DataFrame, alt.Chart]:
+    height: int = 250,
+    start_age: Optional[int] = None,
+    df_plot: Optional[pd.DataFrame] = None) -> Tuple[pd.DataFrame, alt.Chart]:
   """
   各戦略の生存確率 (1 - 破産確率) の推移を年単位で計算し、
   データフレームと Altairの折れ線グラフを返す。
@@ -97,30 +99,47 @@ def create_survival_probability_chart(
     results: 戦略名をキー、SimulationResult を値とする辞書。
     max_years: 何年後までを計算するか。デフォルトは50年。
     height: グラフの高さ。
+    start_age: 開始年齢。指定された場合、x軸が年齢になる。
+    df_plot: (オプション) 既に計算済みのプロット用データフレーム。
+      提供された場合、results からの計算をスキップする。
+      必要なカラム: 'Year', 'Strategy', 'Survival Probability (%)'
 
   Returns:
     生データの DataFrame と Altair チャートのタプル。
   """
-  plot_data = []
-  years = list(range(max_years + 1))
+  if df_plot is None:
+    if results is None:
+      raise ValueError("results or df_plot must be provided")
 
-  for name, res in results.items():
-    sustained = res.sustained_months
+    plot_data = []
+    years = list(range(max_years + 1))
 
-    for y in years:
-      # y年の時点で生存している = sustained_months >= y * 12
-      survival_rate = np.mean(sustained >= y * 12) * 100.0
-      plot_data.append({
-          'Year': y,
-          'Strategy': name,
-          'Survival Probability (%)': survival_rate
-      })
+    for name, res in results.items():
+      sustained = res.sustained_months
 
-  df_plot = pd.DataFrame(plot_data)
+      for y in years:
+        # y年の時点で生存している = sustained_months >= y * 12
+        survival_rate = np.mean(sustained >= y * 12) * 100.0
+        plot_data.append({
+            'Year': y,
+            'Strategy': name,
+            'Survival Probability (%)': survival_rate
+        })
+    df_plot = pd.DataFrame(plot_data)
+
+  # x軸の設定
+  if start_age is not None:
+    df_plot = df_plot.copy()
+    df_plot['Age'] = df_plot['Year'] + start_age
+    x_col = 'Age'
+    x_title = '年齢'
+  else:
+    x_col = 'Year'
+    x_title = '経過年数 (年)'
 
   # y軸の下限を、最小値の10の倍数（切り捨て）に設定
   min_val = df_plot['Survival Probability (%)'].min()
-  y_min = (min_val // 10) * 10
+  y_min = (min_val // 5) * 5
   y_max = 100
 
   display_survival_title = '経過年数と生存確率の推移'
@@ -128,7 +147,7 @@ def create_survival_probability_chart(
     display_survival_title += f"（生存確率 {y_min:.0f}%以下は描画を省略）"
 
   chart = alt.Chart(df_plot).mark_line(point=True).encode(
-      x=alt.X('Year:Q', title='経過年数 (年)'),
+      x=alt.X(f'{x_col}:Q', title=x_title),
       y=alt.Y('Survival Probability (%):Q',
               title='生存確率 (%)',
               scale=alt.Scale(domain=[y_min, y_max])),
@@ -137,7 +156,7 @@ def create_survival_probability_chart(
                                         orient='top',
                                         labelExpr="split(datum.label, '  ')")),
       tooltip=[
-          'Year', 'Strategy',
+          x_col, 'Strategy',
           alt.Tooltip('Survival Probability (%):Q', format='.1f')
       ]).properties(title=display_survival_title, width=600, height=height)
 

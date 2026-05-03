@@ -11,8 +11,11 @@ data/all_60yr/ の結果を分析・可視化するスクリプト。
 7. 生存確率達成ラインのグラフ保存
 """
 
+import argparse
 import os
+from typing import List, Optional, Tuple
 
+import altair as alt
 import pandas as pd
 
 from src.lib.fitting_all_yr import (FeatureSetType, run_fitting_analysis,
@@ -20,6 +23,7 @@ from src.lib.fitting_all_yr import (FeatureSetType, run_fitting_analysis,
                                     run_stepwise_fitting_analysis,
                                     run_survival_curve_analysis,
                                     save_survival_charts)
+from src.lib.visualize import create_survival_probability_chart
 from src.lib.visualize_all_yr import (create_heatmap,
                                       create_spend_percentile_chart,
                                       prepare_heatmap_labels,
@@ -29,6 +33,251 @@ from src.lib.visualize_all_yr import (create_heatmap,
 IMG_DIR = "docs/imgs/all_60yr"
 TEMP_DIR = "temp/all_60yr"
 BASE_SPEND_ANNUAL = 540.0
+
+
+def create_optimal_pension_heatmap(df_best: pd.DataFrame,
+                                   title: str,
+                                   x_col: str,
+                                   x_title: str,
+                                   y_col: str,
+                                   y_title: str,
+                                   output_path: str,
+                                   x_sort: Optional[List] = None,
+                                   y_sort: Optional[List] = None,
+                                   width: int = 500,
+                                   height: int = 450):
+  """
+  最適な年金受給開始年齢を可視化するヒートマップ。
+  """
+  plot_df = df_best.copy()
+
+  # 年齢ごとのカラーマップ
+  color_map = {
+      "60歳": "#FBD38D",  # Light orange
+      "65歳": "#9AE6B4",  # Light green
+      "70歳": "#B2F5EA",  # Light teal
+      "75歳": "#FEB2B2"  # Light red
+  }
+  domain = list(color_map.keys())
+  range_ = list(color_map.values())
+
+  base = alt.Chart(plot_df).encode(
+      x=alt.X(f'{x_col}:O',
+              title=x_title,
+              sort=x_sort,
+              axis=alt.Axis(labelExpr="split(datum.label, '@')")),
+      y=alt.Y(f'{y_col}:O',
+              title=y_title,
+              sort=y_sort,
+              axis=alt.Axis(labelExpr="split(datum.label, '@')")),
+  )
+
+  heatmap = base.mark_rect().encode(
+      color=alt.Color('display_age:N',
+                      title='受給開始年齢',
+                      scale=alt.Scale(domain=domain, range=range_)))
+
+  text = base.mark_text(baseline='middle',
+                        lineBreak='\n').encode(text=alt.Text('combo_label:N'),
+                                               color=alt.value('black'))
+
+  chart = (heatmap + text).properties(title=title, width=width, height=height)
+
+  os.makedirs(os.path.dirname(output_path), exist_ok=True)
+  chart.save(output_path)
+  print(f"✅ {output_path} に保存しました。")
+
+
+def create_pension_survival_curve(df: pd.DataFrame,
+                                 multiplier: float,
+                                 rule: float,
+                                 title: str,
+                                 output_path: str):
+  """
+  指定された multiplier と rule における、受給開始年齢別の生存確率推移を描画する。
+  """
+  # 年度列 (1, 2, ..., 35) を取得
+  year_cols = [str(i) for i in range(1, 36) if str(i) in df.columns]
+
+  # 指定された条件でフィルタ
+  plot_df = df[(df["spend_multiplier"] == multiplier) &
+               (df["spending_rule"] == rule) &
+               (df["value_type"] == "survival")].copy()
+
+  if plot_df.empty:
+    print(f"Warning: No data for multiplier={multiplier}, rule={rule}")
+    return
+
+  # メルトしてロング形式に
+  df_long = plot_df.melt(id_vars=["pension_start_age"],
+                         value_vars=year_cols,
+                         var_name="Year",
+                         value_name="Survival Probability (%)")
+  df_long["Year"] = df_long["Year"].astype(int)
+  df_long["Survival Probability (%)"] *= 100.0
+
+  # 0年目のデータを追加 (開始時は100%)
+  ages = plot_df["pension_start_age"].unique()
+  start_rows = pd.DataFrame({
+      "pension_start_age": ages,
+      "Year": 0,
+      "Survival Probability (%)": 100.0
+  })
+  df_long = pd.concat([start_rows, df_long], ignore_index=True)
+
+  df_long["Strategy"] = df_long["pension_start_age"].map(
+      lambda x: f"{int(x)}歳受給開始")
+
+  # 共通ライブラリの可視化関数を使用
+  _, chart = create_survival_probability_chart(df_plot=df_long,
+                                               start_age=60,
+                                               height=300)
+
+  chart = chart.properties(title=title)
+
+  os.makedirs(os.path.dirname(output_path), exist_ok=True)
+  chart.save(output_path)
+  print(f"✅ {output_path} に保存しました。")
+
+
+def run_optimal_pension_analysis(df_all: pd.DataFrame, target_year: str):
+  """
+  最適な年金受給開始年齢を分析する。
+  """
+  print(f"\n\n{'='*20} 最適な年金受給開始年齢の分析 {'='*20}")
+
+  # 1. グラフ作成 (m=1, r=4% と m=1, r=5%)
+  create_pension_survival_curve(
+      df_all,
+      multiplier=1.0,
+      rule=4.0,
+      title="受給開始年齢別 生存確率推移 (支出レベル1.0, 初年度支出率4%)",
+      output_path=os.path.join(IMG_DIR, "survival_curve_pension_m1_r4.svg"))
+
+  create_pension_survival_curve(
+      df_all,
+      multiplier=1.0,
+      rule=5.0,
+      title="受給開始年齢別 生存確率推移 (支出レベル1.0, 初年度支出率5%)",
+      output_path=os.path.join(IMG_DIR, "survival_curve_pension_m1_r5.svg"))
+
+  create_pension_survival_curve(
+      df_all,
+      multiplier=3.0,
+      rule=5.0,
+      title="受給開始年齢別 生存確率推移 (支出レベル2.0, 初年度支出率5%)",
+      output_path=os.path.join(IMG_DIR, "survival_curve_pension_m3_r5.svg"))
+
+  df_survival = df_all[df_all["value_type"] == "survival"].copy()
+  if df_survival.empty:
+    print("Error: Survival data not found.")
+    return
+
+  dim_cols = ['spend_multiplier', 'spending_rule']
+  pref_order = [60, 65, 70, 75]
+  threshold = 0.01  # 許容範囲 1%
+
+  def get_best_age(group: pd.DataFrame) -> pd.Series:
+    max_prob = float(group[target_year].max())
+    selected_row = None
+
+    # 優先順位に従ってスキャン
+    for age in pref_order:
+      match = group[group["pension_start_age"] == age]
+      if not match.empty:
+        row = match.iloc[0]
+        if float(row[target_year]) >= (max_prob - threshold):
+          selected_row = row.copy()
+          break
+
+    if selected_row is None:
+      selected_row = group.sort_values(by=[target_year],
+                                       ascending=False).iloc[0].copy()
+
+    selected_row["display_age"] = f"{int(selected_row['pension_start_age'])}歳"
+    selected_row[
+        "combo_label"] = f"{int(selected_row['pension_start_age'])}歳\n{selected_row[target_year]*100:.1f}%"
+    return selected_row
+
+  results = []
+  for _, group in df_survival.groupby(dim_cols):
+    results.append(get_best_age(group))
+  df_best = pd.DataFrame(results)
+
+  df_best, m_order, r_order = prepare_heatmap_labels(df_best)
+
+  title = f"最適年金受給開始年齢 ({target_year}年後生存確率, 優先: 60>65>70>75, 許容差{threshold*100:g}%)"
+  output_path = os.path.join(IMG_DIR, "optimal_pension_age_heatmap.svg")
+  create_optimal_pension_heatmap(df_best,
+                                 title=title,
+                                 x_col="rule_label",
+                                 x_title="初期支出率 (%ルール)",
+                                 y_col="multiplier_label",
+                                 y_title="支出レベル",
+                                 output_path=output_path,
+                                 x_sort=r_order,
+                                 y_sort=m_order)
+
+
+def run_p_d_range_analysis(df_all: pd.DataFrame, target_year: str):
+  """
+  P-D-RANGE の分析を実行する。
+  """
+  df_survival = df_all[df_all["value_type"] == "survival"].copy()
+  run_best_combination_analysis(
+      df_survival,
+      target_year=target_year,
+      img_dir=IMG_DIR,
+      temp_dir=TEMP_DIR,
+      title_prefix="60歳リタイア",
+      threshold=0.02,
+      pref_order=["P60_D1", "P65_D1", "P60_D0", "P65_D0"],
+      width=500,
+      height=450)
+
+
+def run_p60_d1_analysis(df_all: pd.DataFrame, target_year: str):
+  """
+  P60-D1 の詳細分析を実行する。
+  """
+  df_survival = df_all[df_all["value_type"] == "survival"].copy()
+
+  # 1. ヒートマップ
+  run_p60_d1_heatmap(df_survival)
+
+  # 2. 予測モデルの評価
+  fitting_results = run_fitting_analysis(df_survival, target_year)
+
+  # 3. ステップワイズ特徴量選択
+  logit_results = [r for r in fitting_results if r["use_logit"]]
+  best_eval = max(logit_results, key=lambda x: x["adj_r2"])
+
+  model_sw, selected_sw, poly_sw = run_stepwise_fitting_analysis(
+      df_survival,
+      target_year,
+      max_adj_r2=float(best_eval["adj_r2"]),
+      poly_deg=int(best_eval["poly_deg"]),
+      interaction_only=bool(best_eval["interaction_only"]),
+      use_logit=True)
+
+  # 4. 生存達成データの生成
+  target_probs = [0.97, 0.95, 0.90, 0.80, 0.70]
+  df_plot_survival, base_cost = run_survival_curve_analysis(
+      df_survival,
+      model_sw,
+      selected_sw,
+      poly_sw,
+      use_logit=True,
+      target_probs=target_probs)
+
+  # 5. グラフ保存
+  save_survival_charts(df_plot_survival,
+                       base_cost,
+                       target_probs,
+                       img_dir=IMG_DIR)
+
+  # 6. Rule of Thumb
+  run_rule_of_thumb_analysis(df_survival, target_year, target_probs)
 
 
 def run_p60_d1_heatmap(df_survival: pd.DataFrame):
@@ -60,107 +309,35 @@ def run_p60_d1_heatmap(df_survival: pd.DataFrame):
 
 
 def main():
-  P_D_RANGE_CSV = "data/all_60yr/P-D-RANGE.csv"
-  if not os.path.exists(P_D_RANGE_CSV):
-    print(f"Error: {P_D_RANGE_CSV} が見つかりません。")
-    return
+  parser = argparse.ArgumentParser(description="60歳リタイア開始・95歳までの分析・可視化スクリプト。")
+  parser.add_argument(
+      "--exp_type",
+      type=str,
+      default="optimal-pension",
+      help="実験設定 (comma separated: optimal-pension, P-D-RANGE, P60-D1)")
+  args = parser.parse_args()
 
-  df_p_d_all = pd.read_csv(P_D_RANGE_CSV)
-  df_p_d_survival = df_p_d_all[df_p_d_all["value_type"] == "survival"].copy()
-
-  P60_D1_CSV = "data/all_60yr/P60-D1.csv"
-  if not os.path.exists(P60_D1_CSV):
-    print(f"Error: {P60_D1_CSV} が見つかりません。")
-    return
-
-  df_p60_d1_all = pd.read_csv(P60_D1_CSV)
-  df_p60_d1_survival = df_p60_d1_all[df_p60_d1_all["value_type"] ==
-                                     "survival"].copy()
-
+  exp_types = args.exp_type.split(",")
   target_year = "35"
-  # 1. 最適な組み合わせの分析 (35年後)
-  run_best_combination_analysis(
-      df_p_d_survival,
-      target_year=target_year,
-      img_dir=IMG_DIR,
-      temp_dir=TEMP_DIR,
-      title_prefix="60歳リタイア",
-      threshold=0.02,
-      pref_order=["P60_D1", "P65_D1", "P60_D0", "P65_D0"],  # 優先順位: 60歳ありを最優先
-      width=500,
-      height=450)
 
-  # 2. 支出額パーセンタイル推移の生成
-  # Only care about P60, D1, Mult1, Rule4 case.
-  df_plot_p = df_p_d_all[(df_p_d_all["pension_start_age"] == 60) &
-                         (df_p_d_all["spend_multiplier"] == 1.0) &
-                         (df_p_d_all["spending_rule"] == 4.0)]
-  if not df_plot_p.empty:
-    title = "年間支出額推移: 60歳リタイア, 年金60歳, 初期540万円/年, 初期支出率4%"
-    output_path = os.path.join(IMG_DIR, "spend_percentiles_60yr_p60_m1_r4.svg")
-    create_spend_percentile_chart(df_plot_p,
-                                  title,
-                                  output_path,
-                                  start_age=60,
-                                  num_years=35)
+  for et in exp_types:
+    et = et.strip()
+    csv_path = f"data/all_60yr/{et}.csv"
+    if not os.path.exists(csv_path):
+      print(f"Warning: {csv_path} が見つかりません。スキップします。")
+      continue
 
-  # 3. df_p60_d1_survival からヒートマップを作成
-  run_p60_d1_heatmap(df_p60_d1_survival)
+    print(f"\nProcessing experiment type: {et}")
+    df_all = pd.read_csv(csv_path)
 
-  # 4. 予測モデルの評価
-  fitting_results = run_fitting_analysis(df_p60_d1_survival, target_year)
-
-  # 5. ステップワイズ特徴量選択による生存確率の近似式算出
-  # fitting_results の中から最も Adj R2 が高い Logit 手法を選択する
-  logit_results = [r for r in fitting_results if r["use_logit"]]
-  best_eval = max(logit_results, key=lambda x: x["adj_r2"])
-
-  model_sw, selected_sw, poly_sw = run_stepwise_fitting_analysis(
-      df_p60_d1_survival,
-      target_year,
-      max_adj_r2=float(best_eval["adj_r2"]),
-      poly_deg=int(best_eval["poly_deg"]),
-      interaction_only=bool(best_eval["interaction_only"]),
-      use_logit=True)
-
-  # 6. 生存達成データの生成 (97, 95, 90, 80, 70%)
-  target_probs = [0.97, 0.95, 0.90, 0.80, 0.70]
-  df_plot_survival, base_cost = run_survival_curve_analysis(
-      df_p60_d1_survival,
-      model_sw,
-      selected_sw,
-      poly_sw,
-      use_logit=True,
-      target_probs=target_probs)
-
-  # 7. 3つのグラフを保存
-  save_survival_charts(df_plot_survival,
-                       base_cost,
-                       target_probs,
-                       img_dir=IMG_DIR)
-
-  # 8. 資産と支出額のみを用いたモデル評価
-  asset_spend_results = run_fitting_analysis(
-      df_p60_d1_survival,
-      target_year,
-      feature_set_type=FeatureSetType.ASSET_SPEND)
-
-  # 9. 資産と支出額のみを用いたステップワイズ近似式算出
-  # 最も高い Adj R2 を持つ Logit モデルを選択
-  logit_as_results = [r for r in asset_spend_results if r["use_logit"]]
-  best_as_eval = max(logit_as_results, key=lambda x: x["adj_r2"])
-
-  run_stepwise_fitting_analysis(df_p60_d1_survival,
-                                target_year,
-                                max_adj_r2=float(best_as_eval["adj_r2"]),
-                                poly_deg=int(best_as_eval["poly_deg"]),
-                                interaction_only=bool(
-                                    best_as_eval["interaction_only"]),
-                                use_logit=True,
-                                feature_set_type=FeatureSetType.ASSET_SPEND)
-
-  # 10. 初期支出率を求める公式 (Rule of Thumb) の出力
-  run_rule_of_thumb_analysis(df_p60_d1_survival, target_year, target_probs)
+    if et == "optimal-pension":
+      run_optimal_pension_analysis(df_all, target_year)
+    elif et == "P-D-RANGE":
+      run_p_d_range_analysis(df_all, target_year)
+    elif et == "P60-D1":
+      run_p60_d1_analysis(df_all, target_year)
+    else:
+      print(f"Unknown experiment type: {et}")
 
 
 if __name__ == "__main__":
