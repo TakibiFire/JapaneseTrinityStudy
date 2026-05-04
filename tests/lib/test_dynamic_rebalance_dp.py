@@ -57,7 +57,7 @@ def test_calculate_optimal_strategy_dp(mock_models_json):
 
   total_net = np.array([2000.0, 1000.0])
   cur_ann_spend = np.array([100.0, 100.0])
-  # initial_age=35, rem_years=50 -> current_age = 35 + (50 - 50) = 35
+  # initial_age=35, total_years=50, rem_years=50 -> current_age = 35 + (50 - 50) = 35
   rem_years = 50.0
   post_tax_net = total_net.copy()
 
@@ -67,6 +67,7 @@ def test_calculate_optimal_strategy_dp(mock_models_json):
                                       post_tax_net,
                                       dp_predictor=predictor,
                                       initial_age=35,
+                                      total_years=50.0,
                                       use_winning_threshold=True,
                                       z_score_for_winning=2.0)
 

@@ -16,6 +16,7 @@ def calculate_optimal_strategy_dp(
     post_tax_net: np.ndarray,
     dp_predictor: DPOptimalStrategyPredictor,
     initial_age: int,
+    total_years: float,
     use_winning_threshold: bool = True,
     z_score_for_winning: float = 2.326,
     z_score_for_next_spend: float = 0.0,
@@ -31,6 +32,7 @@ def calculate_optimal_strategy_dp(
     post_tax_net: 税引き後の純資産見積もり。
     dp_predictor: DPモデルに基づく予測器。
     initial_age: シミュレーション開始時の年齢。
+    total_years: シミュレーションの全期間（年）。
     use_winning_threshold: 勝利しきい値ロジックを使用するかどうか。
     z_score_for_winning: 勝利しきい値の保守性を決める Z スコア。
     z_score_for_next_spend: 支出率計算の保守性を決める Z スコア。
@@ -42,7 +44,7 @@ def calculate_optimal_strategy_dp(
   """
   n_sim = len(total_net)
   # 現在の年齢を計算
-  current_age = int(round(initial_age + (max(0, 50.0 - rem_years))))
+  current_age = int(round(initial_age + (max(0, total_years - rem_years))))
 
   if use_winning_threshold:
     # 勝利しきい値を考慮した A の計算

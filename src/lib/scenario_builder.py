@@ -960,7 +960,8 @@ def _build_strategy(variant: _ExperimentVariant, cf_map: Dict[str, str],
                                               rem_years=rem_years,
                                               post_tax_net=post_tax_net,
                                               dp_predictor=predictor,
-                                              initial_age=world.start_age)
+                                              initial_age=world.start_age,
+                                              total_years=world.n_years)
         return {
             reb.risky_asset.name: ratio,
             reb.zero_risk_asset.name: 1.0 - ratio
