@@ -11,7 +11,7 @@ from src.lib.scenario_builder import (CpiType, CurveSpend, FxType, Lifeplan,
 def create_standard_world(
     n_sim: int,
     start_age: int,
-    end_age: int,
+    end_age_inclusive: int,
     retirement_start_age: int,
     pension_start_age: int,
     seed: int = 42,
@@ -32,7 +32,7 @@ def create_standard_world(
   Returns:
     Setup: 設定オブジェクト
   """
-  years = end_age + 1 - start_age
+  years = end_age_inclusive + 1 - start_age
 
   world_config = WorldConfig(n_sim=n_sim,
                              n_years=years,
@@ -55,3 +55,27 @@ def create_standard_world(
                         PredefinedZeroRisk.ZERO_RISK_4PCT))
 
   return Setup("standard_world", world_config, lifeplan, strategy_spec)
+
+
+def re40_pen60_95(n_sim: int, seed: int = 42) -> Setup:
+  """
+  開始40歳、リタイア40歳、年金開始60歳、終了95歳のシナリオ設定を構築します。
+  """
+  return create_standard_world(n_sim=n_sim,
+                               start_age=40,
+                               end_age_inclusive=95,
+                               retirement_start_age=40,
+                               pension_start_age=60,
+                               seed=seed)
+
+
+def re60_pen60_95(n_sim: int, seed: int = 42) -> Setup:
+  """
+  開始60歳、リタイア60歳、年金開始60歳、終了95歳のシナリオ設定を構築します。
+  """
+  return create_standard_world(n_sim=n_sim,
+                               start_age=60,
+                               end_age_inclusive=95,
+                               retirement_start_age=60,
+                               pension_start_age=60,
+                               seed=seed)

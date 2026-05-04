@@ -56,7 +56,7 @@ def main():
   # 1. セットアップの構築
   setup = create_standard_world(n_sim=N_SIM,
                                 start_age=START_AGE,
-                                end_age=START_AGE + YEARS - 1,
+                                end_age_inclusive=START_AGE + YEARS - 1,
                                 retirement_start_age=40,
                                 pension_start_age=60,
                                 seed=SEED)
