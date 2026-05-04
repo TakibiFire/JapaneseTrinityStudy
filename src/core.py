@@ -525,8 +525,9 @@ def simulate_strategy(strategy: Strategy,
         cash[still_short] += sell_amount
 
     # 6. リバランス
+    # シミュレーションの最終月（m + 1 == total_months）は、その後の資産推移がないためリバランスをスキップする。
     if strategy.rebalance_interval > 0 and (
-        m + 1) % strategy.rebalance_interval == 0:
+        m + 1) % strategy.rebalance_interval == 0 and (m + 1) < total_months:
       reb_paths = active_paths
       if np.any(reb_paths):
         # リバランス時の純資産合計

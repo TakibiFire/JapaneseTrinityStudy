@@ -684,3 +684,78 @@ def test_strategy_initial_spending_memory():
   # Work が発動していれば、資産は 1000 + (100 * 12) = 2200 になっているはず
   # 発動していなければ 1000 のまま
   assert res.net_values[0] == 2200.0
+
+
+def test_simulate_strategy_skip_last_rebalance():
+  """
+  シミュレーションの最終月（m+1 == total_months）において、
+  リバランスがスキップされることを検証する。
+  """
+  n_sim = 1
+  n_months = 12
+  prices = {"A": np.ones((1, 13)), "Cash": np.ones((1, 13))}
+
+  call_months = []
+
+  def recording_rebalance_fn(
+      total_net: np.ndarray, cur_ann_spend: np.ndarray, rem_years: float,
+      post_tax_net: np.ndarray) -> Dict[str, Union[float, np.ndarray]]:
+    # 現在の経過月を逆算（rem_years は (total_months - (m+1))/12 + 0.25）
+    # ここでは単純に呼び出された回数やフラグを記録する
+    call_months.append(True)
+    return {"A": 1.0, "Cash": 0.0}
+
+  strategy = Strategy(name="Test",
+                      initial_money=1000.0,
+                      initial_loan=0.0,
+                      yearly_loan_interest=0.0,
+                      initial_asset_ratio={
+                          "A": 1.0,
+                          "Cash": 0.0
+                      },
+                      selling_priority=["A", "Cash"],
+                      rebalance_interval=12,
+                      dynamic_rebalance_fn=recording_rebalance_fn)
+
+  # n_months = 12, rebalance_interval = 12.
+  # m = 11 の時, (m+1) % 12 == 0 となる。
+  # しかし m+1 == 12 == total_months なので、スキップされるはず。
+  simulate_strategy(strategy, prices, {})
+
+  assert len(call_months) == 0
+
+
+def test_simulate_strategy_do_intermediate_rebalance():
+  """
+  最終月以外ではリバランスが実行されることを検証する。
+  """
+  n_sim = 1
+  n_months = 24
+  prices = {"A": np.ones((1, 25)), "Cash": np.ones((1, 25))}
+
+  call_months = []
+
+  def recording_rebalance_fn(
+      total_net: np.ndarray, cur_ann_spend: np.ndarray, rem_years: float,
+      post_tax_net: np.ndarray) -> Dict[str, Union[float, np.ndarray]]:
+    call_months.append(True)
+    return {"A": 1.0, "Cash": 0.0}
+
+  strategy = Strategy(name="Test",
+                      initial_money=1000.0,
+                      initial_loan=0.0,
+                      yearly_loan_interest=0.0,
+                      initial_asset_ratio={
+                          "A": 1.0,
+                          "Cash": 0.0
+                      },
+                      selling_priority=["A", "Cash"],
+                      rebalance_interval=12,
+                      dynamic_rebalance_fn=recording_rebalance_fn)
+
+  # n_months = 24, rebalance_interval = 12.
+  # m = 11: m+1 = 12. 12 < 24 なので実行される。
+  # m = 23: m+1 = 24. 24 == 24 なのでスキップされる。
+  simulate_strategy(strategy, prices, {})
+
+  assert len(call_months) == 1
