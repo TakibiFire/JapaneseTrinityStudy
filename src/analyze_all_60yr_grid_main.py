@@ -13,7 +13,7 @@ data/all_60yr/ の結果を分析・可視化するスクリプト。
 
 import argparse
 import os
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import altair as alt
 import pandas as pd
@@ -35,29 +35,24 @@ TEMP_DIR = "temp/all_60yr"
 BASE_SPEND_ANNUAL = 540.0
 
 
-def create_optimal_pension_heatmap(df_best: pd.DataFrame,
-                                   title: str,
-                                   x_col: str,
-                                   x_title: str,
-                                   y_col: str,
-                                   y_title: str,
-                                   output_path: str,
-                                   x_sort: Optional[List] = None,
-                                   y_sort: Optional[List] = None,
-                                   width: int = 500,
-                                   height: int = 450):
+def create_best_strategy_heatmap(df_best: pd.DataFrame,
+                                title: str,
+                                x_col: str,
+                                x_title: str,
+                                y_col: str,
+                                y_title: str,
+                                output_path: str,
+                                color_col: str,
+                                color_title: str,
+                                color_map: Dict[str, str],
+                                x_sort: Optional[List] = None,
+                                y_sort: Optional[List] = None,
+                                width: int = 500,
+                                height: int = 450):
   """
-  最適な年金受給開始年齢を可視化するヒートマップ。
+  選択された戦略を可視化するヒートマップ。
   """
   plot_df = df_best.copy()
-
-  # 年齢ごとのカラーマップ
-  color_map = {
-      "60歳": "#FBD38D",  # Light orange
-      "65歳": "#9AE6B4",  # Light green
-      "70歳": "#B2F5EA",  # Light teal
-      "75歳": "#FEB2B2"  # Light red
-  }
   domain = list(color_map.keys())
   range_ = list(color_map.values())
 
@@ -73,8 +68,8 @@ def create_optimal_pension_heatmap(df_best: pd.DataFrame,
   )
 
   heatmap = base.mark_rect().encode(
-      color=alt.Color('display_age:N',
-                      title='受給開始年齢',
+      color=alt.Color(f'{color_col}:N',
+                      title=color_title,
                       scale=alt.Scale(domain=domain, range=range_)))
 
   text = base.mark_text(baseline='middle',
@@ -88,6 +83,32 @@ def create_optimal_pension_heatmap(df_best: pd.DataFrame,
   print(f"✅ {output_path} に保存しました。")
 
 
+def create_optimal_pension_heatmap(df_best: pd.DataFrame,
+                                   title: str,
+                                   x_col: str,
+                                   x_title: str,
+                                   y_col: str,
+                                   y_title: str,
+                                   output_path: str,
+                                   x_sort: Optional[List] = None,
+                                   y_sort: Optional[List] = None,
+                                   width: int = 500,
+                                   height: int = 450):
+  """
+  最適な年金受給開始年齢を可視化するヒートマップ。
+  """
+  color_map = {
+      "60歳": "#FBD38D",  # Light orange
+      "65歳": "#9AE6B4",  # Light green
+      "70歳": "#B2F5EA",  # Light teal
+      "75歳": "#FEB2B2"  # Light red
+  }
+  return create_best_strategy_heatmap(df_best, title, x_col, x_title, y_col,
+                                      y_title, output_path, "display_age",
+                                      "受給開始年齢", color_map, x_sort, y_sort,
+                                      width, height)
+
+
 def create_pension_survival_curve(df: pd.DataFrame,
                                  multiplier: float,
                                  rule: float,
@@ -96,8 +117,8 @@ def create_pension_survival_curve(df: pd.DataFrame,
   """
   指定された multiplier と rule における、受給開始年齢別の生存確率推移を描画する。
   """
-  # 年度列 (1, 2, ..., 35) を取得
-  year_cols = [str(i) for i in range(1, 36) if str(i) in df.columns]
+  # 年度列 (1, 2, ..., 36) を取得
+  year_cols = [str(i) for i in range(1, 37) if str(i) in df.columns]
 
   # 指定された条件でフィルタ
   plot_df = df[(df["spend_multiplier"] == multiplier) &
@@ -291,7 +312,7 @@ def run_p60_d1_heatmap(df_survival: pd.DataFrame):
 
   df_h, m_order, r_order = prepare_heatmap_labels(df_survival)
 
-  year_target = "35"
+  year_target = "36"
   title = f"60歳リタイア・年金60歳・{year_target}年後生存確率(%) (ダイナミックスペンディングON)"
   output_name = f"grid_heatmap_{year_target}yr_p60_dyn_on.svg"
   output_path = os.path.join(IMG_DIR, output_name)
@@ -308,17 +329,100 @@ def run_p60_d1_heatmap(df_survival: pd.DataFrame):
                  y_sort=m_order)
 
 
+def run_pen60_lifeplan_analysis(df_all: pd.DataFrame, target_year: str):
+  """
+  pen60-lifeplan の分析を実行する。
+  """
+  print(f"\n\n{'='*20} pen60-lifeplan 分析 {'='*20}")
+
+  df_survival = df_all[df_all["value_type"] == "survival"].copy()
+  if df_survival.empty:
+    print("Error: Survival data not found.")
+    return
+
+  # 戦略の略称マッピング
+  strategy_map = {
+      "SpendAwareDPRebalance (re60)": "DP(60)",
+      "SpendAwareDPRebalance (re40)": "DP(40)",
+      "DynamicV1Rebalance": "V1",
+      "固定最適比率": "固定",
+      "No dynamic rebalance": "なし"
+  }
+  pref_order = ["DP(60)", "DP(40)", "V1", "固定", "なし"]
+
+  df_survival["strategy_short"] = df_survival["strategy"].map(strategy_map)
+
+  dim_cols = ['spend_multiplier', 'spending_rule']
+  threshold = 0.01  # 1%
+
+  def get_best_strategy(group: pd.DataFrame) -> pd.Series:
+    max_prob = float(group[target_year].max())
+    selected_row = None
+
+    # 優先順位に従ってスキャン
+    for strat in pref_order:
+      match = group[group["strategy_short"] == strat]
+      if not match.empty:
+        row = match.iloc[0]
+        if float(row[target_year]) >= (max_prob - threshold):
+          selected_row = row.copy()
+          break
+
+    if selected_row is None:
+      selected_row = group.sort_values(by=[target_year],
+                                       ascending=False).iloc[0].copy()
+
+    selected_row["display_strategy"] = selected_row["strategy_short"]
+    selected_row[
+        "combo_label"] = f"{selected_row['strategy_short']}\n{selected_row[target_year]*100:.1f}%"
+    return selected_row
+
+  results = []
+  for _, group in df_survival.groupby(dim_cols):
+    results.append(get_best_strategy(group))
+  df_best = pd.DataFrame(results)
+
+  df_best, m_order, r_order = prepare_heatmap_labels(df_best)
+
+  # 戦略ごとのカラーマップ
+  color_map = {
+      "DP(40)": "#9AE6B4",  # Light green
+      "DP(60)": "#B2F5EA",  # Light teal
+      "V1": "#FBD38D",      # Light orange
+      "固定": "#FEB2B2",    # Light red
+      "なし": "#CBD5E0"      # Light gray
+  }
+
+  title = f"最適リバランス戦略 ({target_year}年後生存確率, 優先: DP60>DP40>V1>固定>なし, 許容差{threshold*100:g}%)"
+  output_path = os.path.join(IMG_DIR, "best_rebalance_strategy_heatmap.svg")
+
+  create_best_strategy_heatmap(df_best,
+                               title=title,
+                               x_col="rule_label",
+                               x_title="初期支出率 (%ルール)",
+                               y_col="multiplier_label",
+                               y_title="支出レベル",
+                               output_path=output_path,
+                               color_col="display_strategy",
+                               color_title="最適戦略",
+                               color_map=color_map,
+                               x_sort=r_order,
+                               y_sort=m_order)
+
+
 def main():
   parser = argparse.ArgumentParser(description="60歳リタイア開始・95歳までの分析・可視化スクリプト。")
   parser.add_argument(
       "--exp_type",
       type=str,
       default="optimal-pension",
-      help="実験設定 (comma separated: optimal-pension, P-D-RANGE, P60-D1)")
+      help=
+      "実験設定 (comma separated: optimal-pension, P-D-RANGE, P60-D1, pen60-lifeplan)"
+  )
   args = parser.parse_args()
 
   exp_types = args.exp_type.split(",")
-  target_year = "35"
+  target_year = "36"
 
   for et in exp_types:
     et = et.strip()
@@ -336,6 +440,8 @@ def main():
       run_p_d_range_analysis(df_all, target_year)
     elif et == "P60-D1":
       run_p60_d1_analysis(df_all, target_year)
+    elif et == "pen60-lifeplan":
+      run_pen60_lifeplan_analysis(df_all, target_year)
     else:
       print(f"Unknown experiment type: {et}")
 
