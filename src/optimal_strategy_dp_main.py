@@ -1,7 +1,7 @@
 """
-Optimal Strategy V2 のモデルフィッティングを行うスクリプト。
+Optimal Strategy のモデルフィッティングを行うスクリプト。
 
-このスクリプトは、後ろ向き動的計画法（Backward DP）を用いて、各年齢（40歳から95歳）における
+このスクリプトは、後ろ向き動的計画法（Backward DP）を用いて、各年齢における
 最適な資産配分（オルカン比率）と、その時の生存確率を計算し、回帰モデルとして保存します。
 
 状態変数として「年間支出率 R」を採用しています：
@@ -9,15 +9,15 @@ Optimal Strategy V2 のモデルフィッティングを行うスクリプト。
 ここで、純支出合計は（支出 - 年金受取 + 年金保険料）の月次合計のうち、正の値を合算したものです。
 
 アルゴリズムの概要：
-1. 最終年齢（95歳）から開始し、40歳まで1年ずつ遡ります。
+1. 最終年齢から開始し、開始年齢まで1年ずつ遡ります。
 2. 各年齢において、R のグリッド（0.005から20以上まで）を作成します。
 3. 各 R に対して、オルカン比率 A（0.0から1.0）を変化させて1年間のシミュレーションを実行します。
 4. 翌年の生存確率モデルを用いて、期待生存確率を最大化する最適な A (A_opt) を見つけます。
 5. R と A_opt、および R と生存確率の関係を多項式回帰モデルでフィッティングします。
-6. 結果を `data/optimal_strategy_v2_models.json` に保存します。
+6. 結果を `data/optimal_strategy_dp/${scenario}.json` に保存します。
 
 実行方法:
-  python src/model_fitting_v2_main.py --n_sim 2000
+  python src/optimal_strategy_dp_main.py --scenario re40_pen60_95 --n_sim 2000
 """
 
 import argparse
@@ -31,16 +31,13 @@ import scipy.optimize as opt
 from scipy.interpolate import pchip_interpolate
 from sklearn.isotonic import IsotonicRegression
 
+import src.lib.world_setup as world_setup
 from src.core import (CashflowRule, CashflowType, Strategy, ZeroRiskAsset,
                       simulate_strategy)
 from src.lib.scenario_builder import (CompiledExperiment,
                                       create_experiment_setup)
-from src.lib.world_setup import create_standard_world
 
 # 共通定数
-START_AGE = 40
-END_AGE = 96  # 95歳の終わりまで
-YEARS = END_AGE - START_AGE
 SEED = 42
 
 # アセット名
@@ -157,6 +154,10 @@ def main():
   # 引数の処理
   parser = argparse.ArgumentParser(
       description="Optimal Strategy V2 のモデルフィッティング")
+  parser.add_argument("--scenario",
+                      type=str,
+                      default="re40_pen60_95",
+                      help="シナリオ名 (src/lib/world_setup.py 内の関数名)")
   parser.add_argument("--n_sim", type=int, default=2000, help="シミュレーション回数")
   parser.add_argument("--debug_level",
                       type=int,
@@ -178,13 +179,14 @@ def main():
                 ] if args.debug_paths else []
 
   # 1. アセットとキャッシュフローの生成
-  setup = create_standard_world(n_sim=n_sim,
-                                start_age=START_AGE,
-                                end_age=END_AGE - 1,
-                                retirement_start_age=40,
-                                pension_start_age=60,
-                                seed=SEED)
+  setup_fn = getattr(world_setup, args.scenario)
+  setup = setup_fn(n_sim=n_sim, seed=SEED)
   exp = create_experiment_setup(setup)[0]
+
+  # 共通定数の抽出
+  start_age = setup.world.start_age
+  years = setup.world.n_years
+  end_age = start_age + years  # 排他的な上限 (例: start_age=40, years=56 なら end_age=96)
 
   monthly_prices = exp.monthly_prices
   monthly_cashflows = exp.monthly_cashflows
@@ -194,13 +196,14 @@ def main():
 
   zr_asset_obj = ZeroRiskAsset(ZERO_RISK_NAME, 0.04)
 
-  print(f"Generating asset prices for {YEARS} years, {n_sim} paths...")
+  print(f"Scenario: {args.scenario}")
+  print(f"Generating asset prices for {years} years, {n_sim} paths...")
 
   # CPI の統計計算 (想定外のジャンプを計算するため)
   # 年次 CPI 倍率の平均と標準偏差を計算
   cpi_data = monthly_prices[CPI_NAME]
   annual_cpi_jumps = []
-  for y in range(YEARS):
+  for y in range(years):
     # 年始 (前年末) から年末への倍率
     if y == 0:
       jumps = cpi_data[:, 11] / 1.0  # 初期値は 1.0
@@ -222,8 +225,8 @@ def main():
   # age -> y_withdraw_n (np.ndarray)
   age_cashflow_data: Dict[int, np.ndarray] = {}
 
-  for age in range(START_AGE, END_AGE):
-    year_idx = age - START_AGE
+  for age in range(start_age, end_age):
+    year_idx = age - start_age
     start_m = year_idx * 12
     end_m = (year_idx + 1) * 12
 
@@ -240,8 +243,8 @@ def main():
       print(
           f"    [Age {age} Debug] BaseSpend (Month 0, path 0): {monthly_cashflows[base_spend_key][0, start_m]:.2f}"
       )
-      # If age >= 95, dump all monthly_net_spend for each path.
-      if age >= 95:
+      # If age >= end_age - 1, dump all monthly_net_spend for each path.
+      if age >= end_age - 1:
         print(
             f"    [Age {age} Debug] Path 0 full monthly_net_spend (reversed sign):"
         )
@@ -282,16 +285,16 @@ def main():
   # 勝利しきい値 W_N の計算用 (PV of all future net spending)
   last_w = 0.0
 
-  # 年齢 95 から 40 まで逆算
-  ages_to_process = list(range(END_AGE - 1, START_AGE - 1, -1))
+  # 年齢 end_age - 1 から start_age まで逆算
+  ages_to_process = list(range(end_age - 1, start_age - 1, -1))
   if args.debug_level > 0:
-    ages_to_process = list(range(END_AGE - 1, END_AGE - 6, -1))  # デバッグ時は直近5年分のみ
+    ages_to_process = list(range(end_age - 1, end_age - 6, -1))  # デバッグ時は直近5年分のみ
 
   for age in ages_to_process:
     print(f"\n--- Processing age {age} ---")
 
     # この年のキャッシュフロー (12ヶ月分) のインデックス
-    year_idx = age - START_AGE
+    year_idx = age - start_age
     start_m = year_idx * 12
     end_m = (year_idx + 1) * 12
     cpi_path = monthly_prices[CPI_NAME][:, start_m:end_m]
@@ -309,7 +312,7 @@ def main():
     avg_y_withdraw_n = float(np.mean(y_withdraw_n))
 
     # 勝利しきい値 W_N, M_N の計算
-    if age == END_AGE - 1:
+    if age == end_age - 1:
       # 最終年は 3ヶ月のバッファを載せて計算 (1.25倍)
       w_n = avg_y_withdraw_n * 1.25 / (1.0 + EFFECTIVE_ZERO_RISK_YIELD)
     else:
@@ -404,7 +407,7 @@ def main():
         # この年齢の正味支出（名目）を再現する
         # y_withdraw_n は年間の合計だが、simulate_strategy は月次の cf を必要とする
         # ここでは、元の monthly_net_spend をそのまま使用する
-        year_idx = age - START_AGE
+        year_idx = age - start_age
         start_m_local = year_idx * 12
         end_m_local = (year_idx + 1) * 12
 
@@ -437,7 +440,7 @@ def main():
         bankrupt_this_year = res.sustained_months < 12
 
         # 生存判定
-        if age == END_AGE - 1:
+        if age == end_age - 1:
           # 最終年 (95歳) は今年生存していれば P=1.0
           survival = (~bankrupt_this_year).astype(float)
         else:
@@ -511,7 +514,7 @@ def main():
               # Y_next, R_next は 期待値（z=0, index 3）を表示
               y_next_expected = 0.0
               r_next_expected = 0.0
-              if age < END_AGE - 1:
+              if age < end_age - 1:
                 y_next_expected = float(y_next_dist[p_idx, 3])
                 r_next_expected = float(r_next_scenarios[p_idx, 3])
               print(
@@ -806,8 +809,12 @@ def main():
     }
 
   if args.debug_level == 0:
-    os.makedirs("data", exist_ok=True)
-    output_path = "data/optimal_strategy_v2_models.json"
+    binary_name = os.path.splitext(os.path.basename(__file__))[0]
+    if binary_name.endswith("_main"):
+      binary_name = binary_name[:-5]
+    output_dir = os.path.join("data", binary_name)
+    os.makedirs(output_dir, exist_ok=True)
+    output_path = os.path.join(output_dir, f"{args.scenario}.json")
     with open(output_path, "w") as f:
       json.dump(models, f, indent=2)
     print(f"\nSuccessfully exported models to {output_path}")
