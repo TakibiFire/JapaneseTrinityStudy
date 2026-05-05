@@ -19,10 +19,11 @@ import altair as alt
 import pandas as pd
 
 from src.lib.fitting_all_yr import (FeatureSetType, run_fitting_analysis,
-                                    run_rule_of_thumb_analysis,
-                                    run_stepwise_fitting_analysis,
-                                    run_survival_curve_analysis,
-                                    save_survival_charts)
+                                    run_stepwise_fitting_analysis)
+from src.lib.survival_contours import (generate_rule_of_thumb,
+                                       generate_smooth_contour_data,
+                                       get_contour_anchor_points,
+                                       save_contour_charts)
 from src.lib.visualize import create_survival_probability_chart
 from src.lib.visualize_all_yr import (create_heatmap,
                                       create_spend_percentile_chart,
@@ -318,7 +319,10 @@ def run_p60_d1_analysis(df_all: pd.DataFrame, target_year: str):
   run_p60_d1_heatmap(df_survival)
 
   # 2. 予測モデルの評価
-  fitting_results = run_fitting_analysis(df_survival, target_year)
+  feature_set_type = FeatureSetType.ASSET_SPEND
+  fitting_results = run_fitting_analysis(df_survival,
+                                         target_year,
+                                         feature_set_type=feature_set_type)
 
   # 3. ステップワイズ特徴量選択
   logit_results = [r for r in fitting_results if r["use_logit"]]
@@ -330,26 +334,24 @@ def run_p60_d1_analysis(df_all: pd.DataFrame, target_year: str):
       max_adj_r2=float(best_eval["adj_r2"]),
       poly_deg=int(best_eval["poly_deg"]),
       interaction_only=bool(best_eval["interaction_only"]),
-      use_logit=True)
+      use_logit=True,
+      feature_set_type=feature_set_type)
 
   # 4. 生存達成データの生成
   target_probs = [0.97, 0.95, 0.90, 0.80, 0.70]
-  df_plot_survival, base_cost = run_survival_curve_analysis(
-      df_survival,
-      model_sw,
-      selected_sw,
-      poly_sw,
-      use_logit=True,
-      target_probs=target_probs)
+  plot_data = []
+  for p in target_probs:
+    anchors = get_contour_anchor_points(df_survival, p, target_year)
+    plot_data.extend(generate_smooth_contour_data(anchors, f"{p*100:g}%"))
+  df_plot_survival = pd.DataFrame(plot_data)
 
   # 5. グラフ保存
-  save_survival_charts(df_plot_survival,
-                       base_cost,
-                       target_probs,
-                       img_dir=IMG_DIR)
+  save_contour_charts(df_plot_survival,
+                      target_probs,
+                      img_dir=IMG_DIR)
 
   # 6. Rule of Thumb
-  run_rule_of_thumb_analysis(df_survival, target_year, target_probs)
+  generate_rule_of_thumb(df_survival, target_probs, target_year)
 
 
 def run_p60_d1_heatmap(df_survival: pd.DataFrame):
@@ -488,6 +490,50 @@ def run_pen70_lifeplan_analysis(df_all: pd.DataFrame, target_year: str):
                                y_sort=m_order)
 
 
+def run_pen70_formula_analysis(df_all: pd.DataFrame, target_year: str):
+  """
+  pen70-formula の詳細分析を実行する。
+  """
+  print(f"\n\n{'='*20} pen70-formula 分析 {'='*20}")
+  df_survival = df_all[df_all["value_type"] == "survival"].copy()
+  if df_survival.empty:
+    return
+
+  # 1. ヒートマップ
+  df_h, m_order, r_order = prepare_heatmap_labels(df_survival)
+  year_target = str(NUM_YEARS)
+  title = f"60歳リタイア・年金70歳・{year_target}年後生存確率(%) (R70-aware)"
+  output_path = os.path.join(IMG_DIR, "pen70_formula_heatmap.svg")
+
+  create_heatmap(df_h,
+                 target_col=year_target,
+                 title=title,
+                 x_col="rule_label",
+                 x_title="初期支出率 (%ルール)",
+                 y_col="multiplier_label",
+                 y_title="支出レベル",
+                 output_path=output_path,
+                 x_sort=r_order,
+                 y_sort=m_order)
+
+  # 2. 生存達成データの生成
+  target_probs = [0.97, 0.95, 0.90, 0.80, 0.70]
+  plot_data = []
+  for p in target_probs:
+    anchors = get_contour_anchor_points(df_survival, p, target_year)
+    plot_data.extend(generate_smooth_contour_data(anchors, f"{p*100:g}%"))
+  df_plot_survival = pd.DataFrame(plot_data)
+
+  # 3. グラフ保存
+  save_contour_charts(df_plot_survival,
+                      target_probs,
+                      img_dir=IMG_DIR,
+                      prefix="pen70_formula_")
+
+  # 4. Rule of Thumb
+  generate_rule_of_thumb(df_survival, target_probs, target_year)
+
+
 def main():
   parser = argparse.ArgumentParser(description="60歳リタイア開始・95歳までの分析・可視化スクリプト。")
   parser.add_argument(
@@ -495,7 +541,7 @@ def main():
       type=str,
       default="optimal-pension",
       help=
-      "実験設定 (comma separated: optimal-pension, P-D-RANGE, P60-D1, pen70-lifeplan)"
+      "実験設定 (comma separated: optimal-pension, P-D-RANGE, P60-D1, pen70-lifeplan, pen70-formula)"
   )
   args = parser.parse_args()
 
@@ -529,6 +575,8 @@ def main():
       run_p60_d1_analysis(df_all, target_year)
     elif et == "pen70-lifeplan":
       run_pen70_lifeplan_analysis(df_all, target_year)
+    elif et == "pen70-formula":
+      run_pen70_formula_analysis(df_all, target_year)
     else:
       print(f"Unknown experiment type: {et}")
 
