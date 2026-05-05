@@ -1,8 +1,8 @@
 """
-60歳リタイア開始・95歳までの生存確率を分析するグリッドサーチスクリプト。
+60歳リタイア開始・95歳開始（94歳末）までの生存確率を分析するグリッドサーチスクリプト。
 
 実験設定:
-- 期間: 35年 (60歳〜95歳)
+- 期間: 35年 (60歳〜95歳開始まで)
 - 試行回数: 5,000回
 - 資産構成:
     - オルカン (ファットテール考慮・S&P500補完モデル, 信託報酬 0.05775%)
@@ -17,7 +17,7 @@
 - 年金: 60歳または65歳から受給 (世帯人数と開始年齢により変動)
 
 可変条件:
-- 年金受給開始年齢 (60, 65)
+- 年金受給開始年齢 (60, 65, 70, 75)
 - ダイナミックスペンディングの有無
 - 支出率のルール (資産額に対する比率)
 - 初年度支出倍率
@@ -44,10 +44,10 @@ from src.lib.scenario_builder import (ConstantSpend, CpiType, CurveSpend,
                                       PredefinedZeroRisk, Setup,
                                       SpendAwareDPRebalance, StrategySpec,
                                       WorldConfig, create_experiment_setup)
-from src.lib.world_setup import re60_pen60_95
+from src.lib.world_setup import re60_pen70_95
 
 # 共通設定
-YEARS = 36  # 60歳から95歳終了まで (36年間)
+YEARS = 35  # 60歳から95歳開始まで (35年間)
 START_AGE = 60
 SEED = 43
 
@@ -124,23 +124,23 @@ def get_optimal_pension_setup(
   return exp_setup, N_SIM, combinations
 
 
-def get_pen60_lifeplan_setup(
+def get_pen70_lifeplan_setup(
     base_spend_annual: float
 ) -> Tuple[Setup, int, List[Tuple[float, float, str]]]:
   """
-  pen60-lifeplan 実験設定を生成する。
+  pen70-lifeplan 実験設定を生成する。
   """
-  spend_multipliers = [0.5, 0.75, 1.0, 1.5, 2.0, 3.0]
+  spend_multipliers = [0.75, 1.0, 1.5, 2.0, 3.0]
   spending_rules = [2.5, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
   strategy_names = [
       "No dynamic rebalance", "固定最適比率", "DynamicV1Rebalance",
-      "SpendAwareDPRebalance (re60)", "SpendAwareDPRebalance (re40)"
+      "SpendAwareDPRebalance (R70-aware)"
   ]
   N_SIM = 2000
 
-  # 1. ベースライン設定 (re60_pen60_95)
-  exp_setup = re60_pen60_95(n_sim=N_SIM, seed=SEED)
-  exp_setup.name = "pen60-lifeplan"
+  # 1. ベースライン設定 (re60_pen70_95)
+  exp_setup = re60_pen70_95(n_sim=N_SIM, seed=SEED)
+  exp_setup.name = "pen70-lifeplan"
 
   # 2. グリッドパラメータ
   combinations = list(product(spend_multipliers, spending_rules, strategy_names))
@@ -180,19 +180,18 @@ def get_pen60_lifeplan_setup(
                      rebalance=DynamicV1Rebalance(
                          risky_asset=PredefinedStock.ORUKAN_155,
                          zero_risk_asset=PredefinedZeroRisk.ZERO_RISK_4PCT))
-    elif strat_name == "SpendAwareDPRebalance (re60)":
+    elif strat_name == "SpendAwareDPRebalance (R70-aware)":
+      # 倍率に応じたモデルを選択
+      mult_map = {0.75: "m0_75", 1.0: "m1", 1.5: "m1_5", 2.0: "m2", 3.0: "m3"}
+      mult_suffix = mult_map.get(spend_mult, "m1")
+
+      model_path = f"data/optimal_strategy_dp/re60_pen70_95_{mult_suffix}.json"
+
       spec = replace(spec,
                      rebalance=SpendAwareDPRebalance(
                          risky_asset=PredefinedStock.ORUKAN_155,
                          zero_risk_asset=PredefinedZeroRisk.ZERO_RISK_4PCT,
-                         model_name="data/optimal_strategy_dp/re60_pen60_95.json")
-                     )
-    elif strat_name == "SpendAwareDPRebalance (re40)":
-      spec = replace(spec,
-                     rebalance=SpendAwareDPRebalance(
-                         risky_asset=PredefinedStock.ORUKAN_155,
-                         zero_risk_asset=PredefinedZeroRisk.ZERO_RISK_4PCT,
-                         model_name="data/optimal_strategy_dp/re40_pen60_95.json")
+                         model_name=model_path)
                      )
 
     exp_setup.add_experiment(
@@ -206,17 +205,17 @@ def get_pen60_lifeplan_setup(
 def main():
   # 引数の処理
   parser = argparse.ArgumentParser(
-      description="60歳リタイア開始・95歳までの生存確率を分析するグリッドサーチスクリプト。")
+      description="60歳リタイア開始・95歳開始（94歳末）までの生存確率を分析するグリッドサーチスクリプト。")
   parser.add_argument("--exp_type",
                       type=str,
                       default="optimal-pension",
-                      help="実験設定 (optimal-pension, pen60-lifeplan)")
+                      help="実験設定 (optimal-pension, pen70-lifeplan)")
   args = parser.parse_args()
 
   # 設定
   exp_type = args.exp_type
   assert exp_type in ("optimal-pension",
-                      "pen60-lifeplan"), f"Unsupported exp_type: {exp_type}"
+                      "pen70-lifeplan"), f"Unsupported exp_type: {exp_type}"
 
   data_dir = "data/all_60yr/"
   csv_path = os.path.join(data_dir, f"{exp_type}.csv")
@@ -227,11 +226,15 @@ def main():
       [SpendingType.CONSUMPTION, SpendingType.NON_CONSUMPTION_EXCLUDE_PENSION],
       60, 1)[0]
 
+  exp_setup: Setup
+  n_sim_val: int
+  combinations: List[Any]
+
   if exp_type == "optimal-pension":
-    exp_setup, N_SIM, combinations = get_optimal_pension_setup(
+    exp_setup, n_sim_val, combinations = get_optimal_pension_setup(
         base_spend_annual)
-  elif exp_type == "pen60-lifeplan":
-    exp_setup, N_SIM, combinations = get_pen60_lifeplan_setup(base_spend_annual)
+  elif exp_type == "pen70-lifeplan":
+    exp_setup, n_sim_val, combinations = get_pen70_lifeplan_setup(base_spend_annual)
   else:
     raise KeyError(f"Unsupported {exp_type}")
 
@@ -254,9 +257,9 @@ def main():
     if exp_type == "optimal-pension":
       pension_start, spend_mult, rule = combo
       strat_name = "DynamicV1Rebalance"
-    else:  # pen60-lifeplan
+    else:  # pen70-lifeplan
       spend_mult, rule, strat_name = combo
-      pension_start = 60  # re60_pen60_95 固定
+      pension_start = 70  # re60_pen70_95 固定
 
     initial_annual_cost = base_spend_annual * spend_mult
     init_money = initial_annual_cost / (rule / 100.0)
@@ -275,7 +278,7 @@ def main():
     row_survival["value_type"] = "survival"
     for year in range(1, YEARS + 1):
       bankrupt_count = (res.sustained_months < year * 12).sum()
-      survival_rate = 1.0 - (bankrupt_count / N_SIM)
+      survival_rate = 1.0 - (bankrupt_count / n_sim_val)
       row_survival[str(year)] = survival_rate
     results.append(row_survival)
 
