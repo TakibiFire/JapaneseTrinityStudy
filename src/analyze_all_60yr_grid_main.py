@@ -13,7 +13,7 @@ data/all_60yr/ の結果を分析・可視化するスクリプト。
 
 import argparse
 import os
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import altair as alt
 import pandas as pd
@@ -29,10 +29,35 @@ from src.lib.visualize_all_yr import (create_heatmap,
                                       prepare_heatmap_labels,
                                       run_best_combination_analysis)
 
+
+def calculate_preference_order(df_survival: pd.DataFrame,
+                               target_year: str,
+                               threshold: float,
+                               dim_cols: List[str],
+                               value_col: str) -> List[Any]:
+  """
+  全グリッドセルにおける出現頻度に基づいて優先順位を自動計算する。
+  """
+  counts: Dict[Any, int] = {}
+
+  for _, group in df_survival.groupby(dim_cols):
+    max_prob = float(group[target_year].max())
+    within_threshold = group[group[target_year] >= (max_prob - threshold)][value_col].tolist()
+    for val in within_threshold:
+      if pd.isna(val):
+        continue
+      counts[val] = counts.get(val, 0) + 1
+
+  # 頻度が高い順にソート。頻度が同じなら値自体でソートして安定させる
+  sorted_items = sorted(counts.items(), key=lambda x: (x[1], str(x[0])), reverse=True)
+  return [item[0] for item in sorted_items]
+
+
 # 設定
 IMG_DIR = "docs/imgs/all_60yr"
 TEMP_DIR = "temp/all_60yr"
 BASE_SPEND_ANNUAL = 540.0
+NUM_YEARS = 35
 
 
 def create_best_strategy_heatmap(df_best: pd.DataFrame,
@@ -117,8 +142,8 @@ def create_pension_survival_curve(df: pd.DataFrame,
   """
   指定された multiplier と rule における、受給開始年齢別の生存確率推移を描画する。
   """
-  # 年度列 (1, 2, ..., 36) を取得
-  year_cols = [str(i) for i in range(1, 37) if str(i) in df.columns]
+  # 年度列 (1, 2, ..., NUM_YEARS) を取得
+  year_cols = [str(i) for i in range(1, NUM_YEARS + 1) if str(i) in df.columns]
 
   # 指定された条件でフィルタ
   plot_df = df[(df["spend_multiplier"] == multiplier) &
@@ -195,29 +220,55 @@ def run_optimal_pension_analysis(df_all: pd.DataFrame, target_year: str):
     return
 
   dim_cols = ['spend_multiplier', 'spending_rule']
-  pref_order = [60, 65, 70, 75]
   threshold = 0.01  # 許容範囲 1%
+
+  # 優先順位を自動計算 (閾値内の出現頻度順)
+  pref_order = calculate_preference_order(df_survival, target_year, threshold, dim_cols, "pension_start_age")
+  print(f"Computed preference order for pension ages: {pref_order}")
 
   def get_best_age(group: pd.DataFrame) -> pd.Series:
     max_prob = float(group[target_year].max())
-    selected_row = None
 
-    # 優先順位に従ってスキャン
+    # 0. 優先順位を数値化 (値が小さいほど高優先)
+    pref_map = {age: i for i, age in enumerate(pref_order)}
+    temp_group = group.copy()
+    temp_group["pref_score"] = temp_group["pension_start_age"].map(pref_map)
+
+    # 1. 生存確率の降順、同じなら優先順位の昇順でソート
+    sorted_group = temp_group.sort_values(by=[target_year, "pref_score"],
+                                          ascending=[False, True])
+
+    # 2. 閾値内の全年齢を取得
+    within_threshold_rows = sorted_group[sorted_group[target_year] >= (max_prob - threshold)]
+    within_threshold_ages = within_threshold_rows["pension_start_age"].tolist()
+
+    # 3. 色決定用の代表年齢 (優先順位に従う)
+    selected_row = None
     for age in pref_order:
-      match = group[group["pension_start_age"] == age]
-      if not match.empty:
-        row = match.iloc[0]
-        if float(row[target_year]) >= (max_prob - threshold):
-          selected_row = row.copy()
-          break
+      if age in within_threshold_ages:
+        selected_row = group[group["pension_start_age"] == age].iloc[0].copy()
+        break
 
     if selected_row is None:
-      selected_row = group.sort_values(by=[target_year],
-                                       ascending=False).iloc[0].copy()
+      selected_row = within_threshold_rows.iloc[0].copy()
 
     selected_row["display_age"] = f"{int(selected_row['pension_start_age'])}歳"
-    selected_row[
-        "combo_label"] = f"{int(selected_row['pension_start_age'])}歳\n{selected_row[target_year]*100:.1f}%"
+
+    # 4. ラベル作成 (1行目: 生存率, 2行目: 1つ目, 2つ目, 3行目: 3つ目, 4つ目)
+    label = f"{max_prob*100:.1f}%"
+
+    line2 = f"{int(within_threshold_ages[0])}歳"
+    if len(within_threshold_ages) >= 2:
+      line2 += f", {int(within_threshold_ages[1])}歳"
+    label += f"\n{line2}"
+
+    if len(within_threshold_ages) >= 3:
+      line3 = f"{int(within_threshold_ages[2])}歳"
+      if len(within_threshold_ages) >= 4:
+        line3 += f", {int(within_threshold_ages[3])}歳"
+      label += f"\n{line3}"
+
+    selected_row["combo_label"] = label
     return selected_row
 
   results = []
@@ -227,7 +278,7 @@ def run_optimal_pension_analysis(df_all: pd.DataFrame, target_year: str):
 
   df_best, m_order, r_order = prepare_heatmap_labels(df_best)
 
-  title = f"最適年金受給開始年齢 ({target_year}年後生存確率, 優先: 60>65>70>75, 許容差{threshold*100:g}%)"
+  title = f"最適年金受給開始年齢 ({target_year}年後生存確率, 優先: {'>'.join([f'{int(a)}歳' for a in pref_order])}, 許容差{threshold*100:g}%)"
   output_path = os.path.join(IMG_DIR, "optimal_pension_age_heatmap.svg")
   create_optimal_pension_heatmap(df_best,
                                  title=title,
@@ -312,7 +363,7 @@ def run_p60_d1_heatmap(df_survival: pd.DataFrame):
 
   df_h, m_order, r_order = prepare_heatmap_labels(df_survival)
 
-  year_target = "36"
+  year_target = str(NUM_YEARS)
   title = f"60歳リタイア・年金60歳・{year_target}年後生存確率(%) (ダイナミックスペンディングON)"
   output_name = f"grid_heatmap_{year_target}yr_p60_dyn_on.svg"
   output_path = os.path.join(IMG_DIR, output_name)
@@ -329,11 +380,11 @@ def run_p60_d1_heatmap(df_survival: pd.DataFrame):
                  y_sort=m_order)
 
 
-def run_pen60_lifeplan_analysis(df_all: pd.DataFrame, target_year: str):
+def run_pen70_lifeplan_analysis(df_all: pd.DataFrame, target_year: str):
   """
-  pen60-lifeplan の分析を実行する。
+  pen70-lifeplan の分析を実行する。
   """
-  print(f"\n\n{'='*20} pen60-lifeplan 分析 {'='*20}")
+  print(f"\n\n{'='*20} pen70-lifeplan 分析 {'='*20}")
 
   df_survival = df_all[df_all["value_type"] == "survival"].copy()
   if df_survival.empty:
@@ -342,39 +393,67 @@ def run_pen60_lifeplan_analysis(df_all: pd.DataFrame, target_year: str):
 
   # 戦略の略称マッピング
   strategy_map = {
-      "SpendAwareDPRebalance (re60)": "DP(60)",
-      "SpendAwareDPRebalance (re40)": "DP(40)",
+      "SpendAwareDPRebalance (R70-aware)": "R70",
       "DynamicV1Rebalance": "V1",
       "固定最適比率": "固定",
       "No dynamic rebalance": "なし"
   }
-  pref_order = ["DP(60)", "DP(40)", "V1", "固定", "なし"]
 
   df_survival["strategy_short"] = df_survival["strategy"].map(strategy_map)
 
   dim_cols = ['spend_multiplier', 'spending_rule']
   threshold = 0.01  # 1%
 
+  # 優先順位を自動計算 (閾値内の出現頻度順)
+  pref_order = calculate_preference_order(df_survival, target_year, threshold, dim_cols, "strategy_short")
+  print(f"Computed preference order for strategies: {pref_order}")
+
   def get_best_strategy(group: pd.DataFrame) -> pd.Series:
     max_prob = float(group[target_year].max())
-    selected_row = None
 
-    # 優先順位に従ってスキャン
+    # 0. 優先順位を数値化 (値が小さいほど高優先)
+    pref_map = {name: i for i, name in enumerate(pref_order)}
+    temp_group = group.copy()
+    temp_group["pref_score"] = temp_group["strategy_short"].map(pref_map)
+
+    # 1. 生存確率の降順、同じなら優先順位の昇順でソート
+    sorted_group = temp_group.sort_values(by=[target_year, "pref_score"],
+                                          ascending=[False, True])
+
+    # 2. 閾値内の全戦略を取得
+    within_threshold_rows = sorted_group[sorted_group[target_year] >= (max_prob - threshold)]
+    within_threshold_names = within_threshold_rows["strategy_short"].tolist()
+
+    # 3. 色決定用の代表戦略 (優先順位に従う)
+    selected_row = None
     for strat in pref_order:
-      match = group[group["strategy_short"] == strat]
-      if not match.empty:
-        row = match.iloc[0]
-        if float(row[target_year]) >= (max_prob - threshold):
-          selected_row = row.copy()
-          break
+      if strat in within_threshold_names:
+        selected_row = group[group["strategy_short"] == strat].iloc[0].copy()
+        break
 
     if selected_row is None:
-      selected_row = group.sort_values(by=[target_year],
-                                       ascending=False).iloc[0].copy()
+      selected_row = within_threshold_rows.iloc[0].copy()
 
     selected_row["display_strategy"] = selected_row["strategy_short"]
-    selected_row[
-        "combo_label"] = f"{selected_row['strategy_short']}\n{selected_row[target_year]*100:.1f}%"
+
+    # 4. ラベル作成
+    # 1行目: 生存率 (最大値)
+    label = f"{max_prob*100:.1f}%"
+
+    # 2行目: 1つ目 (, 2つ目) -> ソート順 (同率なら優先順)
+    line2 = within_threshold_names[0]
+    if len(within_threshold_names) >= 2:
+      line2 += f", {within_threshold_names[1]}"
+    label += f"\n{line2}"
+
+    # 3行目: (3つ目) (, 4つ目) -> ソート順
+    if len(within_threshold_names) >= 3:
+      line3 = within_threshold_names[2]
+      if len(within_threshold_names) >= 4:
+        line3 += f", {within_threshold_names[3]}"
+      label += f"\n{line3}"
+
+    selected_row["combo_label"] = label
     return selected_row
 
   results = []
@@ -386,14 +465,13 @@ def run_pen60_lifeplan_analysis(df_all: pd.DataFrame, target_year: str):
 
   # 戦略ごとのカラーマップ
   color_map = {
-      "DP(40)": "#9AE6B4",  # Light green
-      "DP(60)": "#B2F5EA",  # Light teal
+      "R70": "#B2F5EA",    # Light teal
       "V1": "#FBD38D",      # Light orange
       "固定": "#FEB2B2",    # Light red
       "なし": "#CBD5E0"      # Light gray
   }
 
-  title = f"最適リバランス戦略 ({target_year}年後生存確率, 優先: DP60>DP40>V1>固定>なし, 許容差{threshold*100:g}%)"
+  title = f"最適リバランス戦略 ({target_year}年後生存確率, 優先: {'>'.join(pref_order)}, 許容差{threshold*100:g}%)"
   output_path = os.path.join(IMG_DIR, "best_rebalance_strategy_heatmap.svg")
 
   create_best_strategy_heatmap(df_best,
@@ -417,12 +495,12 @@ def main():
       type=str,
       default="optimal-pension",
       help=
-      "実験設定 (comma separated: optimal-pension, P-D-RANGE, P60-D1, pen60-lifeplan)"
+      "実験設定 (comma separated: optimal-pension, P-D-RANGE, P60-D1, pen70-lifeplan)"
   )
   args = parser.parse_args()
 
   exp_types = args.exp_type.split(",")
-  target_year = "36"
+  target_year = str(NUM_YEARS)
 
   for et in exp_types:
     et = et.strip()
@@ -437,11 +515,20 @@ def main():
     if et == "optimal-pension":
       run_optimal_pension_analysis(df_all, target_year)
     elif et == "P-D-RANGE":
-      run_p_d_range_analysis(df_all, target_year)
+      run_best_combination_analysis(
+          df_all[df_all["value_type"] == "survival"].copy(),
+          target_year=target_year,
+          img_dir=IMG_DIR,
+          temp_dir=TEMP_DIR,
+          title_prefix="60歳リタイア",
+          threshold=0.02,
+          pref_order=["P60_D1", "P65_D1", "P60_D0", "P65_D0"],
+          width=500,
+          height=450)
     elif et == "P60-D1":
       run_p60_d1_analysis(df_all, target_year)
-    elif et == "pen60-lifeplan":
-      run_pen60_lifeplan_analysis(df_all, target_year)
+    elif et == "pen70-lifeplan":
+      run_pen70_lifeplan_analysis(df_all, target_year)
     else:
       print(f"Unknown experiment type: {et}")
 
