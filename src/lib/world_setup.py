@@ -84,6 +84,7 @@ def re60_pen60_95(n_sim: int, seed: int = 42) -> Setup:
                                pension_start_age=60,
                                seed=seed)
 
+
 def re60_pen70_95(n_sim: int, seed: int = 42) -> Setup:
   """
   開始60歳、リタイア60歳、年金開始70歳、終了94歳末のシナリオ設定を構築します。
@@ -123,6 +124,10 @@ def re60_pen70_95_m0_75(n_sim: int, seed: int = 42) -> Setup:
 
 def re60_pen70_95_m1(n_sim: int, seed: int = 42) -> Setup:
   return _create_re60_pen70_with_mult(n_sim, 1.0, seed)
+
+
+def re60_pen70_95_m1_2(n_sim: int, seed: int = 42) -> Setup:
+  return _create_re60_pen70_with_mult(n_sim, 1.2, seed)
 
 
 def re60_pen70_95_m1_5(n_sim: int, seed: int = 42) -> Setup:
