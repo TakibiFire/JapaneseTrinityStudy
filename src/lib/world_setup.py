@@ -2,6 +2,10 @@
 資産運用・取り崩しシミュレーションのための標準的な「世界」設定を構築するモジュール。
 """
 
+from dataclasses import replace
+
+from src.lib.retired_spending import (SpendingType,
+                                      get_annual_retired_spending_values)
 from src.lib.scenario_builder import (CpiType, CurveSpend, FxType, Lifeplan,
                                       PensionStatus, PredefinedStock,
                                       PredefinedZeroRisk, Setup, StrategySpec,
@@ -59,11 +63,11 @@ def create_standard_world(
 
 def re40_pen60_95(n_sim: int, seed: int = 42) -> Setup:
   """
-  開始40歳、リタイア40歳、年金開始60歳、終了95歳のシナリオ設定を構築します。
+  開始40歳、リタイア40歳、年金開始60歳、終了94歳末のシナリオ設定を構築します。
   """
   return create_standard_world(n_sim=n_sim,
                                start_age=40,
-                               end_age_inclusive=95,
+                               end_age_inclusive=94,
                                retirement_start_age=40,
                                pension_start_age=60,
                                seed=seed)
@@ -71,11 +75,63 @@ def re40_pen60_95(n_sim: int, seed: int = 42) -> Setup:
 
 def re60_pen60_95(n_sim: int, seed: int = 42) -> Setup:
   """
-  開始60歳、リタイア60歳、年金開始60歳、終了95歳のシナリオ設定を構築します。
+  開始60歳、リタイア60歳、年金開始60歳、終了94歳末のシナリオ設定を構築します。
   """
   return create_standard_world(n_sim=n_sim,
                                start_age=60,
-                               end_age_inclusive=95,
+                               end_age_inclusive=94,
                                retirement_start_age=60,
                                pension_start_age=60,
                                seed=seed)
+
+def re60_pen70_95(n_sim: int, seed: int = 42) -> Setup:
+  """
+  開始60歳、リタイア60歳、年金開始70歳、終了94歳末のシナリオ設定を構築します。
+  """
+  return create_standard_world(n_sim=n_sim,
+                               start_age=60,
+                               end_age_inclusive=94,
+                               retirement_start_age=60,
+                               pension_start_age=70,
+                               seed=seed)
+
+
+def _create_re60_pen70_with_mult(n_sim: int,
+                                 multiplier: float,
+                                 seed: int = 42) -> Setup:
+  """
+  開始60歳、リタイア60歳、年金開始70歳、終了94歳末で、初期支出倍率を指定したシナリオ設定を構築します。
+  """
+  setup = re60_pen70_95(n_sim=n_sim, seed=seed)
+
+  base_spend_annual = get_annual_retired_spending_values(
+      [SpendingType.CONSUMPTION, SpendingType.NON_CONSUMPTION_EXCLUDE_PENSION],
+      60, 1)[0]
+  initial_annual_cost = base_spend_annual * multiplier
+
+  # Lifeplan の支出設定を上書き
+  setup.lifeplan = replace(
+      setup.lifeplan,
+      base_spend=CurveSpend(first_year_annual_amount=initial_annual_cost))
+
+  return setup
+
+
+def re60_pen70_95_m0_75(n_sim: int, seed: int = 42) -> Setup:
+  return _create_re60_pen70_with_mult(n_sim, 0.75, seed)
+
+
+def re60_pen70_95_m1(n_sim: int, seed: int = 42) -> Setup:
+  return _create_re60_pen70_with_mult(n_sim, 1.0, seed)
+
+
+def re60_pen70_95_m1_5(n_sim: int, seed: int = 42) -> Setup:
+  return _create_re60_pen70_with_mult(n_sim, 1.5, seed)
+
+
+def re60_pen70_95_m2(n_sim: int, seed: int = 42) -> Setup:
+  return _create_re60_pen70_with_mult(n_sim, 2.0, seed)
+
+
+def re60_pen70_95_m3(n_sim: int, seed: int = 42) -> Setup:
+  return _create_re60_pen70_with_mult(n_sim, 3.0, seed)
