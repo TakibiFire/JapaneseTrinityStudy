@@ -319,7 +319,10 @@ def main():
       w_n = (avg_y_withdraw_n + last_w) / (1.0 + EFFECTIVE_ZERO_RISK_YIELD)
 
     last_w = w_n
-    m_winning_multiplier = w_n / avg_y_withdraw_n
+    if avg_y_withdraw_n > 1e-6:
+      m_winning_multiplier = w_n / avg_y_withdraw_n
+    else:
+      m_winning_multiplier = 0.0
     print(
         f"  Winning Threshold: M_N={m_winning_multiplier:.4f} (W_N={w_n:.2f})")
 
@@ -460,7 +463,10 @@ def main():
           # 期待される成長率 (加齢による統計的な支出変化 + 平均インフレ)
           avg_y_next = float(np.mean(dp_results[age + 1]["y_withdraw"]))
           avg_y_curr = float(np.mean(y_withdraw_n))
-          expected_growth = avg_y_next / avg_y_curr
+          if avg_y_curr > 1e-6:
+            expected_growth = avg_y_next / avg_y_curr
+          else:
+            expected_growth = 1.0
 
           # CPI のブレ (残差)
           # unexpected_cpi_jump = (1 + mu + z*sigma) / (1 + mu)
@@ -468,8 +474,11 @@ def main():
                                 cpi_annual_sigma) / (1.0 + cpi_annual_mu)
 
           # y_next_dist shape: (n_sim, 7)
-          y_next_dist = y_withdraw_n[:, np.
-                                     newaxis] * expected_growth * relative_cpi_jumps
+          if avg_y_curr > 1e-6:
+            y_next_dist = y_withdraw_n[:, np.newaxis] * expected_growth * relative_cpi_jumps
+          else:
+            # If current withdrawal is 0, next withdrawal is based on avg_y_next
+            y_next_dist = np.full((n_sim, 7), avg_y_next) * relative_cpi_jumps
 
           # 7つの R_next シナリオを計算
           # x_next shape: (n_sim,) -> (n_sim, 7)

@@ -232,10 +232,10 @@ class DPOptimalStrategyPredictor:
     y_from = self._avg_y_withdraws[age_from]
     y_to = self._avg_y_withdraws[age_to]
 
-    if y_from <= 0 or y_to <= 0:
-      raise ValueError(
-          f"Average withdrawal must be positive for multiplier calculation. Age {age_from}: {y_from}, Age {age_to}: {y_to}"
-      )
+    if y_from <= 1e-6:
+      # 前年の取り崩しが0の場合、倍率は定義できないが、安全に 1.0 または y_to をそのまま使うような値を返す
+      # ここでは 1.0 を返し、project_s_rate 側で s_rate_from=0 なら 0 になるようにする
+      return 1.0
 
     return y_to / y_from
 
