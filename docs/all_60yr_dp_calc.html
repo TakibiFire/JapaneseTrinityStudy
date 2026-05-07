@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>60歳リタイア用 最適戦略計算機 (DPモデル)</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      line-height: 1.4;
+      color: #333;
+      margin: 0;
+      padding: 10px;
+      background-color: #f8f9fa;
+    }
+    .container {
+      max-width: 500px;
+      margin: 0 auto;
+      background: #fff;
+      padding: 14px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    h1 {
+      font-size: 1.1rem;
+      margin-top: 0;
+      margin-bottom: 0.8rem;
+      text-align: center;
+    }
+    .form-group {
+      margin-bottom: 0.8rem;
+    }
+    label {
+      display: block;
+      margin-bottom: 0.3rem;
+      font-weight: bold;
+      font-size: 0.8rem;
+    }
+    input {
+      width: 100%;
+      padding: 6px 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-sizing: border-box;
+      font-size: 1rem;
+      background-color: #ffffff;
+    }
+    .input-row {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 0.8rem;
+    }
+    .input-row .form-group {
+      flex: 1;
+    }
+    .unit {
+      font-size: 0.75rem;
+      color: #666;
+      margin-top: 2px;
+      text-align: right;
+    }
+    .output-area {
+      margin-top: 1rem;
+      padding-top: 0.8rem;
+      border-top: 2px solid #eee;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.8rem;
+    }
+    th, td {
+      padding: 6px 2px;
+      border-bottom: 1px solid #eee;
+      text-align: right;
+    }
+    th {
+      font-weight: bold;
+      background-color: #f1f3f5;
+      text-align: center;
+    }
+    .m-label {
+      text-align: left;
+      font-weight: bold;
+    }
+    .val-a {
+      color: #007bff;
+      font-weight: bold;
+      font-size: 1rem;
+    }
+    .val-p {
+      color: #28a745;
+    }
+    .note {
+      font-size: 0.7rem;
+      color: #888;
+      margin-top: 0.8rem;
+      border-top: 1px solid #eee;
+      padding-top: 0.5rem;
+    }
+    .loading {
+      text-align: center;
+      padding: 20px;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h1>60歳リタイア用 最適戦略計算機 (DP)</h1>
+
+  <div class="form-group">
+    <label for="age">現在の年齢 (60以上)</label>
+    <input type="number" id="age" value="60" min="60" max="94">
+    <div class="unit">歳</div>
+  </div>
+
+  <div class="input-row">
+    <div class="form-group">
+      <label for="wealth">現在の総資産</label>
+      <input type="number" id="wealth" value="10000" step="100">
+      <div class="unit">万円</div>
+    </div>
+    <div class="form-group">
+      <label for="lastSpend">昨年の取り崩し額 (正味)</label>
+      <input type="number" id="lastSpend" value="498" step="10">
+      <div class="unit">万円/年</div>
+    </div>
+  </div>
+
+  <div class="output-area" id="output">
+    <table>
+      <thead>
+        <tr>
+          <th>支出レベル</th>
+          <th>60歳時の取り崩し額</th>
+          <th>推奨株式比率</th>
+          <th>生存確率</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="m-label">x0.75</td>
+          <td id="m_val_0_75">373万</td>
+          <td class="val-a" id="a_val_0_75">---</td>
+          <td class="val-p" id="p_val_0_75">---</td>
+        </tr>
+        <tr>
+          <td class="m-label">x1.0</td>
+          <td id="m_val_1">498万</td>
+          <td class="val-a" id="a_val_1">---</td>
+          <td class="val-p" id="p_val_1">---</td>
+        </tr>
+        <tr>
+          <td class="m-label">x1.2</td>
+          <td id="m_val_1_2">597万</td>
+          <td class="val-a" id="a_val_1_2">---</td>
+          <td class="val-p" id="p_val_1_2">---</td>
+        </tr>
+        <tr>
+          <td class="m-label">x1.5</td>
+          <td id="m_val_1_5">747万</td>
+          <td class="val-a" id="a_val_1_5">---</td>
+          <td class="val-p" id="p_val_1_5">---</td>
+        </tr>
+        <tr>
+          <td class="m-label">x2.0</td>
+          <td id="m_val_2">996万</td>
+          <td class="val-a" id="a_val_2">---</td>
+          <td class="val-p" id="p_val_2">---</td>
+        </tr>
+        <tr>
+          <td class="m-label">x3.0</td>
+          <td id="m_val_3">1494万</td>
+          <td class="val-a" id="a_val_3">---</td>
+          <td class="val-p" id="p_val_3">---</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note">
+    ※ 60歳リタイア・年金70歳受給開始のライフプランに基づき、<a href="all_60yr.html#実験2-年金受給70歳固定の時のリバランスの最適戦略を探す" target="_parent">リバランスを最適化</a>した際の株式比率です。<br>
+    ※ <b>昨年の取り崩し額</b>: 60歳時は「今年予定している取り崩し額」、それ以降は「昨年の取り崩し額（正味）」を入力して下さい。「正味」とは、年金などの収入を差し引いた、純粋に資産から取り崩した額のことです。モデル内部で加齢に伴う支出低下（加齢に伴い支出が減る傾向）を考慮して今年の支出を推定します。<br>
+    ※ この右端の生存確率は、最適モデル構築時に求めた予測生存確率のため、精度が若干劣ります。
+  </div>
+</div>
+
+<script src="all_60yr_dp_calc.js"></script>
+
+</body>
+</html>
