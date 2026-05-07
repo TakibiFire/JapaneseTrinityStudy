@@ -120,8 +120,8 @@ nav:
     - サイドFIREの効果: side_fire.md
     - 死亡率を考慮する: mortality.md
   - ライフプランに基づく戦略:
-    - 最適配分を繰り返す<br>（進化版ダイナミックリバランス）: spend_aware_dynamic_rebalance.md
-    - ライフプランを考慮した<br>動的支出（生存確率ベースの<br>ガードレール）: spend_aware_dynamic_spending.md
+    - ライフプランを考慮した<br>最適配分を繰り返す<br>（進化版ダイナミックリバランス）: spend_aware_dynamic_rebalance.md
+    - ライフプランを考慮した<br>支出制限（生存確率ベース<br>のガードレール）: spend_aware_dynamic_spending.md
   - 年齢別の最適戦略:
     - 60歳の最適戦略: all_60yr.md
     - 50歳の最適戦略: all_50yr.md
