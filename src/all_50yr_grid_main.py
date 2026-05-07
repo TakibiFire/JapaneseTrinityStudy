@@ -98,16 +98,15 @@ def get_optimal_pension_setup(
   combinations = list(
       product(pension_start_ages, spend_multipliers, spending_rules))
 
-  base_total_spend = base_spend_50_retired + pension_premium_annual
-
   for (pension_start, spend_mult, rule) in combinations:
     # 初年度支出 (国民年金保険料含む) と初期資産
-    initial_annual_cost = base_total_spend * spend_mult
+    # 国民年金保険料は固定額とし、生活費のみを倍率 (spend_mult) でスケーリングする。
+    initial_annual_cost = base_spend_50_retired * spend_mult + pension_premium_annual
     init_money = initial_annual_cost / (rule / 100.0)
 
     # scenario_builder が自動的に国民年金保険料 (-21.5) を加算するため、
     # CurveSpend には残りの額を設定する。
-    initial_annual_cost_wo_premium = initial_annual_cost - pension_premium_annual
+    initial_annual_cost_wo_premium = base_spend_50_retired * spend_mult
 
     new_lifeplan = replace(
         baseline_lifeplan,
@@ -181,8 +180,7 @@ def main():
     pension_start, spend_mult, rule = combo
     strat_name = "DynamicV1Rebalance"
 
-    base_total_spend = base_spend_50_retired + pension_premium_annual
-    initial_annual_cost = base_total_spend * spend_mult
+    initial_annual_cost = base_spend_50_retired * spend_mult + pension_premium_annual
     init_money = initial_annual_cost / (rule / 100.0)
 
     base_row: Dict[str, Union[float, int, str]] = {
