@@ -8,6 +8,8 @@ from typing import Any, Dict, List, Optional
 import altair as alt
 import pandas as pd
 
+from src.lib.visualize import create_survival_probability_chart
+
 
 def create_heatmap(df: pd.DataFrame,
                    target_col: str,
@@ -339,7 +341,9 @@ def run_best_combination_analysis(
   df_best.to_csv(csv_output, index=False)
   print(f"✅ {csv_output} にCSVを保存しました。")
 
-  print(f"\n--- {title_prefix} {target_year}年後生存確率を最大化する組み合わせの分布 ---")
+  print(
+      f"\n--- {title_prefix} {target_year}年後生存確率を最大化する組み合わせの分布 ---"
+  )
   counts = df_best["display_combo"].value_counts().sort_index()
   print(counts.to_string())
 
@@ -445,6 +449,207 @@ def create_spend_percentile_chart(df: pd.DataFrame,
                                                  legend=legend_option))
 
   chart = (area + line).properties(title=title, width=width, height=height)
+
+  os.makedirs(os.path.dirname(output_path), exist_ok=True)
+  chart.save(output_path)
+  print(f"✅ {output_path} に保存しました。")
+
+
+def calculate_preference_order(df_survival: pd.DataFrame,
+                               target_year: str,
+                               threshold: float,
+                               dim_cols: List[str],
+                               value_col: str) -> List[Any]:
+  """
+  全グリッドセルにおける出現頻度に基づいて優先順位を自動計算する。
+  """
+  counts: Dict[Any, int] = {}
+
+  for _, group in df_survival.groupby(dim_cols):
+    max_prob = float(group[target_year].max())
+    within_threshold = group[group[target_year] >=
+                             (max_prob - threshold)][value_col].tolist()
+    for val in within_threshold:
+      if pd.isna(val):
+        continue
+      counts[val] = counts.get(val, 0) + 1
+
+  # 頻度が高い順にソート。頻度が同じなら値自体でソートして安定させる
+  sorted_items = sorted(counts.items(),
+                        key=lambda x: (x[1], str(x[0])),
+                        reverse=True)
+  return [item[0] for item in sorted_items]
+
+
+def create_best_strategy_heatmap(df_best: pd.DataFrame,
+                                 title: str,
+                                 x_col: str,
+                                 x_title: str,
+                                 y_col: str,
+                                 y_title: str,
+                                 output_path: str,
+                                 color_col: str,
+                                 color_title: str,
+                                 color_map: Dict[str, str],
+                                 x_sort: Optional[List[Any]] = None,
+                                 y_sort: Optional[List[Any]] = None,
+                                 width: int = 500,
+                                 height: int = 450):
+  """
+  選択された戦略を可視化するヒートマップ。
+  """
+  plot_df = df_best.copy()
+  domain = list(color_map.keys())
+  range_ = list(color_map.values())
+
+  base = alt.Chart(plot_df).encode(
+      x=alt.X(f'{x_col}:O',
+              title=x_title,
+              sort=x_sort,
+              axis=alt.Axis(labelExpr="split(datum.label, '@')")),
+      y=alt.Y(f'{y_col}:O',
+              title=y_title,
+              sort=y_sort,
+              axis=alt.Axis(labelExpr="split(datum.label, '@')")),
+  )
+
+  heatmap = base.mark_rect().encode(
+      color=alt.Color(f'{color_col}:N',
+                      title=color_title,
+                      scale=alt.Scale(domain=domain, range=range_)))
+
+  text = base.mark_text(baseline='middle',
+                        lineBreak='\n').encode(text=alt.Text('combo_label:N'),
+                                               color=alt.value('black'))
+
+  chart = (heatmap + text).properties(title=title, width=width, height=height)
+
+  os.makedirs(os.path.dirname(output_path), exist_ok=True)
+  chart.save(output_path)
+  print(f"✅ {output_path} に保存しました。")
+
+
+def create_optimal_pension_heatmap(df_best: pd.DataFrame,
+                                   title: str,
+                                   x_col: str,
+                                   x_title: str,
+                                   y_col: str,
+                                   y_title: str,
+                                   output_path: str,
+                                   x_sort: Optional[List[Any]] = None,
+                                   y_sort: Optional[List[Any]] = None,
+                                   width: int = 500,
+                                   height: int = 450):
+  """
+  最適な年金受給開始年齢を可視化するヒートマップ。
+  """
+  color_map = {
+      "60歳": "#FBD38D",  # Light orange
+      "65歳": "#9AE6B4",  # Light green
+      "70歳": "#B2F5EA",  # Light teal
+      "75歳": "#FEB2B2"  # Light red
+  }
+  return create_best_strategy_heatmap(df_best, title, x_col, x_title, y_col,
+                                      y_title, output_path, "display_age",
+                                      "受給開始年齢", color_map, x_sort, y_sort,
+                                      width, height)
+
+
+def create_improvement_heatmap(df: pd.DataFrame,
+                               target_col: str,
+                               title: str,
+                               x_col: str,
+                               x_title: str,
+                               y_col: str,
+                               y_title: str,
+                               output_path: str,
+                               x_sort: Optional[List[Any]] = None,
+                               y_sort: Optional[List[Any]] = None,
+                               width: int = 500,
+                               height: int = 450):
+  """
+  改善幅を可視化するヒートマップ。
+  """
+  plot_df = df.copy()
+  plot_df["val"] = plot_df[target_col]
+  plot_df["val_pct"] = plot_df["val"] * 100
+
+  base = alt.Chart(plot_df).encode(
+      x=alt.X(f'{x_col}:O',
+              title=x_title,
+              sort=x_sort,
+              axis=alt.Axis(labelExpr="split(datum.label, '@')")),
+      y=alt.Y(f'{y_col}:O',
+              title=y_title,
+              sort=y_sort,
+              axis=alt.Axis(labelExpr="split(datum.label, '@')")),
+  )
+
+  heatmap = base.mark_rect().encode(
+      color=alt.Color('val:Q',
+                      title='改善幅 (%)',
+                      scale=alt.Scale(scheme='blues')))
+
+  text = base.mark_text(baseline='middle').encode(
+      text=alt.Text('val_pct:Q', format='.1f'),
+      color=alt.condition(alt.datum.val > 0.1, alt.value('white'),
+                          alt.value('black')))
+
+  chart = (heatmap + text).properties(title=title, width=width, height=height)
+
+  os.makedirs(os.path.dirname(output_path), exist_ok=True)
+  chart.save(output_path)
+  print(f"✅ {output_path} に保存しました。")
+
+
+def create_pension_survival_curve(df: pd.DataFrame,
+                                 multiplier: float,
+                                 rule: float,
+                                 title: str,
+                                 output_path: str,
+                                 start_age: int,
+                                 num_years: int):
+  """
+  指定された multiplier と rule における、受給開始年齢別の生存確率推移を描画する。
+  """
+  # 年度列 (1, 2, ..., num_years) を取得
+  year_cols = [str(i) for i in range(1, num_years + 1) if str(i) in df.columns]
+
+  # 指定された条件でフィルタ
+  plot_df = df[(df["spend_multiplier"] == multiplier) &
+               (df["spending_rule"] == rule) &
+               (df["value_type"] == "survival")].copy()
+
+  if plot_df.empty:
+    print(f"Warning: No data for multiplier={multiplier}, rule={rule}")
+    return
+
+  # メルトしてロング形式に
+  df_long = plot_df.melt(id_vars=["pension_start_age"],
+                         value_vars=year_cols,
+                         var_name="Year",
+                         value_name="Survival Probability (%)")
+  df_long["Year"] = df_long["Year"].astype(int)
+  df_long["Survival Probability (%)"] *= 100.0
+
+  # 0年目のデータを追加 (開始時は100%)
+  ages = plot_df["pension_start_age"].unique()
+  start_rows = pd.DataFrame({
+      "pension_start_age": ages,
+      "Year": 0,
+      "Survival Probability (%)": 100.0
+  })
+  df_long = pd.concat([start_rows, df_long], ignore_index=True)
+
+  df_long["Strategy"] = df_long["pension_start_age"].map(
+      lambda x: f"{int(x)}歳受給開始")
+
+  # 共通ライブラリの可視化関数を使用
+  _, chart = create_survival_probability_chart(df_plot=df_long,
+                                               start_age=start_age,
+                                               height=300)
+
+  chart = chart.properties(title=title)
 
   os.makedirs(os.path.dirname(output_path), exist_ok=True)
   chart.save(output_path)
