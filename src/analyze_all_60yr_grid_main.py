@@ -24,6 +24,7 @@ from src.lib.survival_contours import (generate_rule_of_thumb,
                                        generate_smooth_contour_data,
                                        get_contour_anchor_points,
                                        save_contour_charts)
+from src.lib.survival_formula_analysis import run_survival_formula_analysis
 from src.lib.visualize import create_survival_probability_chart
 from src.lib.visualize_all_yr import (create_heatmap,
                                       create_spend_percentile_chart,
@@ -133,6 +134,53 @@ def create_optimal_pension_heatmap(df_best: pd.DataFrame,
                                       y_title, output_path, "display_age",
                                       "受給開始年齢", color_map, x_sort, y_sort,
                                       width, height)
+
+
+def create_improvement_heatmap(df: pd.DataFrame,
+                             target_col: str,
+                             title: str,
+                             x_col: str,
+                             x_title: str,
+                             y_col: str,
+                             y_title: str,
+                             output_path: str,
+                             x_sort: Optional[List] = None,
+                             y_sort: Optional[List] = None,
+                             width: int = 500,
+                             height: int = 450):
+  """
+  改善幅を可視化するヒートマップ。
+  """
+  plot_df = df.copy()
+  plot_df["val"] = plot_df[target_col]
+  plot_df["val_pct"] = plot_df["val"] * 100
+
+  base = alt.Chart(plot_df).encode(
+      x=alt.X(f'{x_col}:O',
+              title=x_title,
+              sort=x_sort,
+              axis=alt.Axis(labelExpr="split(datum.label, '@')")),
+      y=alt.Y(f'{y_col}:O',
+              title=y_title,
+              sort=y_sort,
+              axis=alt.Axis(labelExpr="split(datum.label, '@')")),
+  )
+
+  heatmap = base.mark_rect().encode(
+      color=alt.Color('val:Q',
+                      title='改善幅 (%)',
+                      scale=alt.Scale(scheme='blues')))
+
+  text = base.mark_text(baseline='middle').encode(
+      text=alt.Text('val_pct:Q', format='.1f'),
+      color=alt.condition(alt.datum.val > 0.1, alt.value('white'),
+                          alt.value('black')))
+
+  chart = (heatmap + text).properties(title=title, width=width, height=height)
+
+  os.makedirs(os.path.dirname(output_path), exist_ok=True)
+  chart.save(output_path)
+  print(f"✅ {output_path} に保存しました。")
 
 
 def create_pension_survival_curve(df: pd.DataFrame,
@@ -487,7 +535,41 @@ def run_pen70_lifeplan_analysis(df_all: pd.DataFrame, target_year: str):
                                color_title="最適戦略",
                                color_map=color_map,
                                x_sort=r_order,
-                               y_sort=m_order)
+                               y_sort=m_order,
+                               height=405)
+
+  # 改善幅の計算 (R70 vs V1)
+  df_r70 = df_survival[df_survival["strategy_short"] == "R70"].copy()
+  df_v1 = df_survival[df_survival["strategy_short"] == "V1"].copy()
+
+  if not df_r70.empty and not df_v1.empty:
+    df_imp = pd.merge(
+        df_r70[[
+            'spend_multiplier', 'spending_rule', 'initial_annual_cost',
+            target_year
+        ]],
+        df_v1[['spend_multiplier', 'spending_rule', target_year]],
+        on=['spend_multiplier', 'spending_rule'],
+        suffixes=('_r70', '_v1'))
+    df_imp["improvement"] = df_imp[f"{target_year}_r70"] - df_imp[
+        f"{target_year}_v1"]
+
+    df_imp, m_order_imp, r_order_imp = prepare_heatmap_labels(df_imp)
+
+    title_imp = f"R70のV1に対する改善幅 ({target_year}年後生存確率 差分)"
+    output_path_imp = os.path.join(IMG_DIR, "improvement_r70_vs_v1_heatmap.svg")
+
+    create_improvement_heatmap(df_imp,
+                               target_col="improvement",
+                               title=title_imp,
+                               x_col="rule_label",
+                               x_title="初期支出率 (%ルール)",
+                               y_col="multiplier_label",
+                               y_title="支出レベル",
+                               output_path=output_path_imp,
+                               x_sort=r_order_imp,
+                               y_sort=m_order_imp,
+                               height=405)
 
 
 def run_pen70_formula_analysis(df_all: pd.DataFrame, target_year: str):
@@ -532,6 +614,9 @@ def run_pen70_formula_analysis(df_all: pd.DataFrame, target_year: str):
 
   # 4. Rule of Thumb
   generate_rule_of_thumb(df_survival, target_probs, target_year)
+
+  # 5. 詳細な近似モデルの分析
+  run_survival_formula_analysis(df_survival, target_year)
 
 
 def main():
