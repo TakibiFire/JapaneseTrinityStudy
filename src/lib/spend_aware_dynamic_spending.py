@@ -160,31 +160,3 @@ class SpendAwareDynamicSpending(CashflowDynamicHandler):
 
     new_base_nom[active_paths] = res_active
     return new_base_nom
-
-  def calculate_nominal_spend(self, m: int, net_worth: np.ndarray,
-                              prev_base_spend_y: np.ndarray, cpi_m: np.ndarray,
-                              cpi_m_minus_12: np.ndarray,
-                              other_net_m: np.ndarray,
-                              active_paths: np.ndarray) -> np.ndarray:
-    """
-    (Deprecated) 旧エンジン用の計算メソッド。
-
-    
-    TODO: この関数は Phase 1 の `core.py` への移行が完了し、全ての既存スクリプトが
-    `evaluate` を使用するように修正された後に削除可能です。
-    削除前には、`evaluate` が `calculate_nominal_spend` と（数学的に）同一の
-    結果を返すことを `tests/lib/test_core.py` で検証する必要があります。
-    """
-    return self.evaluate(
-        m=m,
-        active_paths=active_paths,
-        current_net_worth=net_worth,
-        tax_cost_m=np.zeros_like(net_worth),
-        prev_actual_amount=prev_base_spend_y,
-        other_net_m=other_net_m,
-        precomputed_cf_m=cpi_m * self.annual_cost_real[m // 12] if m //
-        12 < len(self.annual_cost_real) else cpi_m * self.annual_cost_real[-1],
-        precomputed_cf_prev_m=cpi_m_minus_12 *
-        self.annual_cost_real[max(0, m // 12 - 1)] if max(0, m // 12 - 1) < len(
-            self.annual_cost_real) else cpi_m_minus_12 *
-        self.annual_cost_real[-1])
