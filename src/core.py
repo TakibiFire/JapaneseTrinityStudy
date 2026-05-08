@@ -571,8 +571,12 @@ def simulate_strategy(strategy: Strategy,
             for idx in debug_indices:
               if idx < len(reb_paths) and reb_paths[idx]:
                 mask_idx = np.sum(reb_paths[:idx])
+                price_str = ", ".join([
+                    f"{n}: {local_monthly_asset_prices[n][idx, m+1]:.2f}"
+                    for n in local_monthly_asset_prices
+                ])
                 debug_results[idx].append(
-                    f"[Debug Path {idx}] Month {m} Rebalance: cur_ann_spend={cur_ann_spend[mask_idx]:.2f}, rem_years={rem_years:.4f}, total_net={total_net[mask_idx]:.2f}, post_tax_net={post_tax_net[mask_idx]:.2f}, target_ratios={ {k: (v if isinstance(v, float) else v[mask_idx]) for k, v in target_ratios.items()} }"
+                    f"[Debug Path {idx}] Age {m//12+60} Month {m} Rebalance: cur_ann_spend={cur_ann_spend[mask_idx]:.2f}, prev_ann_spend={prev_annual_spend_y[strategy.cashflow_rules[0].source_name][idx]:.2f}, rem_years={rem_years:.4f}, total_net={total_net[mask_idx]:.2f}, post_tax_net={post_tax_net[mask_idx]:.2f}, prices={price_str}, target_ratios={ {k: (v if isinstance(v, float) else v[mask_idx]) for k, v in target_ratios.items()} }"
                 )
           # -------------
         else:
