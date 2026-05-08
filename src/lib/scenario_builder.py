@@ -189,6 +189,8 @@ class SpendAwareAdjustment:
   lower_mult: float = 0.99
   # 前年比の支出倍率の上限。
   upper_mult: float = 1.02
+  # 勝利しきい値を無効化するかどうか。
+  disable_win_threshold: bool = False
 
 
 @dataclass(frozen=True)
@@ -220,6 +222,8 @@ class SpendAwareDPRebalance:
   zero_risk_asset: PredefinedZeroRisk
   # 使用するDPモデルファイルのパス。
   model_name: str
+  # 勝利しきい値を無効化するかどうか。
+  disable_win_threshold: bool = False
 
 
 # --- 高レベルな宣言 ---
@@ -949,7 +953,8 @@ def _build_strategy(variant: _ExperimentVariant, cf_map: Dict[str, str],
     elif isinstance(spec.rebalance, SpendAwareDPRebalance):
       rebalance_interval = 12
       reb_dp = cast(SpendAwareDPRebalance, spec.rebalance)
-      predictor = DPOptimalStrategyPredictor(reb_dp.model_name)
+      predictor = DPOptimalStrategyPredictor(
+          reb_dp.model_name, disable_win_threshold=reb_dp.disable_win_threshold)
 
       def dr_dp_fn(
           total_net: np.ndarray, cur_ann_spend: np.ndarray, rem_years: float,
@@ -994,7 +999,9 @@ def _build_strategy(variant: _ExperimentVariant, cf_map: Dict[str, str],
               lower_mult=adj.lower_mult,
               upper_mult=adj.upper_mult,
               annual_cost_real=annual_cost_real.tolist(),
-              dp_predictor=DPOptimalStrategyPredictor(adj.model_name))
+              dp_predictor=DPOptimalStrategyPredictor(
+                  adj.model_name,
+                  disable_win_threshold=adj.disable_win_threshold))
         else:
           raise ValueError(f"未知の支出調整タイプです: {spec.spend_adjustment}")
         rules[i] = replace(rule, dynamic_handler=handler)

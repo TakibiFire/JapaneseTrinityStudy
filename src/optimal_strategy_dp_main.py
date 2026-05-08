@@ -171,6 +171,13 @@ def main():
                       type=str,
                       default=None,
                       help="デバッグ情報を表示するパスのインデックス（カンマ区切り、例: 0,1,2）")
+  parser.add_argument("--use_robust_growth",
+                      action="store_true",
+                      help="純支出の代わりにベース支出（Gross Base Spend）を用いて成長率を計算する")
+  parser.add_argument("--output_path",
+                      type=str,
+                      default=None,
+                      help="出力ファイルのパス。指定しない場合はデフォルトのパスを使用")
   args = parser.parse_args()
 
   n_sim = args.n_sim
@@ -191,8 +198,9 @@ def main():
   monthly_prices = exp.monthly_prices
   monthly_cashflows = exp.monthly_cashflows
   cf_map = exp.cf_name_map
-  # 注: 支出の統計的な成長率を計算するために exp.annual_cost_real (BaseSpendの実質推移)
-  # を使用することも検討可能ですが、現在は過去の挙動との整合性のために使用していません。
+  # 支出の統計的な成長率を計算するために、ベース支出の実質推移を取得する
+  spending_annual_real = exp.annual_cost_real
+  assert spending_annual_real is not None
 
   zr_asset_obj = ZeroRiskAsset(ZERO_RISK_NAME, 0.04)
 
@@ -278,6 +286,7 @@ def main():
   models: Dict[str, Any] = {
       "cpi_annual_mu": cpi_annual_mu,
       "cpi_annual_sigma": cpi_annual_sigma,
+      "use_robust_growth": args.use_robust_growth,
   }
   # age -> { "y_withdraw": array, "p_model": {coef}, "r_min": float, "r_max": float, "p_min": float, "p_max": float }
   dp_results: Dict[int, Any] = {}
@@ -461,12 +470,20 @@ def main():
 
           # 今年の支出 Y_N から来年の支出 Y_{N+1} の分布を推定
           # 期待される成長率 (加齢による統計的な支出変化 + 平均インフレ)
-          avg_y_next = float(np.mean(dp_results[age + 1]["y_withdraw"]))
+          year_idx = age - start_age
           avg_y_curr = float(np.mean(y_withdraw_n))
-          if avg_y_curr > 1e-6:
-            expected_growth = avg_y_next / avg_y_curr
+          if args.use_robust_growth and year_idx < years - 1:
+            # ベース支出の実質推移から成長率を計算する（年金オフセットによる不安定さを回避）
+            avg_s_curr = float(spending_annual_real[year_idx])
+            avg_s_next = float(spending_annual_real[year_idx + 1])
+            expected_growth = avg_s_next / avg_s_curr
           else:
-            expected_growth = 1.0
+            # 従来通り、全パスの平均純支出の比率を用いる
+            avg_y_next = float(np.mean(dp_results[age + 1]["y_withdraw"]))
+            if avg_y_curr > 1e-6:
+              expected_growth = avg_y_next / avg_y_curr
+            else:
+              expected_growth = 1.0
 
           # CPI のブレ (残差)
           # unexpected_cpi_jump = (1 + mu + z*sigma) / (1 + mu)
@@ -475,7 +492,8 @@ def main():
 
           # y_next_dist shape: (n_sim, 7)
           if avg_y_curr > 1e-6:
-            y_next_dist = y_withdraw_n[:, np.newaxis] * expected_growth * relative_cpi_jumps
+            y_next_dist = y_withdraw_n[:, np.
+                                       newaxis] * expected_growth * relative_cpi_jumps
           else:
             # If current withdrawal is 0, next withdrawal is based on avg_y_next
             y_next_dist = np.full((n_sim, 7), avg_y_next) * relative_cpi_jumps
@@ -816,14 +834,21 @@ def main():
         "p_min": float(p_surv_min),
         "p_max": float(p_surv_max)
     }
+    if args.use_robust_growth and year_idx < years - 1:
+      models[str(age)]["robust_spend_multiplier"] = float(
+          spending_annual_real[year_idx + 1] / spending_annual_real[year_idx])
 
   if args.debug_level == 0:
-    binary_name = os.path.splitext(os.path.basename(__file__))[0]
-    if binary_name.endswith("_main"):
-      binary_name = binary_name[:-5]
-    output_dir = os.path.join("data", binary_name)
-    os.makedirs(output_dir, exist_ok=True)
-    output_path = os.path.join(output_dir, f"{args.scenario}.json")
+    if args.output_path:
+      output_path = args.output_path
+    else:
+      binary_name = os.path.splitext(os.path.basename(__file__))[0]
+      if binary_name.endswith("_main"):
+        binary_name = binary_name[:-5]
+      output_dir = os.path.join("data", binary_name)
+      output_path = os.path.join(output_dir, f"{args.scenario}.json")
+
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
     with open(output_path, "w") as f:
       json.dump(models, f, indent=2)
     print(f"\nSuccessfully exported models to {output_path}")
