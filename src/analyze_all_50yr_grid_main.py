@@ -13,8 +13,14 @@ import os
 
 import pandas as pd
 
+from src.lib.survival_contours import (generate_rule_of_thumb,
+                                       generate_smooth_contour_data,
+                                       get_contour_anchor_points,
+                                       save_contour_charts)
+from src.lib.survival_formula_analysis import run_survival_formula_analysis
 from src.lib.visualize_all_yr import (calculate_preference_order,
                                       create_best_strategy_heatmap,
+                                      create_heatmap,
                                       create_improvement_heatmap,
                                       create_optimal_pension_heatmap,
                                       create_pension_survival_curve,
@@ -309,12 +315,177 @@ def run_pen70_lifeplan_analysis(df_all: pd.DataFrame, target_year: str):
                                height=405)
 
 
+def run_pen70_formula_analysis(df_all: pd.DataFrame, target_year: str):
+  """
+  pen70-formula の詳細分析を実行する。
+  """
+  print(f"\n\n{'='*20} pen70-formula 分析 {'='*20}")
+  df_survival = df_all[df_all["value_type"] == "survival"].copy()
+  if df_survival.empty:
+    return
+
+  # 1. ヒートマップ
+  df_h, m_order, r_order = prepare_heatmap_labels(df_survival)
+  title = f"50歳リタイア・年金70歳・{target_year}年後生存確率(%) (R70-aware)"
+  output_path = os.path.join(IMG_DIR, "pen70_formula_heatmap.svg")
+
+  create_heatmap(df_h,
+                 target_col=target_year,
+                 title=title,
+                 x_col="rule_label",
+                 x_title="初期支出率 (%ルール)",
+                 y_col="multiplier_label",
+                 y_title="支出レベル",
+                 output_path=output_path,
+                 x_sort=r_order,
+                 y_sort=m_order)
+
+  # 2. 生存達成データの生成
+  target_probs = [0.97, 0.95, 0.90, 0.80, 0.70]
+  plot_data = []
+  for p in target_probs:
+    anchors = get_contour_anchor_points(df_survival, p, target_year)
+    plot_data.extend(generate_smooth_contour_data(anchors, f"{p*100:g}%"))
+  df_plot_survival = pd.DataFrame(plot_data)
+
+  # 3. グラフ保存
+  save_contour_charts(df_plot_survival,
+                      target_probs,
+                      img_dir=IMG_DIR,
+                      prefix="pen70_formula_",
+                      rule_range=(2.38, 7.0))
+
+  # 4. Rule of Thumb
+  generate_rule_of_thumb(df_survival, target_probs, target_year)
+
+  # 5. 詳細な近似モデルの分析
+  run_survival_formula_analysis(df_survival, target_year)
+
+
+def run_pen70_ds_analysis(df_all: pd.DataFrame, target_year: str):
+  """
+  pen70-ds の詳細分析を実行する。
+  """
+  print(f"\n\n{'='*20} pen70-ds 分析 {'='*20}")
+  df_survival = df_all[df_all["value_type"] == "survival"].copy()
+  if df_survival.empty:
+    return
+
+  # 1. ヒートマップ
+  df_h, m_order, r_order = prepare_heatmap_labels(df_survival)
+  title = f"50歳リタイア・年金70歳・{target_year}年後生存確率(%) (R70 + SpendAwareDS)"
+  output_path = os.path.join(IMG_DIR, "pen70_ds_heatmap.svg")
+
+  create_heatmap(df_h,
+                 target_col=target_year,
+                 title=title,
+                 x_col="rule_label",
+                 x_title="初期支出率 (%ルール)",
+                 y_col="multiplier_label",
+                 y_title="支出レベル",
+                 output_path=output_path,
+                 x_sort=r_order,
+                 y_sort=m_order)
+
+  # 2. pen70-formula との比較ヒートマップ
+  formula_path = "data/all_50yr/pen70-formula.csv"
+  if os.path.exists(formula_path):
+    df_formula = pd.read_csv(formula_path)
+    df_f_surv = df_formula[df_formula["value_type"] == "survival"].copy()
+
+    df_comp = pd.merge(
+        df_survival[[
+            'spend_multiplier', 'spending_rule', 'initial_annual_cost',
+            target_year
+        ]],
+        df_f_surv[['spend_multiplier', 'spending_rule', target_year]],
+        on=['spend_multiplier', 'spending_rule'],
+        suffixes=('_ds', '_formula'))
+
+    df_comp["improvement"] = df_comp[f"{target_year}_ds"] - df_comp[
+        f"{target_year}_formula"]
+
+    df_comp, m_order_comp, r_order_comp = prepare_heatmap_labels(df_comp)
+
+    title_imp = f"SpendAwareDSによる改善幅 ({target_year}年後生存確率 差分)"
+    output_path_imp = os.path.join(IMG_DIR,
+                                   "improvement_ds_vs_formula_heatmap.svg")
+
+    create_improvement_heatmap(df_comp,
+                               target_col="improvement",
+                               title=title_imp,
+                               x_col="rule_label",
+                               x_title="初期支出率 (%ルール)",
+                               y_col="multiplier_label",
+                               y_title="支出レベル",
+                               output_path=output_path_imp,
+                               x_sort=r_order_comp,
+                               y_sort=m_order_comp,
+                               height=405)
+
+    # 3. 生存確率曲線の比較 (3つ)
+    from src.lib.visualize import create_survival_probability_chart
+
+    def create_comp_curve(m, r, filename):
+      ds_row = df_survival[(df_survival["spend_multiplier"] == m) &
+                           (df_survival["spending_rule"] == r)]
+      fo_row = df_f_surv[(df_f_surv["spend_multiplier"] == m) &
+                         (df_f_surv["spending_rule"] == r)]
+
+      if ds_row.empty or fo_row.empty:
+        return
+
+      year_cols = [str(i) for i in range(1, NUM_YEARS + 1)]
+
+      # DS
+      ds_vals = ds_row[year_cols].values[0]
+      # Formula
+      fo_vals = fo_row[year_cols].values[0]
+
+      data = []
+      # Year 0
+      data.append({
+          "Year": 0,
+          "Survival Probability (%)": 100.0,
+          "Strategy": "pen70-ds"
+      })
+      data.append({
+          "Year": 0,
+          "Survival Probability (%)": 100.0,
+          "Strategy": "pen70-formula"
+      })
+
+      for i, yr in enumerate(year_cols):
+        data.append({
+            "Year": int(yr),
+            "Survival Probability (%)": ds_vals[i] * 100,
+            "Strategy": "pen70-ds"
+        })
+        data.append({
+            "Year": int(yr),
+            "Survival Probability (%)": fo_vals[i] * 100,
+            "Strategy": "pen70-formula"
+        })
+
+      df_plot = pd.DataFrame(data)
+      _, chart = create_survival_probability_chart(df_plot=df_plot,
+                                                   start_age=START_AGE,
+                                                   height=300)
+      chart = chart.properties(title=f"DS vs Formula 生存確率 (m={m}, r={r}%)")
+      chart.save(os.path.join(IMG_DIR, filename))
+      print(f"✅ {filename} に保存しました。")
+
+    create_comp_curve(1.0, 4.0, "comp_ds_formula_m1_r4.svg")
+    create_comp_curve(1.0, 5.0, "comp_ds_formula_m1_r5.svg")
+    create_comp_curve(3.0, 5.0, "comp_ds_formula_m3_r5.svg")
+
+
 def main():
   parser = argparse.ArgumentParser(description="50歳リタイア開始・95歳までの分析・可視化スクリプト。")
   parser.add_argument("--exp_type",
                       type=str,
                       default="optimal-pension",
-                      help="実験設定 (optimal-pension, pen70-lifeplan)")
+                      help="実験設定 (optimal-pension, pen70-lifeplan, pen70-formula, pen70-ds)")
   args = parser.parse_args()
 
   exp_types = args.exp_type.split(",")
@@ -335,6 +506,10 @@ def main():
       run_percentile_analysis(df_all)
     elif et == "pen70-lifeplan":
       run_pen70_lifeplan_analysis(df_all, target_year)
+    elif et == "pen70-formula":
+      run_pen70_formula_analysis(df_all, target_year)
+    elif et == "pen70-ds":
+      run_pen70_ds_analysis(df_all, target_year)
     else:
       print(f"Unknown experiment type: {et}")
 

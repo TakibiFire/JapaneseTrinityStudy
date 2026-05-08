@@ -215,6 +215,144 @@ def get_pen70_lifeplan_setup(
   return exp_setup, N_SIM, combinations
 
 
+def get_pen70_formula_setup(
+    base_spend_50_retired: float,
+    pension_premium_annual: float) -> Tuple[Setup, int, List[Tuple[float, float, str]]]:
+  """
+  pen70-formula 実験設定を生成する。
+  """
+  spend_multipliers = [0.75, 1.0, 1.2, 1.5, 2.0, 3.0]
+  spending_rules = [2.38, 2.5, 2.8, 3.0, 3.33, 3.66, 4.0, 4.33, 4.66, 5.0, 5.5, 6.0, 7.0]
+  strategy_names = ["SpendAwareDPRebalance (R70-aware)"]
+  N_SIM = 2000
+
+  # 1. ベースライン設定 (re50_pen70_95)
+  exp_setup = re50_pen70_95(n_sim=N_SIM, seed=SEED)
+  exp_setup.name = "pen70-formula"
+
+  # 2. グリッドパラメータ
+  combinations = list(product(spend_multipliers, spending_rules, strategy_names))
+
+  for (spend_mult, rule, strat_name) in combinations:
+    # 初年度支出 (国民年金保険料含む) と初期資産
+    initial_annual_cost = base_spend_50_retired * spend_mult + pension_premium_annual
+    init_money = initial_annual_cost / (rule / 100.0)
+
+    # scenario_builder が自動的に国民年金保険料 (-21.5) を加算するため、
+    # CurveSpend には残りの額を設定する。
+    initial_annual_cost_wo_premium = base_spend_50_retired * spend_mult
+
+    new_lifeplan = replace(
+        exp_setup.lifeplan,
+        base_spend=CurveSpend(
+            first_year_annual_amount=initial_annual_cost_wo_premium))
+
+    # 戦略の設定
+    spec = StrategySpec(
+        initial_money=float(init_money),
+        initial_asset_ratio=((PredefinedStock.ORUKAN_155, 1.0),
+                             (PredefinedZeroRisk.ZERO_RISK_4PCT, 0.0)),
+        selling_priority=(PredefinedStock.ORUKAN_155,
+                          PredefinedZeroRisk.ZERO_RISK_4PCT))
+
+    if strat_name == "SpendAwareDPRebalance (R70-aware)":
+      # 倍率に応じたモデルを選択
+      mult_map = {
+          0.75: "m0_75",
+          1.0: "m1",
+          1.2: "m1_2",
+          1.5: "m1_5",
+          2.0: "m2",
+          3.0: "m3"
+      }
+      mult_suffix = mult_map.get(spend_mult, "m1")
+
+      model_path = f"data/optimal_strategy_dp/re50_pen70_95_{mult_suffix}.json"
+
+      spec = replace(spec,
+                     rebalance=SpendAwareDPRebalance(
+                         risky_asset=PredefinedStock.ORUKAN_155,
+                         zero_risk_asset=PredefinedZeroRisk.ZERO_RISK_4PCT,
+                         model_name=model_path))
+
+    exp_setup.add_experiment(
+        name=f"Mult_{spend_mult}_Rule_{rule}%_{strat_name}",
+        overwrite_lifeplan=new_lifeplan,
+        overwrite_strategy=spec)
+
+  return exp_setup, N_SIM, combinations
+
+
+def get_pen70_ds_setup(
+    base_spend_50_retired: float,
+    pension_premium_annual: float) -> Tuple[Setup, int, List[Tuple[float, float, str]]]:
+  """
+  pen70-ds 実験設定を生成する。
+  SpendAwareAdjustment を有効化した pen70-formula 相当の設定。
+  """
+  spend_multipliers = [0.75, 1.0, 1.2, 1.5, 2.0, 3.0]
+  spending_rules = [2.38, 2.5, 2.8, 3.0, 3.33, 3.66, 4.0, 4.33, 4.66, 5.0, 5.5, 6.0, 7.0]
+  strategy_names = ["SpendAwareDPRebalance (R70-aware)"]
+  N_SIM = 2000
+
+  # 1. ベースライン設定 (re50_pen70_95)
+  exp_setup = re50_pen70_95(n_sim=N_SIM, seed=SEED)
+  exp_setup.name = "pen70-ds"
+
+  # 2. グリッドパラメータ
+  combinations = list(product(spend_multipliers, spending_rules, strategy_names))
+
+  for (spend_mult, rule, strat_name) in combinations:
+    # 初年度支出 (国民年金保険料含む) と初期資産
+    initial_annual_cost = base_spend_50_retired * spend_mult + pension_premium_annual
+    init_money = initial_annual_cost / (rule / 100.0)
+
+    # scenario_builder が自動的に国民年金保険料 (-21.5) を加算するため、
+    # CurveSpend には残りの額を設定する。
+    initial_annual_cost_wo_premium = base_spend_50_retired * spend_mult
+
+    new_lifeplan = replace(
+        exp_setup.lifeplan,
+        base_spend=CurveSpend(
+            first_year_annual_amount=initial_annual_cost_wo_premium))
+
+    # 倍率に応じたモデルを選択
+    mult_map = {
+        0.75: "m0_75",
+        1.0: "m1",
+        1.2: "m1_2",
+        1.5: "m1_5",
+        2.0: "m2",
+        3.0: "m3"
+    }
+    mult_suffix = mult_map.get(spend_mult, "m1")
+    model_path = f"data/optimal_strategy_dp/re50_pen70_95_{mult_suffix}.json"
+
+    # 戦略の設定
+    spec = StrategySpec(
+        initial_money=float(init_money),
+        initial_asset_ratio=((PredefinedStock.ORUKAN_155, 1.0),
+                             (PredefinedZeroRisk.ZERO_RISK_4PCT, 0.0)),
+        selling_priority=(PredefinedStock.ORUKAN_155,
+                          PredefinedZeroRisk.ZERO_RISK_4PCT),
+        rebalance=SpendAwareDPRebalance(
+            risky_asset=PredefinedStock.ORUKAN_155,
+            zero_risk_asset=PredefinedZeroRisk.ZERO_RISK_4PCT,
+            model_name=model_path),
+        spend_adjustment=SpendAwareAdjustment(model_name=model_path,
+                                              p_low=0.97,
+                                              p_high=0.9999,
+                                              lower_mult=0.985,
+                                              upper_mult=1.005))
+
+    exp_setup.add_experiment(
+        name=f"Mult_{spend_mult}_Rule_{rule}%_{strat_name}",
+        overwrite_lifeplan=new_lifeplan,
+        overwrite_strategy=spec)
+
+  return exp_setup, N_SIM, combinations
+
+
 def main():
   # 引数の処理
   parser = argparse.ArgumentParser(
@@ -222,12 +360,13 @@ def main():
   parser.add_argument("--exp_type",
                       type=str,
                       default="optimal-pension",
-                      help="実験設定 (optimal-pension, pen70-lifeplan)")
+                      help="実験設定 (optimal-pension, pen70-lifeplan, pen70-formula, pen70-ds)")
   args = parser.parse_args()
 
   # 設定
   exp_type = args.exp_type
-  assert exp_type in ("optimal-pension", "pen70-lifeplan"), f"Unsupported exp_type: {exp_type}"
+  assert exp_type in ("optimal-pension", "pen70-lifeplan", "pen70-formula",
+                      "pen70-ds"), f"Unsupported exp_type: {exp_type}"
 
   data_dir = "data/all_50yr/"
   csv_path = os.path.join(data_dir, f"{exp_type}.csv")
@@ -249,6 +388,12 @@ def main():
         base_spend_50_retired, pension_premium_annual)
   elif exp_type == "pen70-lifeplan":
     exp_setup, n_sim_val, combinations = get_pen70_lifeplan_setup(
+        base_spend_50_retired, pension_premium_annual)
+  elif exp_type == "pen70-formula":
+    exp_setup, n_sim_val, combinations = get_pen70_formula_setup(
+        base_spend_50_retired, pension_premium_annual)
+  elif exp_type == "pen70-ds":
+    exp_setup, n_sim_val, combinations = get_pen70_ds_setup(
         base_spend_50_retired, pension_premium_annual)
   else:
     raise KeyError(f"Unsupported {exp_type}")
@@ -272,7 +417,7 @@ def main():
     if exp_type == "optimal-pension":
       pension_start, spend_mult, rule = combo
       strat_name = "DynamicV1Rebalance"
-    else:  # pen70-lifeplan
+    else:  # pen70-lifeplan, pen70-formula, pen70-ds
       spend_mult, rule, strat_name = combo
       pension_start = 70  # re50_pen70_95 固定
 
