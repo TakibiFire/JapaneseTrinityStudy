@@ -46,12 +46,13 @@ class DPOptimalStrategyPredictor:
     _p_surv_models (Dict[int, PSurvModel]): 年齢ごとの生存確率モデル。
   """
 
-  def __init__(self, models_path: str):
+  def __init__(self, models_path: str, disable_win_threshold: bool = False):
     """
     JSONファイルからモデルパラメータを読み込み、予測器を初期化します。
 
     Args:
       models_path: モデルパラメータが格納されたJSONファイルのパス。
+      disable_win_threshold: 勝利しきい値を無効化するかどうか。
     """
     with open(models_path, "r") as f:
       raw_models = json.load(f)
@@ -60,8 +61,11 @@ class DPOptimalStrategyPredictor:
     self._p_surv_models: Dict[int, PSurvModel] = {}
     self._avg_y_withdraws: Dict[int, float] = {}
     self._winning_multipliers: Dict[int, float] = {}
+    self._robust_spend_multipliers: Dict[int, float] = {}
     self._cpi_annual_mu: float = raw_models.get("cpi_annual_mu", 0.0)
     self._cpi_annual_sigma: float = raw_models.get("cpi_annual_sigma", 0.0)
+    self._disable_win_threshold: bool = disable_win_threshold
+    self._use_robust_growth: bool = raw_models.get("use_robust_growth", False)
 
     for age_str, data in raw_models.items():
       if not age_str.isdigit():
@@ -71,6 +75,9 @@ class DPOptimalStrategyPredictor:
         self._avg_y_withdraws[age] = float(data["avg_y_withdraw"])
       if "m_winning_multiplier" in data:
         self._winning_multipliers[age] = float(data["m_winning_multiplier"])
+      if "robust_spend_multiplier" in data:
+        self._robust_spend_multipliers[age] = float(
+            data["robust_spend_multiplier"])
       if "a_opt_model" in data:
         a_data = data["a_opt_model"]
         self._a_opt_models[age] = AOptModel(
@@ -136,6 +143,11 @@ class DPOptimalStrategyPredictor:
     Returns:
       Union[float, np.ndarray]: パス依存의 勝利しきい値（万円）。
     """
+    if self._disable_win_threshold:
+      if isinstance(last_y_withdraw, np.ndarray):
+        return np.full_like(last_y_withdraw, float('inf'))
+      return float('inf')
+
     m_n = self.get_winning_multiplier(age)
     if m_n <= 0:
       if isinstance(last_y_withdraw, np.ndarray):
@@ -226,6 +238,11 @@ class DPOptimalStrategyPredictor:
     指定された年齢間の平均支出（Withdrawal）の比率（倍率）を取得します。
     投影に使用されます。
     """
+    if self._use_robust_growth and age_from in self._robust_spend_multipliers:
+      # 注: 現在の DP の用途では age_to == age_from + 1 であることを前提としている。
+      # もし複数年のジャンプが必要な場合は、マルチプライヤーを累積させる必要がある。
+      return self._robust_spend_multipliers[age_from]
+
     if age_from not in self._avg_y_withdraws or age_to not in self._avg_y_withdraws:
       return 1.0
 
