@@ -210,7 +210,10 @@ def run_p60_d1_analysis(df_all: pd.DataFrame, target_year: str):
   df_plot_survival = pd.DataFrame(plot_data)
 
   # 5. グラフ保存
-  save_contour_charts(df_plot_survival, target_probs, img_dir=IMG_DIR)
+  save_contour_charts(df_plot_survival,
+                      target_probs,
+                      img_dir=IMG_DIR,
+                      rule_range=(2.5, 8.0))
 
   # 6. Rule of Thumb
   generate_rule_of_thumb(df_survival, target_probs, target_year)
@@ -424,7 +427,8 @@ def run_pen70_formula_analysis(df_all: pd.DataFrame, target_year: str):
   save_contour_charts(df_plot_survival,
                       target_probs,
                       img_dir=IMG_DIR,
-                      prefix="pen70_formula_")
+                      prefix="pen70_formula_",
+                      rule_range=(2.8, 8.0))
 
   # 4. Rule of Thumb
   generate_rule_of_thumb(df_survival, target_probs, target_year)

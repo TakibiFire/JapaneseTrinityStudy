@@ -111,7 +111,8 @@ def generate_smooth_contour_data(
 def save_contour_charts(df_plot: pd.DataFrame,
                         target_probs: List[float],
                         img_dir: str,
-                        prefix: str = "") -> None:
+                        prefix: str = "",
+                        rule_range: Tuple[float, float] = (2.8, 7.0)) -> None:
   """
   生成された高密度データから、生存確率達成ラインの3種のグラフを作成・保存する。
 
@@ -120,6 +121,7 @@ def save_contour_charts(df_plot: pd.DataFrame,
     target_probs: 描画対象の目標生存確率のリスト (ソート順指定のため)
     img_dir: 保存先ディレクトリ
     prefix: 保存ファイル名のプレフィックス
+    rule_range: 初期支出率の表示範囲 (domain)
   """
   if df_plot.empty:
     print("曲線を描画できるデータがありませんでした。")
@@ -132,7 +134,7 @@ def save_contour_charts(df_plot: pd.DataFrame,
   chart1 = alt.Chart(df_plot).mark_line(point=True, clip=True).encode(
       x=alt.X('spending_rule:Q',
               title='初期支出率 (%)',
-              scale=alt.Scale(domain=[2.8, 7.0])),
+              scale=alt.Scale(domain=list(rule_range))),
       y=alt.Y('annual_spend_man:Q',
               title='支出レベル (万円/年)',
               scale=alt.Scale(domain=[0, df_plot["annual_spend_man"].max() * 1.1])),
@@ -171,7 +173,7 @@ def save_contour_charts(df_plot: pd.DataFrame,
               scale=alt.Scale(domain=[0, 30000])),
       y=alt.Y('spending_rule:Q',
               title='初期支出率 (%)',
-              scale=alt.Scale(domain=[2.8, 7.0])),
+              scale=alt.Scale(domain=list(rule_range))),
       color=alt.Color('target_prob:N',
                       title='目標生存確率',
                       sort=prob_order,
