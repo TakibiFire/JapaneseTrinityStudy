@@ -232,6 +232,8 @@ def main():
   # 各年齢のキャッシュフローデータを抽出
   # age -> y_withdraw_n (np.ndarray)
   age_cashflow_data: Dict[int, np.ndarray] = {}
+  # age -> gross_spend_n (np.ndarray)
+  age_gross_spend_data: Dict[int, np.ndarray] = {}
 
   for age in range(start_age, end_age):
     year_idx = age - start_age
@@ -243,7 +245,9 @@ def main():
     base_spend_key = cf_map["BaseSpend"]
     # 支出額 (名目) は monthly_cashflows に負の値で入っている。
     # 単位は 万円/月
-    monthly_net_spend -= monthly_cashflows[base_spend_key][:, start_m:end_m]
+    m_base_spend = -monthly_cashflows[base_spend_key][:, start_m:end_m]
+    monthly_net_spend += m_base_spend
+    age_gross_spend_data[age] = np.sum(m_base_spend, axis=1)
 
     if args.debug_level >= 3 and age == args.debug_age:
       print(
@@ -293,6 +297,7 @@ def main():
 
   # 勝利しきい値 W_N の計算用 (PV of all future net spending)
   last_w = 0.0
+  last_w_path = np.zeros(n_sim)
 
   # 年齢 end_age - 1 から start_age まで逆算
   ages_to_process = list(range(end_age - 1, start_age - 1, -1))
@@ -320,7 +325,7 @@ def main():
     # 全パスの平均支出額を記録（実験スクリプトでの投影に使用）
     avg_y_withdraw_n = float(np.mean(y_withdraw_n))
 
-    # 勝利しきい値 W_N, M_N の計算
+    # 勝利しきい値 W_N, M_N の計算 (Legacy)
     if age == end_age - 1:
       # 最終年は 3ヶ月のバッファを載せて計算 (1.25倍)
       w_n = avg_y_withdraw_n * 1.25 / (1.0 + EFFECTIVE_ZERO_RISK_YIELD)
@@ -328,12 +333,56 @@ def main():
       w_n = (avg_y_withdraw_n + last_w) / (1.0 + EFFECTIVE_ZERO_RISK_YIELD)
 
     last_w = w_n
+
     if avg_y_withdraw_n > 1e-6:
       m_winning_multiplier = w_n / avg_y_withdraw_n
     else:
       m_winning_multiplier = 0.0
+
+    # 堅牢な勝利しきい値マルチプライヤー M_robust の計算 (Gross Spend ベース)
+    # 従来の Net Withdrawal ベースの計算では、年金受給開始後に分母が小さくなり、
+    # マルチプライヤーが不安定になる問題があった。
+    # そこで、より安定した Gross Spend（税・社会保険料等を含む総支出）を分母とし、
+    # 各パスごとに将来の必要資金の現在価値（Future PV）を計算することで、
+    # 統計的に安定したマルチプライヤーを算出する。
+    if age == end_age - 1:
+      # 最終年は 3ヶ月のバッファを載せて計算 (1.25倍)
+      w_n_path = y_withdraw_n * 1.25 / (1.0 + EFFECTIVE_ZERO_RISK_YIELD)
+    else:
+      # FuturePV_n = (NetWithdrawal_n + FuturePV_{n+1}) / (1 + yield)
+      w_n_path = (y_withdraw_n + last_w_path) / (1.0 +
+                                                 EFFECTIVE_ZERO_RISK_YIELD)
+
+    last_w_path = w_n_path
+
+    # 分母として「前年の Gross Spend」を使用する。
+    # シミュレーション開始時点（start_age）では前年のデータがないため、
+    # 今年のデータを平均成長率で割り戻して推定する。
+    if age > start_age:
+      prev_gross_spend = age_gross_spend_data[age - 1]
+    else:
+      # 最初の年は、翌年への投影の逆を行う
+      if age + 1 in age_gross_spend_data:
+        growth = np.mean(age_gross_spend_data[age + 1]) / np.mean(
+            age_gross_spend_data[age])
+      else:
+        growth = 1.0
+      prev_gross_spend = age_gross_spend_data[age] / growth
+
+    # 各パスごとのマルチプライヤー M_n,p = FuturePV_n,p / GrossSpend_{n-1},p
+    m_robust_path = w_n_path / np.maximum(prev_gross_spend, 1e-6)
+    # 各種パーセンタイルを計算してモデルに記録する
+    percentiles = [50, 60, 70, 80, 85, 90, 95, 97, 98, 99]
+    m_v2_percentiles = {
+        str(p): float(np.percentile(m_robust_path, p)) for p in percentiles
+    }
+    m_v2_percentiles["MAX"] = float(np.max(m_robust_path))
+
     print(
         f"  Winning Threshold: M_N={m_winning_multiplier:.4f} (W_N={w_n:.2f})")
+    print(
+        f"  Robust Threshold: M_V2_50={m_v2_percentiles['50']:.4f}, M_V2_99={m_v2_percentiles['99']:.4f}, M_V2_max={m_v2_percentiles['MAX']:.4f}"
+    )
 
     if args.debug_level >= 2:
       print(f"  [Level 2 Info] Cashflow:")
@@ -819,6 +868,7 @@ def main():
     models[str(age)] = {
         "avg_y_withdraw": avg_y_withdraw_n,
         "m_winning_multiplier": m_winning_multiplier,
+        "m_winning_multiplier_v2": m_v2_percentiles,
         "a_opt_model": {
             "r_points": [float(r) for r in r_points_a],
             "a_points": [float(a) for a in a_points],

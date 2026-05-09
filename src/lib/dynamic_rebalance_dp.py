@@ -2,7 +2,7 @@
 動的計画法（DP）に基づく最適戦略を用いたリバランス戦略。
 """
 
-from typing import Dict, Union
+from typing import Dict, Optional, Union
 
 import numpy as np
 
@@ -17,6 +17,7 @@ def calculate_optimal_strategy_dp(
     dp_predictor: DPOptimalStrategyPredictor,
     initial_age: int,
     total_years: float,
+    prev_gross_ann_spend: Optional[np.ndarray] = None,
     use_winning_threshold: bool = True,
     z_score_for_winning: float = 2.326,
     z_score_for_next_spend: float = 0.0,
@@ -33,6 +34,7 @@ def calculate_optimal_strategy_dp(
     dp_predictor: DPモデルに基づく予測器。
     initial_age: シミュレーション開始時の年齢。
     total_years: シミュレーションの全期間（年）。
+    prev_gross_ann_spend: 前年の年間総支出額（名目）。
     use_winning_threshold: 勝利しきい値ロジックを使用するかどうか。
     z_score_for_winning: 勝利しきい値の保守性を決める Z スコア。
     z_score_for_next_spend: 支出率計算の保守性を決める Z スコア。
@@ -48,12 +50,11 @@ def calculate_optimal_strategy_dp(
 
   if use_winning_threshold:
     # 勝利しきい値を考慮した A の計算
-    # 簡略化のため、last_y_withdraw は現在の支出率から逆算、あるいはそのまま使用
-    # ここでは cur_ann_spend を Y_{N-1} とみなして計算する
     a_opt = dp_predictor.get_a_opt_with_winning_threshold(
         current_age,
         post_tax_net,
         cur_ann_spend,
+        last_gross_withdraw=prev_gross_ann_spend,
         z_score_for_winning=z_score_for_winning,
         z_score_for_next_spend=z_score_for_next_spend)
   else:

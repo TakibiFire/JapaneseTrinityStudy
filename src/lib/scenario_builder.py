@@ -23,7 +23,7 @@ from src.lib.cashflow_generator import (BaseSpendConfig, CashflowConfig,
                                         CashflowDynamicHandler, CashflowRule,
                                         CashflowType, MortalityConfig,
                                         PensionConfig, generate_cashflows)
-from src.lib.dp_predictor import DPOptimalStrategyPredictor
+from src.lib.dp_predictor import DPOptimalStrategyPredictor, WinThresholdType
 from src.lib.dynamic_rebalance import calculate_optimal_strategy
 from src.lib.dynamic_rebalance_dp import calculate_optimal_strategy_dp
 from src.lib.life_table import FEMALE_MORTALITY_RATES, MALE_MORTALITY_RATES
@@ -189,8 +189,8 @@ class SpendAwareAdjustment:
   lower_mult: float = 0.99
   # 前年比の支出倍率の上限。
   upper_mult: float = 1.02
-  # 勝利しきい値を無効化するかどうか。
-  disable_win_threshold: bool = False
+  # 勝利しきい値の計算方式。
+  win_threshold_type: WinThresholdType = WinThresholdType.V1
 
 
 @dataclass(frozen=True)
@@ -222,8 +222,8 @@ class SpendAwareDPRebalance:
   zero_risk_asset: PredefinedZeroRisk
   # 使用するDPモデルファイルのパス。
   model_name: str
-  # 勝利しきい値を無効化するかどうか。
-  disable_win_threshold: bool = False
+  # 勝利しきい値の計算方式。
+  win_threshold_type: WinThresholdType = WinThresholdType.V1
 
 
 # --- 高レベルな宣言 ---
@@ -923,7 +923,8 @@ def _build_strategy(variant: _ExperimentVariant, cf_map: Dict[str, str],
       # ここでは calculate_optimal_strategy をラップして使用する
       def dr_fn(
           total_net: np.ndarray, cur_ann_spend: np.ndarray, rem_years: float,
-          post_tax_net: np.ndarray) -> Dict[str, Union[float, np.ndarray]]:
+          post_tax_net: np.ndarray, prev_gross_ann_spend: np.ndarray
+      ) -> Dict[str, Union[float, np.ndarray]]:
         reb = cast(DynamicV1Rebalance, spec.rebalance)
         s_rate = cur_ann_spend / np.maximum(post_tax_net, 1e-10)
 
@@ -954,19 +955,22 @@ def _build_strategy(variant: _ExperimentVariant, cf_map: Dict[str, str],
       rebalance_interval = 12
       reb_dp = cast(SpendAwareDPRebalance, spec.rebalance)
       predictor = DPOptimalStrategyPredictor(
-          reb_dp.model_name, disable_win_threshold=reb_dp.disable_win_threshold)
+          reb_dp.model_name, win_threshold_type=reb_dp.win_threshold_type)
 
       def dr_dp_fn(
           total_net: np.ndarray, cur_ann_spend: np.ndarray, rem_years: float,
-          post_tax_net: np.ndarray) -> Dict[str, Union[float, np.ndarray]]:
+          post_tax_net: np.ndarray, prev_gross_ann_spend: np.ndarray
+      ) -> Dict[str, Union[float, np.ndarray]]:
         reb = cast(SpendAwareDPRebalance, spec.rebalance)
-        ratio = calculate_optimal_strategy_dp(total_net=total_net,
-                                              cur_ann_spend=cur_ann_spend,
-                                              rem_years=rem_years,
-                                              post_tax_net=post_tax_net,
-                                              dp_predictor=predictor,
-                                              initial_age=world.start_age,
-                                              total_years=world.n_years)
+        ratio = calculate_optimal_strategy_dp(
+            total_net=total_net,
+            cur_ann_spend=cur_ann_spend,
+            rem_years=rem_years,
+            post_tax_net=post_tax_net,
+            dp_predictor=predictor,
+            initial_age=world.start_age,
+            total_years=world.n_years,
+            prev_gross_ann_spend=prev_gross_ann_spend)
         return {
             reb.risky_asset.name: ratio,
             reb.zero_risk_asset.name: 1.0 - ratio
@@ -1000,8 +1004,7 @@ def _build_strategy(variant: _ExperimentVariant, cf_map: Dict[str, str],
               upper_mult=adj.upper_mult,
               annual_cost_real=annual_cost_real.tolist(),
               dp_predictor=DPOptimalStrategyPredictor(
-                  adj.model_name,
-                  disable_win_threshold=adj.disable_win_threshold))
+                  adj.model_name, win_threshold_type=adj.win_threshold_type))
         else:
           raise ValueError(f"未知の支出調整タイプです: {spec.spend_adjustment}")
         rules[i] = replace(rule, dynamic_handler=handler)

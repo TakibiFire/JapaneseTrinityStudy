@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 
 from src.core import simulate_strategy
+from src.lib.dp_predictor import WinThresholdType
 from src.lib.retired_spending import (SpendingType,
                                       get_annual_retired_spending_values)
 from src.lib.scenario_builder import (PredefinedStock, PredefinedZeroRisk,
@@ -36,17 +37,19 @@ def main():
       [SpendingType.CONSUMPTION, SpendingType.NON_CONSUMPTION_EXCLUDE_PENSION],
       60, 1)[0]
 
-  # モデルのリスト
-  model_files = [
-      "re60_pen70_95_n1000", "re60_pen70_95_n2000",
-      "re60_pen70_95_robust_n1000", "re60_pen70_95_robust_n2000"
-  ]
+  # モデルのリスト (N_SIM=1000 のみ使用)
+  model_files = ["re60_pen70_95_n1000", "re60_pen70_95_robust_n1000"]
 
   # 実験パラメータ
-  spending_rules = [
-      2.5, 2.8, 3.0, 3.33, 3.66, 4.0, 4.33, 4.66, 5.0, 5.5, 6.0, 7.0, 8.0
+  spending_rules = [2.5, 2.8, 3.0, 3.33, 3.66, 4.0, 4.33, 4.66] + np.arange(
+      5.0, 10.01, 0.25).tolist()
+  win_threshold_options = [
+      WinThresholdType.DISABLED, WinThresholdType.V1, WinThresholdType.V2_50,
+      WinThresholdType.V2_60, WinThresholdType.V2_70, WinThresholdType.V2_80,
+      WinThresholdType.V2_85, WinThresholdType.V2_90, WinThresholdType.V2_95,
+      WinThresholdType.V2_97, WinThresholdType.V2_98, WinThresholdType.V2_99,
+      WinThresholdType.V2_MAX
   ]
-  win_threshold_options = [True, False]  # disable_win_threshold の値
 
   # ベースライン設定 (re60_pen70_95)
   exp_setup = re60_pen70_95(n_sim=N_SIM_EVAL, seed=SEED)
@@ -55,7 +58,7 @@ def main():
   combinations = list(
       product(model_files, win_threshold_options, spending_rules))
 
-  for (model_base, disable_win, rule) in combinations:
+  for (model_base, win_type, rule) in combinations:
     # spending_rule に合わせて初期資産を調整
     init_money = base_spend_annual / (rule / 100.0)
 
@@ -68,9 +71,9 @@ def main():
                        risky_asset=PredefinedStock.ORUKAN_155,
                        zero_risk_asset=PredefinedZeroRisk.ZERO_RISK_4PCT,
                        model_name=model_path,
-                       disable_win_threshold=disable_win))
+                       win_threshold_type=win_type))
 
-    win_str = "win0" if disable_win else "win1"
+    win_str = win_type.name.lower()
     exp_setup.add_experiment(name=f"{model_base}_{win_str}_R{rule}",
                              overwrite_strategy=spec)
 
@@ -90,7 +93,7 @@ def main():
                             exp.monthly_prices,
                             monthly_cashflows=exp.monthly_cashflows)
 
-    model_base, disable_win, rule = combo
+    model_base, win_type, rule = combo
 
     # 最終的な生存確率のみを記録 (95歳開始時点)
     bankrupt_count = (res.sustained_months < YEARS * 12).sum()
@@ -98,9 +101,9 @@ def main():
 
     results.append({
         "model": model_base,
-        "disable_win_threshold": disable_win,
+        "win_type": win_type.name,
         "robust": "robust" in model_base,
-        "n_sim_train": 1000 if "n1000" in model_base else 2000,
+        "n_sim_train": 1000,
         "spending_rule": rule,
         "survival_rate": survival_rate
     })

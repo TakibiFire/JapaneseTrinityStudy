@@ -119,8 +119,10 @@ class DynamicSpending:
 
 
 # ダイナミックリバランス用のコールバック関数
-DynamicRebalanceFn = Callable[[np.ndarray, np.ndarray, float, np.ndarray],
-                              Dict[str, Union[float, np.ndarray]]]
+# 引数: (現在の資産合計, 現在の年間正味支出, 残り年数, 税引き後資産見積もり, 前年の年間総支出)
+DynamicRebalanceFn = Callable[
+    [np.ndarray, np.ndarray, float, np.ndarray, np.ndarray],
+    Dict[str, Union[float, np.ndarray]]]
 
 
 @dataclasses.dataclass
@@ -551,7 +553,12 @@ def simulate_strategy(strategy: Strategy,
           # ---
           rem_years = (total_months - (m + 1)) / 12.0 + 0.25
           # DRには正味の年間支出を渡す（負の値にならないよう0でクリップ）
-          cur_ann_spend = np.maximum(0.0, net_reg_spend_m[reb_paths]) * 12.0
+          # リバランスは年末（m=11, 23...）に行われるため、tracker にはちょうど1年分（12ヶ月分）
+          # の支出が蓄積されている。これを用いることで、トレーニング時（年間合計を使用）との整合性を保つ。
+          cur_ann_spend = np.maximum(0.0,
+                                     annual_net_reg_spend_tracker[reb_paths])
+          # 前年の総支出（Gross）。V2 勝利しきい値の分母として使用する。
+          prev_gross_ann_spend = annual_gross_reg_spend_tracker[reb_paths]
 
           # リバランス時の未払い税金を計算する（正確な Post-tax Net Value を求めるため）
           unrealized_gains_at_rebalance = np.zeros_like(total_net)
@@ -565,7 +572,8 @@ def simulate_strategy(strategy: Strategy,
 
           target_ratios = strategy.dynamic_rebalance_fn(total_net,
                                                         cur_ann_spend,
-                                                        rem_years, post_tax_net)
+                                                        rem_years, post_tax_net,
+                                                        prev_gross_ann_spend)
           # --- DEBUG ---
           if debug_indices is not None and debug_results is not None:
             for idx in debug_indices:
@@ -576,7 +584,7 @@ def simulate_strategy(strategy: Strategy,
                     for n in local_monthly_asset_prices
                 ])
                 debug_results[idx].append(
-                    f"[Debug Path {idx}] Age {m//12+60} Month {m} Rebalance: cur_ann_spend={cur_ann_spend[mask_idx]:.2f}, prev_ann_spend={prev_annual_spend_y[strategy.cashflow_rules[0].source_name][idx]:.2f}, rem_years={rem_years:.4f}, total_net={total_net[mask_idx]:.2f}, post_tax_net={post_tax_net[mask_idx]:.2f}, prices={price_str}, target_ratios={ {k: (v if isinstance(v, float) else v[mask_idx]) for k, v in target_ratios.items()} }"
+                    f"[Debug Path {idx}] Age {m//12+60} Month {m} Rebalance: cur_ann_spend={cur_ann_spend[mask_idx]:.2f}, prev_ann_spend={prev_gross_ann_spend[mask_idx]:.2f}, rem_years={rem_years:.4f}, total_net={total_net[mask_idx]:.2f}, post_tax_net={post_tax_net[mask_idx]:.2f}, prices={price_str}, target_ratios={ {k: (v if isinstance(v, float) else v[mask_idx]) for k, v in target_ratios.items()} }"
                 )
           # -------------
         else:

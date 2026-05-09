@@ -5,10 +5,28 @@
 
 import json
 from dataclasses import dataclass
-from typing import Dict, Union, cast
+from enum import Enum, auto
+from typing import Dict, Optional, Union, cast
 
 import numpy as np
 from scipy.interpolate import pchip_interpolate
+
+
+class WinThresholdType(Enum):
+  """勝利しきい値の計算方法。"""
+  DISABLED = auto()  # 無効
+  V1 = auto()  # 従来方式 (Net Withdrawal ベース)
+  V2_50 = auto()  # 堅牢方式 (Gross Spend ベース, 50%ile)
+  V2_60 = auto()  # 堅牢方式 (Gross Spend ベース, 60%ile)
+  V2_70 = auto()  # 堅牢方式 (Gross Spend ベース, 70%ile)
+  V2_80 = auto()  # 堅牢方式 (Gross Spend ベース, 80%ile)
+  V2_85 = auto()  # 堅牢方式 (Gross Spend ベース, 85%ile)
+  V2_90 = auto()  # 堅牢方式 (Gross Spend ベース, 90%ile)
+  V2_95 = auto()  # 堅牢方式 (Gross Spend ベース, 95%ile)
+  V2_97 = auto()  # 堅牢方式 (Gross Spend ベース, 97%ile)
+  V2_98 = auto()  # 堅牢方式 (Gross Spend ベース, 98%ile)
+  V2_99 = auto()  # 堅牢方式 (Gross Spend ベース, 99%ile)
+  V2_MAX = auto()  # 堅牢方式 (Gross Spend ベース, Max)
 
 
 @dataclass
@@ -46,13 +64,16 @@ class DPOptimalStrategyPredictor:
     _p_surv_models (Dict[int, PSurvModel]): 年齢ごとの生存確率モデル。
   """
 
-  def __init__(self, models_path: str, disable_win_threshold: bool = False):
+  def __init__(self,
+               models_path: str,
+               win_threshold_type: Union[WinThresholdType,
+                                         bool] = WinThresholdType.V1):
     """
     JSONファイルからモデルパラメータを読み込み、予測器を初期化します。
 
     Args:
       models_path: モデルパラメータが格納されたJSONファイルのパス。
-      disable_win_threshold: 勝利しきい値を無効化するかどうか。
+      win_threshold_type: 勝利しきい値の種類、または無効化するかどうかの真偽値。
     """
     with open(models_path, "r") as f:
       raw_models = json.load(f)
@@ -61,10 +82,17 @@ class DPOptimalStrategyPredictor:
     self._p_surv_models: Dict[int, PSurvModel] = {}
     self._avg_y_withdraws: Dict[int, float] = {}
     self._winning_multipliers: Dict[int, float] = {}
+    self._m_winning_multiplier_v2: Dict[int, Dict[str, float]] = {}
     self._robust_spend_multipliers: Dict[int, float] = {}
     self._cpi_annual_mu: float = raw_models.get("cpi_annual_mu", 0.0)
     self._cpi_annual_sigma: float = raw_models.get("cpi_annual_sigma", 0.0)
-    self._disable_win_threshold: bool = disable_win_threshold
+
+    # 互換性のための処理
+    if isinstance(win_threshold_type, bool):
+      self._win_threshold_type = WinThresholdType.DISABLED if win_threshold_type else WinThresholdType.V1
+    else:
+      self._win_threshold_type = win_threshold_type
+
     self._use_robust_growth: bool = raw_models.get("use_robust_growth", False)
 
     for age_str, data in raw_models.items():
@@ -75,6 +103,10 @@ class DPOptimalStrategyPredictor:
         self._avg_y_withdraws[age] = float(data["avg_y_withdraw"])
       if "m_winning_multiplier" in data:
         self._winning_multipliers[age] = float(data["m_winning_multiplier"])
+      if "m_winning_multiplier_v2" in data:
+        self._m_winning_multiplier_v2[age] = {
+            k: float(v) for k, v in data["m_winning_multiplier_v2"].items()
+        }
       if "robust_spend_multiplier" in data:
         self._robust_spend_multipliers[age] = float(
             data["robust_spend_multiplier"])
@@ -130,42 +162,86 @@ class DPOptimalStrategyPredictor:
       self,
       age: int,
       last_y_withdraw: Union[float, np.ndarray],
+      last_gross_withdraw: Optional[Union[float, np.ndarray]] = None,
       z_score: float = 2.326) -> Union[float, np.ndarray]:
     """
     現在の年齢と前年の支出額から、パス依存の勝利しきい値 W_N を計算します。
-    W_N = M_N * Y_{N-1} * (Avg_Y_N / Avg_Y_{N-1}) * unexpected_cpi_jump
 
     Args:
       age: 現在の年齢。
       last_y_withdraw: 前年の実際の支出額（正味）。
+      last_gross_withdraw: 前年の実際の総支出額（Gross）。V2系で使用。
       z_score: 勝利しきい値の保守性を決める Z スコア（デフォルト 2.326 は 99%ile）。
+        注: V2系ではモデルに Z スコアが内包されているため、この値は V1 方式でのみ使用される。
 
     Returns:
-      Union[float, np.ndarray]: パス依存의 勝利しきい値（万円）。
+      Union[float, np.ndarray]: パス依存の勝利しきい値（万円）。
     """
-    if self._disable_win_threshold:
+    if self._win_threshold_type == WinThresholdType.DISABLED:
       if isinstance(last_y_withdraw, np.ndarray):
         return np.full_like(last_y_withdraw, float('inf'))
       return float('inf')
 
-    m_n = self.get_winning_multiplier(age)
+    if self._win_threshold_type == WinThresholdType.V1:
+      m_n = self._winning_multipliers.get(age, 0.0)
+      if m_n <= 0:
+        if isinstance(last_y_withdraw, np.ndarray):
+          return np.full_like(last_y_withdraw, float('inf'))
+        return float('inf')
+
+      # Y_{N-1} から Y_N (最悪ケース) を推定
+      expected_growth = self.get_spend_multiplier(age - 1, age)
+      worst_case_y_n = last_y_withdraw * expected_growth * self.get_unexpected_cpi_jump(
+          z_score)
+      return m_n * worst_case_y_n
+
+    # V2 方式 (Robust)
+    m_dict = self._m_winning_multiplier_v2.get(age, {})
+    if self._win_threshold_type == WinThresholdType.V2_50:
+      m_n = m_dict.get("50", 0.0)
+    elif self._win_threshold_type == WinThresholdType.V2_60:
+      m_n = m_dict.get("60", 0.0)
+    elif self._win_threshold_type == WinThresholdType.V2_70:
+      m_n = m_dict.get("70", 0.0)
+    elif self._win_threshold_type == WinThresholdType.V2_80:
+      m_n = m_dict.get("80", 0.0)
+    elif self._win_threshold_type == WinThresholdType.V2_85:
+      m_n = m_dict.get("85", 0.0)
+    elif self._win_threshold_type == WinThresholdType.V2_90:
+      m_n = m_dict.get("90", 0.0)
+    elif self._win_threshold_type == WinThresholdType.V2_95:
+      m_n = m_dict.get("95", 0.0)
+    elif self._win_threshold_type == WinThresholdType.V2_97:
+      m_n = m_dict.get("97", 0.0)
+    elif self._win_threshold_type == WinThresholdType.V2_98:
+      m_n = m_dict.get("98", 0.0)
+    elif self._win_threshold_type == WinThresholdType.V2_99:
+      m_n = m_dict.get("99", 0.0)
+    elif self._win_threshold_type == WinThresholdType.V2_MAX:
+      m_n = m_dict.get("MAX", 0.0)
+    else:
+      m_n = 0.0
+
     if m_n <= 0:
       if isinstance(last_y_withdraw, np.ndarray):
         return np.full_like(last_y_withdraw, float('inf'))
       return float('inf')
 
-    # Y_{N-1} から Y_N (最悪ケース) を推定
-    expected_growth = self.get_spend_multiplier(age - 1, age)
-    worst_case_y_n = last_y_withdraw * expected_growth * self.get_unexpected_cpi_jump(
-        z_score)
+    # V2 では分母に Gross Spend を使用する
+    if last_gross_withdraw is None:
+      # Gross が提供されない場合は Net を代用（非推奨）
+      denominator = last_y_withdraw
+    else:
+      denominator = last_gross_withdraw
 
-    return m_n * worst_case_y_n
+    return m_n * denominator
 
   def get_a_opt_with_winning_threshold(
       self,
       age: int,
       initial_wealth: Union[float, np.ndarray],
       last_y_withdraw: Union[float, np.ndarray],
+      last_gross_withdraw: Optional[Union[float, np.ndarray]] = None,
       z_score_for_winning: float = 2.326,
       z_score_for_next_spend: float = 0.0) -> Union[float, np.ndarray]:
     """
@@ -177,15 +253,19 @@ class DPOptimalStrategyPredictor:
       age: 現在の年齢。
       initial_wealth: 年始の総資産（税引き前、あるいは税引き後の保守的見積もり）。
       last_y_withdraw: 前年の実際の支出額（正味）。
+      last_gross_withdraw: 前年の実際の総支出額（Gross）。V2系で使用。
       z_score_for_winning: 勝利しきい値の保守性を決める Z スコア
         （デフォルト 2.326 は 99%ile）。
       z_score_for_next_spend: 来年の支出の保守性を決める Z スコア
-        （デフォルト 0.0 は期待値。DPモデルが不確実性を内包するため、期待値を使用する）。
+        （デフォルト 0.0 は期待値）。
     Returns:
       Union[float, np.ndarray]: 最適な株式比率 [0.0, 1.0]。
     """
-    w_n = self.calculate_winning_threshold(age, last_y_withdraw,
-                                           z_score_for_winning)
+    w_n = self.calculate_winning_threshold(
+        age,
+        last_y_withdraw,
+        last_gross_withdraw=last_gross_withdraw,
+        z_score=z_score_for_winning)
 
     # スカラーの場合
     if isinstance(initial_wealth, (float, int)):

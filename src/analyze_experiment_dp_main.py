@@ -20,23 +20,42 @@ def main():
 
   df = pd.read_csv(csv_path)
 
+  # Robust モデルのみに絞る
+  df = df[df['robust'] == True].copy()
+
+  # 各 win_type のポイントを計算
+  strategies = df['win_type'].unique()
+  points = {s: 0 for s in strategies}
+  rules = df['spending_rule'].unique()
+
+  for rule in rules:
+    df_rule = df[df['spending_rule'] == rule]
+    max_sr = df_rule['survival_rate'].max()
+    threshold = max_sr - 0.005
+    top_tier = df_rule[df_rule['survival_rate'] >= threshold]
+    for s in top_tier['win_type']:
+      points[s] += 1
+
+  # ポイント順に並べ替えて上位4つを抽出
+  sorted_strategies = sorted(points.items(), key=lambda x: x[1], reverse=True)
+  top_4_strategies = [s for s, p in sorted_strategies[:4]]
+
+  print(f"Top 4 Strategies for Robust Model: {top_4_strategies}")
+
+  # 上位4つのみを保持
+  df = df[df['win_type'].isin(top_4_strategies)].copy()
+
   # 結果のダンプ
-  print("--- Experimental Results ---")
-  print(
-      df.sort_values(
-          ['robust', 'n_sim_train', 'disable_win_threshold',
-           'spending_rule']).to_string(index=False))
+  print("--- Experimental Results (Top 4 Robust) ---")
+  print(df.sort_values(['win_type', 'spending_rule']).to_string(index=False))
   print("----------------------------")
 
   # 表示用にラベルを加工
-  df['WinThreshold'] = df['disable_win_threshold'].apply(lambda x: 'Win:OFF'
-                                                         if x else 'Win:ON')
-  df['Growth'] = df['robust'].apply(lambda x: 'Robust' if x else 'Net')
-  df['Train'] = df['n_sim_train'].apply(lambda x: f'N={x}')
+  df['WinThreshold'] = df['win_type']
+  df['Growth'] = 'Robust'
 
-  # 8通りの組み合わせを一つのラベルに統合
-  df['Combination'] = df['WinThreshold'] + ' / ' + df['Growth'] + ' / ' + df[
-      'Train']
+  # ラベルを統合
+  df['Combination'] = df['WinThreshold']
 
   # y軸の範囲をデータの最小値・最大値に合わせる
   y_min = df['survival_rate'].min()
@@ -53,7 +72,7 @@ def main():
                       title='Approach Combinations',
                       legend=alt.Legend(columns=1, symbolLimit=0)),
       tooltip=[
-          'spending_rule', 'survival_rate', 'WinThreshold', 'Growth', 'Train'
+          'spending_rule', 'survival_rate', 'WinThreshold', 'Growth'
       ]).properties(
           width=600,
           height=500,
