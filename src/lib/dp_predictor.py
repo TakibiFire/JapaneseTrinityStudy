@@ -13,7 +13,18 @@ from scipy.interpolate import pchip_interpolate
 
 
 class WinThresholdType(Enum):
-  """勝利しきい値の計算方法。"""
+  """
+  勝利しきい値（リバランス時にオルカン比率を 100% から下げる基準）の計算方法。
+
+  勝利しきい値 W_N とは、「これだけの資産があれば、将来にわたって安全（高確率で生存）
+  である」とみなされる資産額。
+
+  - DISABLED: 勝利判定を行わず、常に DP モデルの推奨に従う。
+  - V1: 従来方式。現在の Net Withdrawal に基づいて将来の必要額を見積もる。
+  - V2_XX: 堅牢方式。将来の必要額（現在価値）の分布から XX パーセンタイル値を
+    しきい値として採用する。分母には Net Withdrawal ではなく Gross Spend を使用
+    するため、年金受給期でも計算が安定する。
+  """
   DISABLED = auto()  # 無効
   V1 = auto()  # 従来方式 (Net Withdrawal ベース)
   V2_50 = auto()  # 堅牢方式 (Gross Spend ベース, 50%ile)
@@ -66,14 +77,13 @@ class DPOptimalStrategyPredictor:
 
   def __init__(self,
                models_path: str,
-               win_threshold_type: Union[WinThresholdType,
-                                         bool] = WinThresholdType.V1):
+               win_threshold_type: WinThresholdType = WinThresholdType.V2_90):
     """
     JSONファイルからモデルパラメータを読み込み、予測器を初期化します。
 
     Args:
       models_path: モデルパラメータが格納されたJSONファイルのパス。
-      win_threshold_type: 勝利しきい値の種類、または無効化するかどうかの真偽値。
+      win_threshold_type: 勝利しきい値の種類。
     """
     with open(models_path, "r") as f:
       raw_models = json.load(f)
@@ -92,10 +102,7 @@ class DPOptimalStrategyPredictor:
     self._net_prediction: str = raw_models.get("net_prediction", "legacy")
 
     # 勝利しきい値の設定
-    if isinstance(win_threshold_type, bool):
-      self._win_threshold_type = WinThresholdType.DISABLED if win_threshold_type else WinThresholdType.V1
-    else:
-      self._win_threshold_type = win_threshold_type
+    self._win_threshold_type = win_threshold_type
 
     for age_str, data in raw_models.items():
       if not age_str.isdigit():

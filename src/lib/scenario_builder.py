@@ -190,7 +190,7 @@ class SpendAwareAdjustment:
   # 前年比の支出倍率の上限。
   upper_mult: float = 1.02
   # 勝利しきい値の計算方式。
-  win_threshold_type: WinThresholdType = WinThresholdType.V1
+  win_threshold_type: WinThresholdType = WinThresholdType.V2_90
 
 
 @dataclass(frozen=True)
@@ -223,7 +223,7 @@ class SpendAwareDPRebalance:
   # 使用するDPモデルファイルのパス。
   model_name: str
   # 勝利しきい値の計算方式。
-  win_threshold_type: WinThresholdType = WinThresholdType.V1
+  win_threshold_type: WinThresholdType = WinThresholdType.V2_90
 
 
 # --- 高レベルな宣言 ---

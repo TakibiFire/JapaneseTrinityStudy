@@ -7,7 +7,7 @@ import json
 import numpy as np
 import pytest
 
-from src.lib.dp_predictor import DPOptimalStrategyPredictor
+from src.lib.dp_predictor import DPOptimalStrategyPredictor, WinThresholdType
 from src.lib.dynamic_rebalance_dp import calculate_optimal_strategy_dp
 from src.lib.dynamic_rebalance_type import DRResult
 
@@ -54,7 +54,7 @@ def mock_models_json(tmp_path):
 
 def test_calculate_optimal_strategy_dp(mock_models_json):
   """calculate_optimal_strategy_dp の基本的なテスト。"""
-  predictor = DPOptimalStrategyPredictor(mock_models_json)
+  predictor = DPOptimalStrategyPredictor(mock_models_json, win_threshold_type=WinThresholdType.V1)
 
   total_net = np.array([2000.0, 1000.0])
   cur_ann_spend = np.array([100.0, 100.0])
