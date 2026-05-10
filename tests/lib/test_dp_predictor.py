@@ -34,9 +34,14 @@ def mock_models_json(tmp_path):
   models = {
       "cpi_annual_mu": 0.01,
       "cpi_annual_sigma": 0.04,
+      "net_prediction": "ar1_residual",
       "35": {
           "avg_y_withdraw": 100.0,
           "m_winning_multiplier": 10.0,
+          "cpi_prev_coef": 25.0,
+          "cpi_curr_coef": 25.0,
+          "intercept": 50.0,
+          "resid_points": [0.0] * 7,
           "a_opt_model": a_opt_model,
           "p_survival_model": p_survival_model,
           "p_min": 0.1,
@@ -66,6 +71,30 @@ def test_predictor_initialization(mock_models_json):
   assert predictor.get_a_opt_model(35).r_min_a == 0.02
   assert predictor.get_p_surv_model(35).r_min_p == 0.02
   assert predictor.get_p_surv_model(35).p_max == 0.9
+  assert predictor.net_prediction == "ar1_residual"
+
+
+def test_predict_r_from_ar1(mock_models_json):
+  """predict_r_from_ar1 のテスト。"""
+  predictor = DPOptimalStrategyPredictor(mock_models_json)
+
+  # age 35: cpi_prev_coef=25.0, cpi_curr_coef=25.0, intercept=50.0, resid=0.0
+  # cpi_prev=1.0, cpi_curr=1.2, wealth=1000.0
+  # predicted_net = 25.0 * 1.0 + 25.0 * 1.2 + 50.0 + 0.0 = 25 + 30 + 50 = 105.0
+  # R = 105.0 / 1000.0 = 0.105
+  r = predictor.predict_r_from_ar1(35, 1000.0, 1.0, 1.2)
+  assert pytest.approx(r) == 0.105
+
+  # ベクトル化テスト
+  wealths = np.array([1000.0, 2000.0])
+  cpi_prevs = np.array([1.0, 1.0])
+  cpi_currs = np.array([1.2, 1.0])
+  # p1: 105/1000 = 0.105
+  # p2: (25*1.0 + 25*1.0 + 50)/2000 = 100/2000 = 0.05
+  rs = predictor.predict_r_from_ar1(35, wealths, cpi_prevs, cpi_currs)
+  assert isinstance(rs, np.ndarray)
+  assert pytest.approx(rs[0]) == 0.105
+  assert pytest.approx(rs[1]) == 0.05
 
 
 def test_predict_a_opt_scalar(mock_models_json):

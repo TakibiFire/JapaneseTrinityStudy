@@ -6,7 +6,7 @@
 import json
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Dict, Optional, Union, cast
+from typing import Dict, List, Optional, Union, cast
 
 import numpy as np
 from scipy.interpolate import pchip_interpolate
@@ -83,17 +83,19 @@ class DPOptimalStrategyPredictor:
     self._avg_y_withdraws: Dict[int, float] = {}
     self._winning_multipliers: Dict[int, float] = {}
     self._m_winning_multiplier_v2: Dict[int, Dict[str, float]] = {}
-    self._robust_spend_multipliers: Dict[int, float] = {}
+    self._cpi_prev_coef: Dict[int, float] = {}
+    self._cpi_curr_coef: Dict[int, float] = {}
+    self._intercept: Dict[int, float] = {}
+    self._ar1_resid_points: Dict[int, List[float]] = {}
     self._cpi_annual_mu: float = raw_models.get("cpi_annual_mu", 0.0)
     self._cpi_annual_sigma: float = raw_models.get("cpi_annual_sigma", 0.0)
+    self._net_prediction: str = raw_models.get("net_prediction", "legacy")
 
-    # 互換性のための処理
+    # 勝利しきい値の設定
     if isinstance(win_threshold_type, bool):
       self._win_threshold_type = WinThresholdType.DISABLED if win_threshold_type else WinThresholdType.V1
     else:
       self._win_threshold_type = win_threshold_type
-
-    self._use_robust_growth: bool = raw_models.get("use_robust_growth", False)
 
     for age_str, data in raw_models.items():
       if not age_str.isdigit():
@@ -107,9 +109,12 @@ class DPOptimalStrategyPredictor:
         self._m_winning_multiplier_v2[age] = {
             k: float(v) for k, v in data["m_winning_multiplier_v2"].items()
         }
-      if "robust_spend_multiplier" in data:
-        self._robust_spend_multipliers[age] = float(
-            data["robust_spend_multiplier"])
+      if "cpi_prev_coef" in data and "cpi_curr_coef" in data and "intercept" in data:
+        self._cpi_prev_coef[age] = float(data["cpi_prev_coef"])
+        self._cpi_curr_coef[age] = float(data["cpi_curr_coef"])
+        self._intercept[age] = float(data["intercept"])
+      if "resid_points" in data:
+        self._ar1_resid_points[age] = [float(v) for v in data["resid_points"]]
       if "a_opt_model" in data:
         a_data = data["a_opt_model"]
         self._a_opt_models[age] = AOptModel(
@@ -126,6 +131,34 @@ class DPOptimalStrategyPredictor:
             r_max_p=p_data["r_max_p"],
             p_max=data.get("p_max", 1.0),
             p_min=data.get("p_min", 0.0))
+
+  @property
+  def net_prediction(self) -> str:
+    """来年の支出予測手法を返します。"""
+    return self._net_prediction
+
+  def predict_r_from_ar1(
+      self, age: int, current_money: Union[float, np.ndarray],
+      cpi_prev: Union[float, np.ndarray],
+      cpi_curr: Union[float, np.ndarray]) -> Union[float, np.ndarray]:
+    """
+    現在の年齢、総資産、前年CPI、当期首CPIから来年の支出率 R を予測します。
+    Expected Resid (50%ile) を使用します。
+    """
+    if age not in self._intercept:
+      # モデルがない場合は 0 を返す
+      if isinstance(current_money, np.ndarray):
+        return np.zeros_like(current_money)
+      return 0.0
+
+    a = self._cpi_prev_coef[age]
+    b = self._cpi_curr_coef[age]
+    c = self._intercept[age]
+    expected_resid = self._ar1_resid_points[age][3]  # 50%ile (Median)
+
+    predicted_net = np.maximum(0.0,
+                               a * cpi_prev + b * cpi_curr + c + expected_resid)
+    return predicted_net / np.maximum(current_money, 1e-7)
 
   def get_a_opt_model(self, age: int) -> AOptModel:
     """
@@ -243,11 +276,22 @@ class DPOptimalStrategyPredictor:
       last_y_withdraw: Union[float, np.ndarray],
       last_gross_withdraw: Optional[Union[float, np.ndarray]] = None,
       z_score_for_winning: float = 2.326,
-      z_score_for_next_spend: float = 0.0) -> Union[float, np.ndarray]:
+      z_score_for_next_spend: float = 0.0,
+      precomputed_r: Optional[Union[float, np.ndarray]] = None) -> Union[float, np.ndarray]:
     """
     勝利しきい値を考慮して、最適な資産配分 A を決定します。
-    もし X_N > W_N であれば、W_N を安全資産に割り当て、残りをオルカンに割り当てます。
-    そうでなければ、通常の DP モデルに従います。
+
+    アルゴリズム：
+    1. 現在の資産 X_N が勝利しきい値 W_N を超えているか判定します。
+       W_N = M_V2 * last_gross_withdraw (V2方式) または M_N * WorstCaseY (V1方式)。
+    2. もし X_N > W_N であれば、勝利とみなし、W_N を安全資産に割り当て、残りをオルカンに割り当てます。
+       A = (X_N - W_N) / X_N
+    3. そうでなければ、通常の DP モデルに従って A を決定します。
+       この際、支出率 R (withdrawal rate) を計算する必要があります。
+       - ar1_residual モデルの場合: すでに計算済みのモーメンタムを考慮した R 
+         (precomputed_r) を使用することを強く推奨します。
+       - それ以外、または R が提供されない場合: 従来の比率ベースの投影
+         (last_y * growth / initial_wealth) を用いて R を算出します。
 
     Args:
       age: 現在の年齢。
@@ -257,7 +301,10 @@ class DPOptimalStrategyPredictor:
       z_score_for_winning: 勝利しきい値の保守性を決める Z スコア
         （デフォルト 2.326 は 99%ile）。
       z_score_for_next_spend: 来年の支出の保守性を決める Z スコア
-        （デフォルト 0.0 は期待値）。
+        （デフォルト 0.0 は期待値）。比率ベースの計算でのみ使用。
+      precomputed_r: 計算済みの支出率 R。ar1_residual 等でモーメンタムを
+        考慮した R を再利用する場合に指定します。
+
     Returns:
       Union[float, np.ndarray]: 最適な株式比率 [0.0, 1.0]。
     """
@@ -272,12 +319,15 @@ class DPOptimalStrategyPredictor:
       if initial_wealth > w_n:
         return (initial_wealth - w_n) / initial_wealth
 
-      expected_growth = self.get_spend_multiplier(age - 1, age)
-      if z_score_for_next_spend != 0:
-        expected_growth *= self.get_unexpected_cpi_jump(z_score_for_next_spend)
-      expected_y_n = last_y_withdraw * expected_growth
-      s_rate = expected_y_n / initial_wealth
-      return cast(float, self.predict_a_opt(age, s_rate))
+      if precomputed_r is not None:
+        r = float(precomputed_r)
+      else:
+        expected_growth = self.get_spend_multiplier(age - 1, age)
+        if z_score_for_next_spend != 0:
+          expected_growth *= self.get_unexpected_cpi_jump(z_score_for_next_spend)
+        expected_y_n = last_y_withdraw * expected_growth
+        r = expected_y_n / initial_wealth
+      return cast(float, self.predict_a_opt(age, r))
 
     # 配列の場合
     wealth_arr = np.asarray(initial_wealth, dtype=np.float64)
@@ -295,12 +345,18 @@ class DPOptimalStrategyPredictor:
     # 勝利していない場合: 通常の DP
     not_won_mask = ~won_mask
     if np.any(not_won_mask):
-      expected_growth = self.get_spend_multiplier(age - 1, age)
-      if z_score_for_next_spend != 0:
-        expected_growth *= self.get_unexpected_cpi_jump(z_score_for_next_spend)
-      expected_y_n = last_y_arr[not_won_mask] * expected_growth
-      s_rate = expected_y_n / wealth_arr[not_won_mask]
-      res[not_won_mask] = self.predict_a_opt(age, s_rate)
+      if precomputed_r is not None:
+        if isinstance(precomputed_r, np.ndarray):
+          r = precomputed_r[not_won_mask]
+        else:
+          r = precomputed_r
+      else:
+        expected_growth = self.get_spend_multiplier(age - 1, age)
+        if z_score_for_next_spend != 0:
+          expected_growth *= self.get_unexpected_cpi_jump(z_score_for_next_spend)
+        expected_y_n = last_y_arr[not_won_mask] * expected_growth
+        r = expected_y_n / wealth_arr[not_won_mask]
+      res[not_won_mask] = self.predict_a_opt(age, r)
 
     return res
 
@@ -318,11 +374,6 @@ class DPOptimalStrategyPredictor:
     指定された年齢間の平均支出（Withdrawal）の比率（倍率）を取得します。
     投影に使用されます。
     """
-    if self._use_robust_growth and age_from in self._robust_spend_multipliers:
-      # 注: 現在の DP の用途では age_to == age_from + 1 であることを前提としている。
-      # もし複数年のジャンプが必要な場合は、マルチプライヤーを累積させる必要がある。
-      return self._robust_spend_multipliers[age_from]
-
     if age_from not in self._avg_y_withdraws or age_to not in self._avg_y_withdraws:
       return 1.0
 

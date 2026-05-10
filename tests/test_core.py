@@ -11,6 +11,7 @@ from src.lib.cashflow_generator import (BaseSpendConfig, CashflowConfig,
                                         CashflowRule, CashflowType,
                                         PensionConfig, SuddenSpendConfig,
                                         generate_cashflows)
+from src.lib.dynamic_rebalance_type import DRResult
 from src.lib.spend_aware_dynamic_spending import SpendAwareDynamicSpending
 
 
@@ -398,9 +399,15 @@ def test_simulate_with_dynamic_rebalance():
   prices = {"A": np.ones((1, 13)), "Cash": np.ones((1, 13))}
 
   def dummy_rebalance_fn(
-      total_net: np.ndarray, cur_ann_spend: np.ndarray, rem_years: float,
-      post_tax_net: np.ndarray) -> Dict[str, Union[float, np.ndarray]]:
-    return {"A": 0.8, "Cash": 0.2}
+      total_net: np.ndarray,
+      cur_ann_spend: np.ndarray,
+      rem_years: float,
+      post_tax_net: np.ndarray,
+      prev_gross_ann_spend: np.ndarray,
+      current_prices: Optional[Dict[str, np.ndarray]],
+      prev_prices: Optional[Dict[str, np.ndarray]],
+      need_debug: np.ndarray) -> DRResult:
+    return DRResult(target_ratios={"A": 0.8, "Cash": 0.2}, debug=None)
 
   strategy = Strategy(name="Test",
                       initial_money=1000.0,
@@ -698,12 +705,18 @@ def test_simulate_strategy_skip_last_rebalance():
   call_months = []
 
   def recording_rebalance_fn(
-      total_net: np.ndarray, cur_ann_spend: np.ndarray, rem_years: float,
-      post_tax_net: np.ndarray) -> Dict[str, Union[float, np.ndarray]]:
+      total_net: np.ndarray,
+      cur_ann_spend: np.ndarray,
+      rem_years: float,
+      post_tax_net: np.ndarray,
+      prev_gross_ann_spend: np.ndarray,
+      current_prices: Optional[Dict[str, np.ndarray]],
+      prev_prices: Optional[Dict[str, np.ndarray]],
+      need_debug: np.ndarray) -> DRResult:
     # 現在の経過月を逆算（rem_years は (total_months - (m+1))/12 + 0.25）
     # ここでは単純に呼び出された回数やフラグを記録する
     call_months.append(True)
-    return {"A": 1.0, "Cash": 0.0}
+    return DRResult(target_ratios={"A": 1.0, "Cash": 0.0}, debug=None)
 
   strategy = Strategy(name="Test",
                       initial_money=1000.0,
@@ -736,10 +749,16 @@ def test_simulate_strategy_do_intermediate_rebalance():
   call_months = []
 
   def recording_rebalance_fn(
-      total_net: np.ndarray, cur_ann_spend: np.ndarray, rem_years: float,
-      post_tax_net: np.ndarray) -> Dict[str, Union[float, np.ndarray]]:
+      total_net: np.ndarray,
+      cur_ann_spend: np.ndarray,
+      rem_years: float,
+      post_tax_net: np.ndarray,
+      prev_gross_ann_spend: np.ndarray,
+      current_prices: Optional[Dict[str, np.ndarray]],
+      prev_prices: Optional[Dict[str, np.ndarray]],
+      need_debug: np.ndarray) -> DRResult:
     call_months.append(True)
-    return {"A": 1.0, "Cash": 0.0}
+    return DRResult(target_ratios={"A": 1.0, "Cash": 0.0}, debug=None)
 
   strategy = Strategy(name="Test",
                       initial_money=1000.0,

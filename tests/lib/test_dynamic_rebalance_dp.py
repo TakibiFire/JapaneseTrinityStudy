@@ -9,6 +9,7 @@ import pytest
 
 from src.lib.dp_predictor import DPOptimalStrategyPredictor
 from src.lib.dynamic_rebalance_dp import calculate_optimal_strategy_dp
+from src.lib.dynamic_rebalance_type import DRResult
 
 
 @pytest.fixture
@@ -71,11 +72,13 @@ def test_calculate_optimal_strategy_dp(mock_models_json):
                                       use_winning_threshold=True,
                                       z_score_for_winning=2.0)
 
-  assert isinstance(res, np.ndarray)
-  assert res.shape == (2,)
+  assert isinstance(res, DRResult)
+  a_opt = res.target_ratios
+  assert isinstance(a_opt, np.ndarray)
+  assert a_opt.shape == (2,)
   # threshold = m_n * last_y * growth * jump
   # threshold for 35: 10 * 100 * 1 * 1.07920792 = 1079.20792
   # A = (2000 - 1079.20792) / 2000 = 0.4603960396
-  assert pytest.approx(res[0]) == 0.4603960396
+  assert pytest.approx(a_opt[0]) == 0.4603960396
   # Path 1: 勝利条件未達成 -> 通常DP (s_rate = 100/1000 = 0.1 -> A=1.0)
-  assert res[1] == 1.0
+  assert a_opt[1] == 1.0

@@ -7,16 +7,15 @@
 import hashlib
 from dataclasses import dataclass, field, replace
 from enum import Enum, auto
-from typing import Any, Dict, List, Optional, Set, Tuple, Union, cast
+from typing import Dict, List, Optional, Set, Tuple, Union, cast
 
 import numpy as np
 import scipy.stats as stats
 
 from src.core import DynamicSpending, Strategy, ZeroRiskAsset
 from src.lib.asset_generator import (Asset, AssetConfigType, CpiAsset,
-                                     DerivedAsset, ForexAsset,
-                                     MonthlyARLogNormal, MonthlyLogDist,
-                                     MonthlyLogNormal, SlideAdjustedCpiAsset,
+                                     DerivedAsset, ForexAsset, MonthlyLogDist,
+                                     SlideAdjustedCpiAsset,
                                      YearlyLogNormalArithmetic,
                                      generate_monthly_asset_prices)
 from src.lib.cashflow_generator import (BaseSpendConfig, CashflowConfig,
@@ -26,6 +25,7 @@ from src.lib.cashflow_generator import (BaseSpendConfig, CashflowConfig,
 from src.lib.dp_predictor import DPOptimalStrategyPredictor, WinThresholdType
 from src.lib.dynamic_rebalance import calculate_optimal_strategy
 from src.lib.dynamic_rebalance_dp import calculate_optimal_strategy_dp
+from src.lib.dynamic_rebalance_type import DRResult, DynamicRebalanceFn
 from src.lib.life_table import FEMALE_MORTALITY_RATES, MALE_MORTALITY_RATES
 from src.lib.retired_spending import (SpendingType,
                                       get_annual_retired_spending_multipliers,
@@ -911,7 +911,7 @@ def _build_strategy(variant: _ExperimentVariant, cf_map: Dict[str, str],
 
   # リバランス設定
   rebalance_interval = 0
-  dynamic_rebalance_fn = None
+  dynamic_rebalance_fn: Optional[DynamicRebalanceFn] = None
   if spec.rebalance:
     if isinstance(spec.rebalance, FixedRebalance):
       rebalance_interval = spec.rebalance.interval_months
@@ -921,10 +921,12 @@ def _build_strategy(variant: _ExperimentVariant, cf_map: Dict[str, str],
 
       # 必要に応じて dynamic_rebalance_fn を設定
       # ここでは calculate_optimal_strategy をラップして使用する
-      def dr_fn(
-          total_net: np.ndarray, cur_ann_spend: np.ndarray, rem_years: float,
-          post_tax_net: np.ndarray, prev_gross_ann_spend: np.ndarray
-      ) -> Dict[str, Union[float, np.ndarray]]:
+      def dr_fn(total_net: np.ndarray, cur_ann_spend: np.ndarray,
+                rem_years: float, post_tax_net: np.ndarray,
+                prev_gross_ann_spend: np.ndarray,
+                current_prices: Optional[Dict[str, np.ndarray]],
+                prev_prices: Optional[Dict[str, np.ndarray]],
+                need_debug: np.ndarray) -> DRResult:
         reb = cast(DynamicV1Rebalance, spec.rebalance)
         s_rate = cur_ann_spend / np.maximum(post_tax_net, 1e-10)
 
@@ -934,7 +936,8 @@ def _build_strategy(variant: _ExperimentVariant, cf_map: Dict[str, str],
         elif reb.zero_risk_asset == PredefinedZeroRisk.CASH:
           zr_yield = 0.0
         else:
-          raise ValueError(f"リバランスの振り分け先に指定できない資産です: {reb.zero_risk_asset}")
+          raise ValueError(
+              f"リバランスの振り分け先に指定できない資産です: {reb.zero_risk_asset}")
 
         # calculate_optimal_strategy はインフレ率 0.0177 を前提にチューニングされている
         ratio = calculate_optimal_strategy(s_rate,
@@ -944,10 +947,11 @@ def _build_strategy(variant: _ExperimentVariant, cf_map: Dict[str, str],
                                            inflation_rate=0.0177)
 
         # 資産名へのマッピング
-        return {
+        return DRResult(target_ratios={
             reb.risky_asset.name: ratio,
             reb.zero_risk_asset.name: 1.0 - ratio
-        }
+        },
+                        debug=None)
 
       dynamic_rebalance_fn = dr_fn
 
@@ -957,12 +961,14 @@ def _build_strategy(variant: _ExperimentVariant, cf_map: Dict[str, str],
       predictor = DPOptimalStrategyPredictor(
           reb_dp.model_name, win_threshold_type=reb_dp.win_threshold_type)
 
-      def dr_dp_fn(
-          total_net: np.ndarray, cur_ann_spend: np.ndarray, rem_years: float,
-          post_tax_net: np.ndarray, prev_gross_ann_spend: np.ndarray
-      ) -> Dict[str, Union[float, np.ndarray]]:
+      def dr_dp_fn(total_net: np.ndarray, cur_ann_spend: np.ndarray,
+                   rem_years: float, post_tax_net: np.ndarray,
+                   prev_gross_ann_spend: np.ndarray,
+                   current_prices: Optional[Dict[str, np.ndarray]],
+                   prev_prices: Optional[Dict[str, np.ndarray]],
+                   need_debug: np.ndarray) -> DRResult:
         reb = cast(SpendAwareDPRebalance, spec.rebalance)
-        ratio = calculate_optimal_strategy_dp(
+        res = calculate_optimal_strategy_dp(
             total_net=total_net,
             cur_ann_spend=cur_ann_spend,
             rem_years=rem_years,
@@ -970,11 +976,15 @@ def _build_strategy(variant: _ExperimentVariant, cf_map: Dict[str, str],
             dp_predictor=predictor,
             initial_age=world.start_age,
             total_years=world.n_years,
-            prev_gross_ann_spend=prev_gross_ann_spend)
-        return {
-            reb.risky_asset.name: ratio,
-            reb.zero_risk_asset.name: 1.0 - ratio
-        }
+            current_prices=current_prices,
+            prev_prices=prev_prices,
+            prev_gross_ann_spend=prev_gross_ann_spend,
+            need_debug=need_debug)
+        return DRResult(target_ratios={
+            reb.risky_asset.name: res.target_ratios,
+            reb.zero_risk_asset.name: 1.0 - res.target_ratios
+        },
+                        debug=res.debug)
 
       dynamic_rebalance_fn = dr_dp_fn
 

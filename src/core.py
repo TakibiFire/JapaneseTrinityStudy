@@ -10,8 +10,9 @@ from typing import Callable, Dict, List, Optional, Union, cast
 
 import numpy as np
 
-from src.lib.cashflow_generator import (CashflowRule, CashflowType,
-                                        ExtraCashflowMultiplierFn)
+from src.lib.cashflow_generator import CashflowRule, CashflowType
+from src.lib.dynamic_rebalance_type import (DPDebugOutput, DRResult,
+                                            DynamicRebalanceFn)
 
 # ---------------------------------------------------------------------------
 # 1. データ構造 (Dataclasses)
@@ -116,13 +117,6 @@ class DynamicSpending:
                          other_net_m=other_net_m,
                          precomputed_cf_m=cpi_m,
                          precomputed_cf_prev_m=cpi_m_minus_12)
-
-
-# ダイナミックリバランス用のコールバック関数
-# 引数: (現在の資産合計, 現在の年間正味支出, 残り年数, 税引き後資産見積もり, 前年の年間総支出)
-DynamicRebalanceFn = Callable[
-    [np.ndarray, np.ndarray, float, np.ndarray, np.ndarray],
-    Dict[str, Union[float, np.ndarray]]]
 
 
 @dataclasses.dataclass
@@ -526,7 +520,7 @@ def simulate_strategy(strategy: Strategy,
         units[asset_name][still_short] -= units_to_sell
         cash[still_short] += sell_amount
 
-    # 6. リバランス
+    # 6. リバランスの反映
     # シミュレーションの最終月（m + 1 == total_months）は、その後の資産推移がないためリバランスをスキップする。
     if strategy.rebalance_interval > 0 and (
         m + 1) % strategy.rebalance_interval == 0 and (m + 1) < total_months:
@@ -570,10 +564,33 @@ def simulate_strategy(strategy: Strategy,
             unrealized_gains_at_rebalance += np.maximum(0.0, gain)
           post_tax_net = total_net - unrealized_gains_at_rebalance * strategy.tax_rate
 
-          target_ratios = strategy.dynamic_rebalance_fn(total_net,
-                                                        cur_ann_spend,
-                                                        rem_years, post_tax_net,
-                                                        prev_gross_ann_spend)
+          # リバランス時点のアセット価格（CPIを含む）を取得
+          current_prices_at_rebalance = {
+              name: local_monthly_asset_prices[name][reb_paths, m + 1]
+              for name in local_monthly_asset_prices
+          }
+          # 前年のアセット価格を取得（AR1予測用）
+          prev_prices_at_rebalance = {
+              name:
+                  local_monthly_asset_prices[name][reb_paths,
+                                                   max(0, m + 1 - 12)]
+              for name in local_monthly_asset_prices
+          }
+
+          # デバッグ対象パスのマスクを作成
+          need_debug_mask = np.zeros(n_sim, dtype=bool)
+          if debug_indices is not None:
+            need_debug_mask[debug_indices] = True
+          reb_need_debug = need_debug_mask[reb_paths]
+
+          dr_result = strategy.dynamic_rebalance_fn(
+              total_net, cur_ann_spend, rem_years, post_tax_net,
+              prev_gross_ann_spend, current_prices_at_rebalance,
+              prev_prices_at_rebalance, reb_need_debug)
+
+          target_ratios_full = dr_result.target_ratios
+          dr_debug = dr_result.debug
+
           # --- DEBUG ---
           if debug_indices is not None and debug_results is not None:
             for idx in debug_indices:
@@ -583,12 +600,20 @@ def simulate_strategy(strategy: Strategy,
                     f"{n}: {local_monthly_asset_prices[n][idx, m+1]:.2f}"
                     for n in local_monthly_asset_prices
                 ])
+                # DP計算の詳細情報を取得
+                dp_info_str = ""
+                if dr_debug is not None:
+                  pY_N = dr_debug.pY_N[mask_idx]
+                  P_pred = dr_debug.P_pred[mask_idx]
+                  W_N = dr_debug.W_N[mask_idx]
+                  dp_info_str = f", pY_N={pY_N:.2f}, P_pred={P_pred:.4f}, W_N={W_N:.2f}"
+
                 debug_results[idx].append(
-                    f"[Debug Path {idx}] Age {m//12+60} Month {m} Rebalance: cur_ann_spend={cur_ann_spend[mask_idx]:.2f}, prev_ann_spend={prev_gross_ann_spend[mask_idx]:.2f}, rem_years={rem_years:.4f}, total_net={total_net[mask_idx]:.2f}, post_tax_net={post_tax_net[mask_idx]:.2f}, prices={price_str}, target_ratios={ {k: (v if isinstance(v, float) else v[mask_idx]) for k, v in target_ratios.items()} }"
+                    f"[Debug Path {idx}] Age {m//12+60} Month {m} Rebalance: cur_ann_spend={cur_ann_spend[mask_idx]:.2f}, prev_ann_spend={prev_gross_ann_spend[mask_idx]:.2f}, rem_years={rem_years:.4f}, total_net={total_net[mask_idx]:.2f}, post_tax_net={post_tax_net[mask_idx]:.2f}, cpi={current_prices_at_rebalance.get('Japan_CPI', np.ones(1))[mask_idx]:.4f}, prev_cpi={prev_prices_at_rebalance.get('Japan_CPI', np.ones(1))[mask_idx]:.4f}{dp_info_str}, prices={price_str}, target_ratios={ {k: (v if isinstance(v, float) else v[mask_idx]) for k, v in target_ratios_full.items() if k in target_ratios_full} }"
                 )
           # -------------
         else:
-          target_ratios = {
+          target_ratios_full = {
               k: np.full(np.sum(reb_paths), v)
               for k, v in normalized_ratio.items()
           }
@@ -600,9 +625,9 @@ def simulate_strategy(strategy: Strategy,
           current_units = units[name]
           current_asset_val = current_units[reb_paths] * price_for_sell
           try:
-            diff = current_asset_val - total_net * target_ratios[name]
+            diff = current_asset_val - total_net * target_ratios_full[name]
           except KeyError as e:
-            print(f"target_ratios={target_ratios}")
+            print(f"target_ratios={target_ratios_full}")
             raise e
           sell_mask = diff > 1e-8
           if np.any(sell_mask):
@@ -622,7 +647,7 @@ def simulate_strategy(strategy: Strategy,
           price_for_buy = local_monthly_asset_prices[name][reb_paths, m + 1]
           current_units = units[name]
           val_after_sell = current_units[reb_paths] * price_for_buy
-          diff = total_net * target_ratios[name] - val_after_sell
+          diff = total_net * target_ratios_full[name] - val_after_sell
           buy_mask = diff > 1e-8
           if np.any(buy_mask):
             buy_idx = np.where(reb_paths)[0][buy_mask]

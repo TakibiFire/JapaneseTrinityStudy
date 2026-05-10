@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 
 from src.core import Strategy
+from src.lib.dynamic_rebalance_type import DRResult
 from src.lib.scenario_builder import (ConstantSpend, CpiType, CurveSpend,
                                       DynamicV1Adjustment, DynamicV1Rebalance,
                                       FixedRebalance, FxType, Gender, Lifeplan,
@@ -344,9 +345,11 @@ def test_dynamic_v1_rebalance_func_call(baseline_setup):
   net_worth = np.array([1000.0] * 10)
   ann_spend = np.array([40.0] * 10)
   # 関数を呼び出して結果を検証
-  res = strategy.dynamic_rebalance_fn(net_worth, ann_spend, 20.0, net_worth)
-  assert "ORUKAN_155" in res
-  assert "CASH" in res
+  res = strategy.dynamic_rebalance_fn(net_worth, ann_spend, 20.0, net_worth,
+                                      ann_spend, None, None,
+                                      np.zeros(10, dtype=bool))
+  assert "ORUKAN_155" in res.target_ratios
+  assert "CASH" in res.target_ratios
 
 
 def test_strategy_zero_risk_4pct(baseline_setup):
@@ -386,7 +389,8 @@ def test_rebalance_v1_rigorous(baseline_setup):
     rem_years = 20.0
     post_tax_net = np.array([800.0] * 10)
 
-    res = dr_fn(net_worth, ann_spend, rem_years, post_tax_net)
+    res = dr_fn(net_worth, ann_spend, rem_years, post_tax_net, ann_spend, None,
+                None, np.zeros(10, dtype=bool))
 
     # calculate_optimal_strategy への引数を検証
     # s_rate = 40.0 / 800.0 = 0.05
@@ -396,8 +400,8 @@ def test_rebalance_v1_rigorous(baseline_setup):
     assert kwargs["base_yield"] == 0.04
     assert kwargs["inflation_rate"] == 0.0177
 
-    assert res["ORUKAN_155"] == 0.6
-    assert res["ZERO_RISK_4PCT"] == 0.4
+    assert res.target_ratios["ORUKAN_155"] == 0.6
+    assert res.target_ratios["ZERO_RISK_4PCT"] == 0.4
 
 
 def test_create_experiment_setup_resolves_spend_aware_adjustment_call(
@@ -440,15 +444,17 @@ def test_create_experiment_setup_covers_dp_rebalance_call(baseline_setup):
     mock_predictor.return_value = MagicMock()
     with patch(
         "src.lib.scenario_builder.calculate_optimal_strategy_dp") as mock_calc:
-      mock_calc.return_value = 0.6
+      mock_calc.return_value = DRResult(target_ratios=0.6, debug=None)
       compiled = create_experiment_setup(baseline_setup)
       strategy = compiled[0].strategy
       net_worth = np.array([1000.0] * 10)
       ann_spend = np.array([40.0] * 10)
       assert strategy.dynamic_rebalance_fn is not None
-      res = strategy.dynamic_rebalance_fn(net_worth, ann_spend, 20.0, net_worth)
-      assert res["ORUKAN_155"] == 0.6
-      assert res["CASH"] == 0.4
+      res = strategy.dynamic_rebalance_fn(net_worth, ann_spend, 20.0, net_worth,
+                                          ann_spend, None, None,
+                                          np.zeros(10, dtype=bool))
+      assert res.target_ratios["ORUKAN_155"] == 0.6
+      assert res.target_ratios["CASH"] == 0.4
 
 
 def test_pension_premium_logic(baseline_setup):
@@ -723,7 +729,8 @@ def test_unhandled_enum_values(baseline_setup):
     # ここで dr_fn を実行する必要がある
     dr_fn = compiled_strat.dynamic_rebalance_fn
     assert dr_fn is not None
-    dr_fn(np.ones(10), np.ones(10), 10.0, np.ones(10))
+    dr_fn(np.ones(10), np.ones(10), 10.0, np.ones(10), np.ones(10), None, None,
+          np.zeros(10, dtype=bool))
 
   # 7. selling_priority
   with pytest.raises(ValueError, match="未知の資産タイプです"):
