@@ -27,15 +27,13 @@ from typing import Any, Dict, List, Optional, Tuple, Union, cast
 
 import numpy as np
 import pandas as pd
-import scipy.optimize as opt
 from scipy.interpolate import pchip_interpolate
 from sklearn.isotonic import IsotonicRegression
 
 import src.lib.world_setup as world_setup
 from src.core import (CashflowRule, CashflowType, Strategy, ZeroRiskAsset,
                       simulate_strategy)
-from src.lib.scenario_builder import (CompiledExperiment,
-                                      create_experiment_setup)
+from src.lib.scenario_builder import create_experiment_setup
 
 # 共通定数
 SEED = 42
@@ -171,14 +169,27 @@ def main():
                       type=str,
                       default=None,
                       help="デバッグ情報を表示するパスのインデックス（カンマ区切り、例: 0,1,2）")
-  parser.add_argument("--use_robust_growth",
-                      action="store_true",
-                      help="純支出の代わりにベース支出（Gross Base Spend）を用いて成長率を計算する")
+  parser.add_argument("--net_prediction",
+                      type=str,
+                      choices=["ar1_residual"],
+                      default="ar1_residual",
+                      help="来年の支出額（および支出率 R）の予測手法")
   parser.add_argument("--output_path",
                       type=str,
                       default=None,
                       help="出力ファイルのパス。指定しない場合はデフォルトのパスを使用")
+  parser.add_argument("--tie_breaker_method",
+                      type=str,
+                      choices=["legacy", "goal_based"],
+                      default="legacy",
+                      help="タイブレークの手法 (legacy: 最大の A を選択, goal_based: 勝利確率を考慮)")
+  parser.add_argument("--disable_shortcuts",
+                      action="store_true",
+                      help="A のサンプリングの高速化（ショートカット）を無効化する")
   args = parser.parse_args()
+
+  # 互換性維持のための後処理
+  net_prediction = args.net_prediction
 
   n_sim = args.n_sim
   debug = args.debug_level > 0
@@ -286,11 +297,60 @@ def main():
           f"    [Age {age} Debug] monthly_net_spend (sum(max(0, ...)), path 0): {age_cashflow_data[age][0]:.2f}"
       )
 
+  # 1.5. AR(1) Residual-Based Regression (Offline)
+  ar1_models: Dict[int, Dict[str, Any]] = {}
+  print("Computing AR(1) residual models...")
+  # Age 60の末（Month 11）のリバランスでは Age 61 のモデルが使用される。
+  # 最後のリバランス（Age 93の末）では Age 94 のモデルが使用される。
+  # よって start_age + 1 から end_age - 1 までのAR(1)パラメータがあればよい。
+  for age in range(start_age, end_age - 1):
+    # 次の年齢の実際の支出 (age+1 の1年間の合計)
+    y_next_actual = age_cashflow_data[age + 1]  # shape (n_sim,)
+
+    # age+1 の期首（cpi_curr）と age の期首（cpi_prev）の CPI
+    # これらを用いて age+1 の支出分布を予測する
+    idx_curr = (age + 1 - start_age) * 12
+    idx_prev = (age - start_age) * 12
+
+    cpi_curr = monthly_prices[CPI_NAME][:, idx_curr]
+    cpi_prev = monthly_prices[CPI_NAME][:, idx_prev]
+
+    # y_next = a * cpi_prev + b * cpi_curr + c の重回帰モデルを解く
+    X = np.column_stack([cpi_prev, cpi_curr, np.ones(n_sim)])
+    coeffs, _, _, _ = np.linalg.lstsq(X, y_next_actual, rcond=None)
+    a, b, c = coeffs
+
+    # 残差を計算
+    y_fit = a * cpi_prev + b * cpi_curr + c
+    residuals = y_next_actual - y_fit
+
+    # ガウス分布の z-score に対応する 7 つのパーセンタイルを抽出
+    percentiles = [
+        0.1349898, 2.275013, 15.865525, 50.0, 84.134475, 97.724987, 99.86501
+    ]
+    resid_points = np.percentile(residuals, percentiles).tolist()
+
+    # R^2 (決定係数) を計算
+    ss_res = np.sum(residuals**2)
+    ss_tot = np.sum((y_next_actual - np.mean(y_next_actual))**2)
+    r_sq = 1.0 - (ss_res / ss_tot) if ss_tot > 1e-10 else 1.0
+
+    ar1_models[age + 1] = {
+        "cpi_prev_coef": float(a),
+        "cpi_curr_coef": float(b),
+        "intercept": float(c),
+        "resid_points": resid_points,
+        "r_squared": float(r_sq)
+    }
+    print(
+        f"  Age {age+1} Prediction: Net ~ {a:.4f}*CPI_prev + {b:.4f}*CPI_curr + {c:.4f} (R^2 = {r_sq:.4f})"
+    )
+
   # 2. Backward DP
   models: Dict[str, Any] = {
       "cpi_annual_mu": cpi_annual_mu,
       "cpi_annual_sigma": cpi_annual_sigma,
-      "use_robust_growth": args.use_robust_growth,
+      "net_prediction": net_prediction,
   }
   # age -> { "y_withdraw": array, "p_model": {coef}, "r_min": float, "r_max": float, "p_min": float, "p_max": float }
   dp_results: Dict[int, Any] = {}
@@ -416,9 +476,15 @@ def main():
 
       # 初期資産 X_p,N = Y_withdraw,p,N / r
       x_p_n = y_withdraw_n / r
+
+      # 最適な生存確率
       best_survival = -1.0
+      # 最適な勝利確率（tie-breaker用）
+      best_p_win = -1.0
+      # 最適な資産配分 A
       best_a = 0.0
-      survivals_per_a = {}
+      # A ごとの生存確率を保持する辞書
+      survivals_per_a: Dict[float, float] = {}
 
       # 探索する A のリストを決定
       search_a_list = [a_fixed] if a_fixed is not None else a_grid
@@ -518,34 +584,25 @@ def main():
           ])
 
           # 今年の支出 Y_N から来年の支出 Y_{N+1} の分布を推定
-          # 期待される成長率 (加齢による統計的な支出変化 + 平均インフレ)
-          year_idx = age - start_age
-          avg_y_curr = float(np.mean(y_withdraw_n))
-          if args.use_robust_growth and year_idx < years - 1:
-            # ベース支出の実質推移から成長率を計算する（年金オフセットによる不安定さを回避）
-            avg_s_curr = float(spending_annual_real[year_idx])
-            avg_s_next = float(spending_annual_real[year_idx + 1])
-            expected_growth = avg_s_next / avg_s_curr
-          else:
-            # 従来通り、全パスの平均純支出の比率を用いる
-            avg_y_next = float(np.mean(dp_results[age + 1]["y_withdraw"]))
-            if avg_y_curr > 1e-6:
-              expected_growth = avg_y_next / avg_y_curr
-            else:
-              expected_growth = 1.0
+          model = ar1_models[age + 1]
 
-          # CPI のブレ (残差)
-          # unexpected_cpi_jump = (1 + mu + z*sigma) / (1 + mu)
-          relative_cpi_jumps = (1.0 + cpi_annual_mu + z_scores *
-                                cpi_annual_sigma) / (1.0 + cpi_annual_mu)
+          # 状態変数: cpi_prev (当期首CPI), cpi_curr (次期首CPIの予測シナリオ)
+          # 回帰モデルでは y_next = a * cpi_prev + b * cpi_curr + c を使用
+          cpi_prev_p = monthly_prices[CPI_NAME][:, start_m]
 
-          # y_next_dist shape: (n_sim, 7)
-          if avg_y_curr > 1e-6:
-            y_next_dist = y_withdraw_n[:, np.
-                                       newaxis] * expected_growth * relative_cpi_jumps
-          else:
-            # If current withdrawal is 0, next withdrawal is based on avg_y_next
-            y_next_dist = np.full((n_sim, 7), avg_y_next) * relative_cpi_jumps
+          # 次期首の CPI シナリオを生成: CPI_next = CPI_curr * (1 + mu + z*sigma)
+          cpi_growth_scenarios = (1.0 + cpi_annual_mu +
+                                  z_scores * cpi_annual_sigma)
+          cpi_curr_p_scenarios = cpi_prev_p[:,
+                                            np.newaxis] * cpi_growth_scenarios
+
+          # 回帰式による予測値 (n_sim, 7)
+          y_base = model["cpi_prev_coef"] * cpi_prev_p[:, np.newaxis] + model[
+              "cpi_curr_coef"] * cpi_curr_p_scenarios + model["intercept"]
+
+          # 残差（ショック）を加えて来年の支出分布を生成
+          resid_array = np.array(model["resid_points"])
+          y_next_dist = np.maximum(0, y_base + resid_array)
 
           # 7つの R_next シナリオを計算
           # x_next shape: (n_sim,) -> (n_sim, 7)
@@ -600,10 +657,45 @@ def main():
         # 全パスの 平均生存確率
         avg_survival = float(np.mean(survival))
         survivals_per_a[a] = avg_survival
-        # 生存確率が同じ（例：共に1.0）場合は、より高いオルカン比率 A を選択する（tie-break）
-        if avg_survival > best_survival or (abs(avg_survival - best_survival)
-                                            < 1e-9 and a > best_a):
+
+        # タイブレーク用の追加指標: 勝利確率
+        p_win = 0.0
+        if args.tie_breaker_method == "goal_based":
+          if age == end_age - 1:
+            # 最終年は生存確率そのものを勝利確率とする
+            p_win = avg_survival
+          else:
+            # 翌年の Winning Threshold を超える確率を計算
+            m_v2 = models[str(age + 1)]["m_winning_multiplier_v2"]
+            # 70%ile を目標とする。70%ile の winning threshold が best performance
+            # を示したため。
+            m_goal = m_v2["70"]
+            gross_spend_curr = age_gross_spend_data[age]
+            w_next_path = m_goal * gross_spend_curr
+            is_win = x_next >= w_next_path
+            p_win = float(np.mean(is_win))
+
+        # 最適 A の更新判定
+        is_better = False
+        if avg_survival > best_survival + 1e-9:
+          is_better = True
+        elif abs(avg_survival - best_survival) < 1e-9:
+          # 生存確率がタイの場合
+          if args.tie_breaker_method == "legacy":
+            # 以前のロジック: A が大きい方を選択
+            if a > best_a:
+              is_better = True
+          elif args.tie_breaker_method == "goal_based":
+            # 新しいロジック: 勝利確率が高い方を選択。それもタイなら A が大きい方を選択
+            if p_win > best_p_win + 1e-9:
+              is_better = True
+            elif abs(p_win - best_p_win) < 1e-9:
+              if a > best_a:
+                is_better = True
+
+        if is_better:
           best_survival = avg_survival
+          best_p_win = p_win
           best_a = a
 
       # 許容範囲 [a_min, a_max] の算出 (P >= P_max * 0.999)
@@ -623,6 +715,7 @@ def main():
       # ログに結果を追記
       log_entry["a_opt_result"] = float(best_a)
       log_entry["p_survival_result"] = float(best_survival)
+      log_entry["p_win_result"] = float(best_p_win)
 
       return result
 
@@ -736,21 +829,27 @@ def main():
         # A_opt が安定している領域ではサンプリングを高速化
         a_fixed = None
         reason = ""
-        if r < r_min_a:
-          a_fixed = 1.0
-          reason = f"R={r:.4f} < R_min_a={r_min_a:.4f} なので A=1.0 に固定"
-        elif r > r_max_a:
-          # 境界での a_max を参考にする
-          res_boundary = evaluate_r(r_max_a, stage="遷移領域サンプリング（境界値確認）")
-          a_fixed = res_boundary[4]
-          reason = f"R={r:.4f} > R_max_a={r_max_a:.4f} なので A={a_fixed:.2f} に固定"
+        # goal_based または disable_shortcuts が有効な場合はショートカットを行わない
+        if args.tie_breaker_method == "legacy" and not args.disable_shortcuts:
+          if r < r_min_a:
+            a_fixed = 1.0
+            reason = f"R={r:.4f} < R_min_a={r_min_a:.4f} なので A=1.0 に固定"
+          elif r > r_max_a:
+            # 境界での a_max を参考にする
+            res_boundary = evaluate_r(r_max_a, stage="遷移領域サンプリング（境界値確認）")
+            a_fixed = res_boundary[4]
+            reason = f"R={r:.4f} > R_max_a={r_max_a:.4f} なので A={a_fixed:.2f} に固定"
         evaluate_r(r, a_fixed=a_fixed, stage="遷移領域サンプリング", reason=reason)
       for i in range(len(step_r_vals) - 1):
+        # goal_based または disable_shortcuts の場合は a_fixed による高速化を行わない
+        use_shortcuts = args.tie_breaker_method == "legacy" and not args.disable_shortcuts
+        r_min_a_val = r_min_a if use_shortcuts else None
+        r_max_a_val = r_max_a if use_shortcuts else None
         adaptive_sample(evaluate_r,
                         step_r_vals[i],
                         step_r_vals[i + 1],
-                        r_min_a=r_min_a,
-                        r_max_a=r_max_a)
+                        r_min_a=r_min_a_val,
+                        r_max_a=r_max_a_val)
 
     # 評価結果の集約
     age_results = []
@@ -786,19 +885,23 @@ def main():
                                           p_iso_unique,
                                           threshold=0.01)
 
-    # A_opt モデル: PCHIP on a_max + Anchor Filtering
+    # A_opt モデル: PCHIP on a_opt (legacy の場合は a_max と等価) + Anchor Filtering
     unique_r_a, unique_idx_a = np.unique(df_fit_a["r"], return_index=True)
-    a_max_unique = df_fit_a["a_opt_max"].values[unique_idx_a]
+    if args.tie_breaker_method == "legacy":
+      a_fit_targets = df_fit_a["a_opt_max"].values[unique_idx_a]
+    else:
+      a_fit_targets = df_fit_a["a_opt"].values[unique_idx_a]
+
     # Anchor point 削減 (0% threshold to disable reduction)
     r_points_a, a_points = filter_anchors(unique_r_a,
-                                          a_max_unique,
+                                          a_fit_targets,
                                           threshold=0.0)
 
     if args.debug_age is not None and age == args.debug_age:
       print(
           f"\n[DEBUG Age {age}] Anchor counts: P={len(r_points_p)}, A={len(r_points_a)}"
       )
-      print("index, R, P_obs, P_fit, A_max, A_fit")
+      print("index, R, P_obs, P_fit, A_opt, A_max, A_fit")
       for i, (idx, age_row) in enumerate(df_age.iterrows()):
         rv = float(age_row["r"])
         p_fit = p_surv_max if rv < r_min_p else (
@@ -807,7 +910,7 @@ def main():
         a_fit = 1.0 if (rv < r_min_a or rv > r_max_a) else pchip_interpolate(
             r_points_a, a_points, rv)
         print(
-            f"{i}, {rv:.6f}, {age_row['p_survival']:.6f}, {p_fit:.6f}, {age_row['a_opt_max']:.2f}, {a_fit:.2f}"
+            f"{i}, {rv:.6f}, {age_row['p_survival']:.6f}, {p_fit:.6f}, {age_row['a_opt']:.2f}, {age_row['a_opt_max']:.2f}, {a_fit:.2f}"
         )
 
     # 結果表示
@@ -884,9 +987,8 @@ def main():
         "p_min": float(p_surv_min),
         "p_max": float(p_surv_max)
     }
-    if args.use_robust_growth and year_idx < years - 1:
-      models[str(age)]["robust_spend_multiplier"] = float(
-          spending_annual_real[year_idx + 1] / spending_annual_real[year_idx])
+    if age in ar1_models:
+      models[str(age)].update(ar1_models[age])
 
   if args.debug_level == 0:
     if args.output_path:
