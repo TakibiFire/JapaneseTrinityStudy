@@ -10,6 +10,7 @@ python src/visualize_dp_model.py \
 
 import argparse
 import json
+import os
 
 import altair as alt
 import numpy as np
@@ -245,6 +246,7 @@ if __name__ == "__main__":
   if rows:
     # 各行を縦に並べる
     grid = alt.vconcat(*rows).resolve_scale(color='shared')
-    output_path = 'temp/visualize_dp_model.svg'
+    json_basename = os.path.splitext(os.path.basename(args.json))[0]
+    output_path = f'temp/visualize_{json_basename}.svg'
     grid.save(output_path)
     print(f"Saved {output_path}")
