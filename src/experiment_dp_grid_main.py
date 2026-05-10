@@ -37,18 +37,19 @@ def main():
       [SpendingType.CONSUMPTION, SpendingType.NON_CONSUMPTION_EXCLUDE_PENSION],
       60, 1)[0]
 
-  # モデルのリスト (N_SIM=1000 のみ使用)
-  model_files = ["re60_pen70_95_n1000", "re60_pen70_95_robust_n1000"]
+  # モデルのリスト
+  tie_breakers = ["legacy", "goal_based", "survival_first_goal_based"]
+  min_y_values = [0, 5, 25]
+  model_files = [
+      f"re60_pen70_95_tb{tb}_miny{miny}_n1000"
+      for tb in tie_breakers for miny in min_y_values
+  ]
 
   # 実験パラメータ
-  spending_rules = [2.5, 2.8, 3.0, 3.33, 3.66, 4.0, 4.33, 4.66] + np.arange(
-      5.0, 10.01, 0.25).tolist()
+  spending_rules = [4.33, 4.66] + np.arange(5.0, 10.01, 0.5).tolist()
   win_threshold_options = [
-      WinThresholdType.DISABLED, WinThresholdType.V1, WinThresholdType.V2_50,
-      WinThresholdType.V2_60, WinThresholdType.V2_70, WinThresholdType.V2_80,
-      WinThresholdType.V2_85, WinThresholdType.V2_90, WinThresholdType.V2_95,
-      WinThresholdType.V2_97, WinThresholdType.V2_98, WinThresholdType.V2_99,
-      WinThresholdType.V2_MAX
+      WinThresholdType.DISABLED, WinThresholdType.V1, WinThresholdType.V2_70,
+      WinThresholdType.V2_80, WinThresholdType.V2_90
   ]
 
   # ベースライン設定 (re60_pen70_95)
@@ -99,10 +100,26 @@ def main():
     bankrupt_count = (res.sustained_months < YEARS * 12).sum()
     survival_rate = 1.0 - (bankrupt_count / N_SIM_EVAL)
 
+    # 手法の特定
+    mode = "unknown"
+    if "tblegacy" in model_base:
+      mode = "legacy"
+    elif "tbgoal_based" in model_base:
+      mode = "goal_based"
+    elif "tbsurvival_first" in model_base:
+      mode = "survival_first"
+
+    min_y = 0
+    if "miny5" in model_base:
+      min_y = 5
+    elif "miny25" in model_base:
+      min_y = 25
+
     results.append({
         "model": model_base,
+        "mode": mode,
+        "min_y": min_y,
         "win_type": win_type.name,
-        "robust": "robust" in model_base,
         "n_sim_train": 1000,
         "spending_rule": rule,
         "survival_rate": survival_rate
