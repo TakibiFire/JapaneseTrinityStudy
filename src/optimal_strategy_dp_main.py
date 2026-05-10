@@ -180,12 +180,16 @@ def main():
                       help="出力ファイルのパス。指定しない場合はデフォルトのパスを使用")
   parser.add_argument("--tie_breaker_method",
                       type=str,
-                      choices=["legacy", "goal_based"],
-                      default="legacy",
-                      help="タイブレークの手法 (legacy: 最大の A を選択, goal_based: 勝利確率を考慮)")
+                      choices=["legacy", "goal_based", "survival_first_goal_based"],
+                      default="survival_first_goal_based",
+                      help="タイブレークの手法 (legacy: 最大の A を選択, goal_based: 勝利確率を考慮, survival_first_goal_based: 生存確率 100% の場合のみ勝利確率を考慮)")
   parser.add_argument("--disable_shortcuts",
                       action="store_true",
                       help="A のサンプリングの高速化（ショートカット）を無効化する")
+  parser.add_argument("--min_y_withdraw",
+                      type=float,
+                      default=5.0,
+                      help="初期資産 X を計算する際の純支出 Y の下限 (万円)。Y=0 の時の特異点を回避するために使用。")
   args = parser.parse_args()
 
   # 互換性維持のための後処理
@@ -475,7 +479,15 @@ def main():
         return eval_cache[r_key]
 
       # 初期資産 X_p,N = Y_withdraw,p,N / r
-      x_p_n = y_withdraw_n / r
+      # Y=0 の時の特異点を回避するため、Y に下限を設ける。
+      # DPの評価対象である「年間支出率 R」は、本来 Y/X で定義される。
+      # Y=0 の時、Xがいくらであっても R=0 となるはずだが、現在の逆算ロジック
+      # (X = Y/R) では X=0 と算出されてしまい、翌年以降に Y>0 となった際に
+      # 確実に破産してしまう。これを避けるため、仮想的な最小支出(Y_min)を設定し、
+      # X = max(Y, Y_min) / R とすることで、富裕層（低R）の評価時に妥当な
+      # 資産額をシミュレーションに与える。
+      y_withdraw_eff = np.maximum(y_withdraw_n, args.min_y_withdraw)
+      x_p_n = y_withdraw_eff / r
 
       # 最適な生存確率
       best_survival = -1.0
@@ -660,7 +672,7 @@ def main():
 
         # タイブレーク用の追加指標: 勝利確率
         p_win = 0.0
-        if args.tie_breaker_method == "goal_based":
+        if args.tie_breaker_method in ["goal_based", "survival_first_goal_based"]:
           if age == end_age - 1:
             # 最終年は生存確率そのものを勝利確率とする
             p_win = avg_survival
@@ -690,6 +702,19 @@ def main():
             if p_win > best_p_win + 1e-9:
               is_better = True
             elif abs(p_win - best_p_win) < 1e-9:
+              if a > best_a:
+                is_better = True
+          elif args.tie_breaker_method == "survival_first_goal_based":
+            # 生存確率がほぼ 100%（妥協ルールの範囲内）の場合のみ、勝利確率を考慮する
+            # n_sim=1000 の場合、1パスの重みは 0.001 であるため、0.999 以上を 100% 圏内とみなす
+            if avg_survival >= 0.999 - 1e-9:
+              if p_win > best_p_win + 1e-9:
+                is_better = True
+              elif abs(p_win - best_p_win) < 1e-9:
+                if a > best_a:
+                  is_better = True
+            else:
+              # 生存確率が 100% 未満の場合は、従来の A が大きい方を選択
               if a > best_a:
                 is_better = True
 
@@ -829,7 +854,7 @@ def main():
         # A_opt が安定している領域ではサンプリングを高速化
         a_fixed = None
         reason = ""
-        # goal_based または disable_shortcuts が有効な場合はショートカットを行わない
+        # goal_based 系の手法または disable_shortcuts が有効な場合はショートカットを行わない
         if args.tie_breaker_method == "legacy" and not args.disable_shortcuts:
           if r < r_min_a:
             a_fixed = 1.0
@@ -841,7 +866,7 @@ def main():
             reason = f"R={r:.4f} > R_max_a={r_max_a:.4f} なので A={a_fixed:.2f} に固定"
         evaluate_r(r, a_fixed=a_fixed, stage="遷移領域サンプリング", reason=reason)
       for i in range(len(step_r_vals) - 1):
-        # goal_based または disable_shortcuts の場合は a_fixed による高速化を行わない
+        # goal_based 系の手法または disable_shortcuts の場合は a_fixed による高速化を行わない
         use_shortcuts = args.tie_breaker_method == "legacy" and not args.disable_shortcuts
         r_min_a_val = r_min_a if use_shortcuts else None
         r_max_a_val = r_max_a if use_shortcuts else None
@@ -889,6 +914,11 @@ def main():
     unique_r_a, unique_idx_a = np.unique(df_fit_a["r"], return_index=True)
     if args.tie_breaker_method == "legacy":
       a_fit_targets = df_fit_a["a_opt_max"].values[unique_idx_a]
+    elif args.tie_breaker_method == "survival_first_goal_based":
+      # 生存確率がほぼ 100% なら a_opt (goal_based), そうでなければ a_opt_max (legacy 互換の 0.1% 妥協ルール)
+      is_100 = df_fit_a["p_survival"] >= 0.999 - 1e-9
+      a_targets_raw = np.where(is_100, df_fit_a["a_opt"], df_fit_a["a_opt_max"])
+      a_fit_targets = a_targets_raw[unique_idx_a]
     else:
       a_fit_targets = df_fit_a["a_opt"].values[unique_idx_a]
 
