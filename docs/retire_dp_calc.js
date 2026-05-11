@@ -234,10 +234,7 @@ function calculateAll() {
     const targetExpectedYN = expectedSpend * levelMultiplier;
 
     if (mValEl) {
-      // 今年(N歳)の予定支出から、開始年齢時点の支出に逆算して表示する
-      const multiplierBaseToN = predictor.getSpendMultiplier(startAge, age);
-      const spendAtBase = targetExpectedYN / multiplierBaseToN;
-      mValEl.textContent = Math.round(spendAtBase) + '万';
+      mValEl.textContent = calcConfig.base_spends[m] + '万';
     }
 
     if (!predictor.data[age]) {

@@ -343,8 +343,8 @@ def get_pen70_ds_setup(
         spend_adjustment=SpendAwareAdjustment(model_name=model_path,
                                               p_low=0.97,
                                               p_high=0.9999,
-                                              lower_mult=0.985,
-                                              upper_mult=1.005))
+                                              lower_mult=0.98,
+                                              upper_mult=1.01))
 
     exp_setup.add_experiment(
         name=f"Mult_{spend_mult}_Rule_{rule}%_{strat_name}",
