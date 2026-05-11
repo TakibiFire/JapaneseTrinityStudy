@@ -1,8 +1,5 @@
 /**
- * 60歳リタイア用 DP 最適戦略計算機 (JavaScript 版)
- * 
- * PCHIP (Piecewise Cubic Hermite Interpolating Polynomial) 補間を実装し、
- * Python の scipy.interpolate.pchip_interpolate と同様の挙動を再現します。
+ * 汎用 DP 最適戦略計算機 (JavaScript 版)
  */
 
 class PchipInterpolator {
@@ -37,7 +34,6 @@ class PchipInterpolator {
   }
 
   computeEndpointDerivative(h0, h1, d0, d1) {
-    // One-sided derivative at the boundary
     const s = ((2 * h0 + h1) * d0 - h0 * d1) / (h0 + h1);
     if (s * d0 <= 0) {
       return 0;
@@ -51,7 +47,6 @@ class PchipInterpolator {
     if (xi <= this.x[0]) return this.y[0];
     if (xi >= this.x[this.n - 1]) return this.y[this.n - 1];
 
-    // Binary search for the interval
     let low = 0, high = this.n - 2;
     while (low <= high) {
       const mid = Math.floor((low + high) / 2);
@@ -62,7 +57,6 @@ class PchipInterpolator {
         const t2 = t * t;
         const t3 = t2 * t;
         
-        // Hermite basis functions
         const h00 = 2 * t3 - 3 * t2 + 1;
         const h10 = t3 - 2 * t2 + t;
         const h01 = -2 * t3 + 3 * t2;
@@ -130,87 +124,133 @@ class DPOptimalStrategyPredictor {
     return this.p_surv_interpolators[age].interpolate(sRate);
   }
 
-  calculateWinningThreshold(age, lastYWithdraw, zScore = 2.326) {
+  calculateWinningThreshold(age, expectedYN, zScore = 2.326) {
     const mN = this.data[age]?.m_winning_multiplier || 0;
     if (mN <= 0) return Infinity;
-    
-    const expectedGrowth = this.getSpendMultiplier(age - 1, age);
-    const worstCaseYN = lastYWithdraw * expectedGrowth * this.getUnexpectedCpiJump(zScore);
+    const worstCaseYN = expectedYN * this.getUnexpectedCpiJump(zScore);
     return mN * worstCaseYN;
   }
 
-  getAOptWithWinningThreshold(age, initialWealth, lastYWithdraw, zScoreWinning = 2.326, zScoreNextSpend = 0.0) {
-    const wN = this.calculateWinningThreshold(age, lastYWithdraw, zScoreWinning);
-    
+  getAOptWithWinningThreshold(age, initialWealth, expectedYN, zScoreWinning = 2.326) {
+    const wN = this.calculateWinningThreshold(age, expectedYN, zScoreWinning);
     if (initialWealth > wN) {
       return (initialWealth - wN) / initialWealth;
     }
-
-    let expectedGrowth = this.getSpendMultiplier(age - 1, age);
-    if (zScoreNextSpend !== 0) {
-      expectedGrowth *= this.getUnexpectedCpiJump(zScoreNextSpend);
-    }
-    const expectedYN = lastYWithdraw * expectedGrowth;
     const sRate = expectedYN / initialWealth;
     return this.predictAOpt(age, sRate);
   }
 }
 
-// グローバルな予測器インスタンスを保持するオブジェクト
-const predictors = {};
-const mValues = ["0.75", "1", "1.2", "1.5", "2", "3"];
-const mFiles = {
-  "0.75": 'data/all_60yr/re60_pen70_95_m0_75.json',
-  "1": 'data/all_60yr/re60_pen70_95_m1.json',
-  "1.2": 'data/all_60yr/re60_pen70_95_m1_2.json',
-  "1.5": 'data/all_60yr/re60_pen70_95_m1_5.json',
-  "2": 'data/all_60yr/re60_pen70_95_m2.json',
-  "3": 'data/all_60yr/re60_pen70_95_m3.json'
-};
+let calcConfig = null;
+let formulaConfig = null;
+let predictors = {};
+let mValues = [];
+let startAge = 60;
 
-async function initPredictors() {
-  const promises = mValues.map(async (m) => {
-    try {
-      const response = await fetch(mFiles[m]);
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-      const data = await response.json();
-      predictors[m] = new DPOptimalStrategyPredictor(data);
-      calculateAll();
-    } catch (e) {
-      console.error(`Failed to load model M=${m}:`, e);
+async function init() {
+  const params = new URLSearchParams(window.location.search);
+  const dataKey = params.get('data') || 'all_60yr';
+  
+  try {
+    // dp_calc.json から計算機設定を読み込む
+    const cResponse = await fetch(`data/${dataKey}/dp_calc.json`);
+    if (!cResponse.ok) throw new Error("Failed to load dp_calc.json");
+    calcConfig = await cResponse.json();
+
+    startAge = calcConfig.start_age || 60;
+    const targetAge = calcConfig.target_age || 95;
+
+    document.getElementById('html-title').textContent = `${startAge}歳リタイア用 最適オルカン配分計算機`;
+    document.getElementById('title').textContent = `${startAge}歳リタイア用 最適オルカン配分計算機`;
+    document.getElementById('age-base-header').textContent = `${startAge}歳時の取り崩し額`;
+    document.getElementById('age-label').textContent = `現在の年齢 (${startAge}〜${targetAge - 1}歳)`;
+
+    const ageEl = document.getElementById('age');
+    ageEl.value = startAge;
+    ageEl.min = startAge;
+    ageEl.max = targetAge - 1;
+
+    mValues = Object.keys(calcConfig.models).sort((a, b) => parseFloat(a) - parseFloat(b));
+    
+    // テーブル行の生成
+    const tbody = document.getElementById('table-body');
+    tbody.innerHTML = '';
+    mValues.forEach(m => {
+      const mId = m.replace('.', '_');
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td class="m-label">x${m}</td>
+        <td id="m_val_${mId}">${calcConfig.base_spends[m]}万</td>
+        <td class="val-a" id="a_val_${mId}">---</td>
+        <td class="val-p" id="p_val_${mId}">---</td>
+      `;
+      tbody.appendChild(row);
+    });
+
+    // デフォルトの予定支出額を設定 (x1.0 の値)
+    const expectedSpendEl = document.getElementById('expectedSpend');
+    if (calcConfig.base_spends["1.0"]) {
+      expectedSpendEl.value = calcConfig.base_spends["1.0"];
+    } else if (calcConfig.base_spends["1"]) {
+      expectedSpendEl.value = calcConfig.base_spends["1"];
     }
-  });
-  await Promise.all(promises);
+
+    // モデルの読み込み
+    const promises = mValues.map(async (m) => {
+      try {
+        const mResponse = await fetch(`data/${dataKey}/${calcConfig.models[m]}`);
+        const mData = await mResponse.json();
+        predictors[m] = new DPOptimalStrategyPredictor(mData);
+      } catch (e) {
+        console.error(`Failed to load model M=${m}:`, e);
+      }
+    });
+    
+    await Promise.all(promises);
+    calculateAll();
+
+  } catch (e) {
+    console.error("Initialization failed", e);
+  }
 }
 
 function calculateAll() {
   const age = parseInt(document.getElementById('age').value);
   const wealth = parseFloat(document.getElementById('wealth').value);
-  const lastSpend = parseFloat(document.getElementById('lastSpend').value);
+  const expectedSpend = parseFloat(document.getElementById('expectedSpend').value);
 
-  if (isNaN(age) || isNaN(wealth) || isNaN(lastSpend)) return;
+  if (isNaN(age) || isNaN(wealth) || isNaN(expectedSpend) || mValues.length === 0) return;
 
   mValues.forEach(m => {
     const predictor = predictors[m];
-    const aEl = document.getElementById(`a_val_${m.replace('.', '_')}`);
-    const pEl = document.getElementById(`p_val_${m.replace('.', '_')}`);
+    const mId = m.replace('.', '_');
+    const aEl = document.getElementById(`a_val_${mId}`);
+    const pEl = document.getElementById(`p_val_${mId}`);
+    const mValEl = document.getElementById(`m_val_${mId}`);
     
     if (!predictor) return;
-    if (!aEl || !pEl) return;
+    
+    const levelMultiplier = parseFloat(m);
+    const targetExpectedYN = expectedSpend * levelMultiplier;
+
+    if (mValEl) {
+      // 今年(N歳)の予定支出から、開始年齢時点の支出に逆算して表示する
+      const multiplierBaseToN = predictor.getSpendMultiplier(startAge, age);
+      const spendAtBase = targetExpectedYN / multiplierBaseToN;
+      mValEl.textContent = Math.round(spendAtBase) + '万';
+    }
 
     if (!predictor.data[age]) {
-      aEl.textContent = 'N/A';
-      pEl.textContent = 'N/A';
+      if (aEl) aEl.textContent = 'N/A';
+      if (pEl) pEl.textContent = 'N/A';
       return;
     }
 
     // A の計算
-    const aOpt = predictor.getAOptWithWinningThreshold(age, wealth, lastSpend);
+    const aOpt = predictor.getAOptWithWinningThreshold(age, wealth, targetExpectedYN);
     
-    // P の計算 (sRate = expectedYN / initialWealth)
-    const expectedGrowth = predictor.getSpendMultiplier(age - 1, age);
-    const expectedYN = lastSpend * expectedGrowth;
-    const sRate = expectedYN / wealth;
+    // P の計算
+    const sRate = targetExpectedYN / wealth;
     const pSurv = predictor.predictPSurv(age, sRate);
 
     if (aEl) aEl.textContent = (aOpt * 100).toFixed(1) + '%';
@@ -218,13 +258,9 @@ function calculateAll() {
   });
 }
 
-// 起動時
 document.addEventListener('DOMContentLoaded', async () => {
-  await initPredictors();
-  calculateAll();
-  
-  // イベントリスナー
-  ['age', 'wealth', 'lastSpend'].forEach(id => {
+  await init();
+  ['age', 'wealth', 'expectedSpend'].forEach(id => {
     document.getElementById(id).addEventListener('input', calculateAll);
   });
 });

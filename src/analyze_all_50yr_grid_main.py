@@ -11,6 +11,7 @@ data/all_50yr/ の結果を分析・可視化するスクリプト。
 import argparse
 import json
 import os
+import shutil
 
 import pandas as pd
 
@@ -496,6 +497,134 @@ def run_pen70_ds_analysis(df_all: pd.DataFrame, target_year: str):
     create_comp_curve(3.0, 5.0, "comp_ds_formula_m3_r5.svg")
 
 
+def generate_dp_calc_json(df_all: pd.DataFrame):
+  """
+  生存確率計算機（DP版）のための設定JSONを生成する。
+  """
+  print(f"\n\n{'='*20} DP計算機用JSONの生成 {'='*20}")
+
+  # 支出倍率ごとの代表的な初期支出額を抽出する
+  df_survival = df_all[df_all["value_type"] == "survival"].copy()
+
+  # ユニークな倍率を取得してソート
+  multipliers = sorted(df_survival["spend_multiplier"].unique())
+  base_spends = {}
+  models = {}
+
+  # モデルのコピー元ディレクトリ
+  model_src_dir = "data/optimal_strategy_dp"
+
+  for m in multipliers:
+    # 0.75 -> 0_75, 1.2 -> 1_2
+    m_val = float(m)
+    m_key = str(m_val).replace(".", "_") if m_val % 1 != 0 else str(int(m_val))
+    if m_key.endswith("_0"):
+      m_key = m_key[:-2]
+
+    # モデルファイル名 (re50_pen70_95_m0_75.json など)
+    model_name = f"re50_pen70_95_m{m_key}.json"
+    src_path = os.path.join(model_src_dir, model_name)
+    dst_path = os.path.join(DATA_OUT_DIR, model_name)
+
+    # コピー元が存在する場合のみコピーして登録
+    if os.path.exists(src_path):
+      shutil.copy(src_path, dst_path)
+      print(f"Copied {src_path} -> {dst_path}")
+
+      models[str(m_val)] = model_name
+
+      # 初期支出額の取得
+      m_rows = df_survival[df_survival["spend_multiplier"] == m]
+      base_spends[str(m_val)] = round(
+          float(m_rows.iloc[0]["initial_annual_cost"]))
+    else:
+      # コピー先が既に存在する場合も登録
+      if os.path.exists(dst_path):
+        models[str(m_val)] = model_name
+        m_rows = df_survival[df_survival["spend_multiplier"] == m]
+        base_spends[str(m_val)] = round(
+            float(m_rows.iloc[0]["initial_annual_cost"]))
+      else:
+        print(f"Warning: Model file not found: {src_path}")
+
+  out_json = {
+      "start_age": START_AGE,
+      "target_age": START_AGE + int(NUM_YEARS),
+      "models": models,
+      "base_spends": base_spends
+  }
+
+  os.makedirs(DATA_OUT_DIR, exist_ok=True)
+  json_path = os.path.join(DATA_OUT_DIR, "dp_calc.json")
+  with open(json_path, "w") as f:
+    json.dump(out_json, f, indent=2)
+  print(f"✅ {json_path} を保存しました。")
+
+
+def generate_dp_calc_json(df_all: pd.DataFrame):
+  """
+  生存確率計算機（DP版）のための設定JSONを生成する。
+  """
+  print(f"\n\n{'='*20} DP計算機用JSONの生成 {'='*20}")
+
+  # 支出倍率ごとの代表的な初期支出額を抽出する
+  df_survival = df_all[df_all["value_type"] == "survival"].copy()
+
+  # ユニークな倍率を取得してソート
+  multipliers = sorted(df_survival["spend_multiplier"].unique())
+  base_spends = {}
+  models = {}
+
+  # モデルのコピー元ディレクトリ
+  model_src_dir = "data/optimal_strategy_dp"
+
+  for m in multipliers:
+    # 0.75 -> 0_75, 1.2 -> 1_2
+    m_val = float(m)
+    m_key = str(m_val).replace(".", "_") if m_val % 1 != 0 else str(int(m_val))
+    if m_key.endswith("_0"):
+      m_key = m_key[:-2]
+
+    # モデルファイル名 (re50_pen70_95_m0_75.json など)
+    model_name = f"re50_pen70_95_m{m_key}.json"
+    src_path = os.path.join(model_src_dir, model_name)
+    dst_path = os.path.join(DATA_OUT_DIR, model_name)
+
+    # コピー元が存在する場合のみコピーして登録
+    if os.path.exists(src_path):
+      shutil.copy(src_path, dst_path)
+      print(f"Copied {src_path} -> {dst_path}")
+
+      models[str(m_val)] = model_name
+
+      # 初期支出額の取得
+      m_rows = df_survival[df_survival["spend_multiplier"] == m]
+      base_spends[str(m_val)] = round(
+          float(m_rows.iloc[0]["initial_annual_cost"]))
+    else:
+      # コピー先が既に存在する場合も登録
+      if os.path.exists(dst_path):
+        models[str(m_val)] = model_name
+        m_rows = df_survival[df_survival["spend_multiplier"] == m]
+        base_spends[str(m_val)] = round(
+            float(m_rows.iloc[0]["initial_annual_cost"]))
+      else:
+        print(f"Warning: Model file not found: {src_path}")
+
+  out_json = {
+      "start_age": START_AGE,
+      "target_age": START_AGE + int(NUM_YEARS),
+      "models": models,
+      "base_spends": base_spends
+  }
+
+  os.makedirs(DATA_OUT_DIR, exist_ok=True)
+  json_path = os.path.join(DATA_OUT_DIR, "dp_calc.json")
+  with open(json_path, "w") as f:
+    json.dump(out_json, f, indent=2)
+  print(f"✅ {json_path} を保存しました。")
+
+
 def main():
   parser = argparse.ArgumentParser(description="50歳リタイア開始・95歳までの分析・可視化スクリプト。")
   parser.add_argument(
@@ -525,6 +654,7 @@ def main():
       run_pen70_lifeplan_analysis(df_all, target_year)
     elif et == "pen70-formula":
       run_pen70_formula_analysis(df_all, target_year)
+      generate_dp_calc_json(df_all)
     elif et == "pen70-ds":
       run_pen70_ds_analysis(df_all, target_year)
     else:
