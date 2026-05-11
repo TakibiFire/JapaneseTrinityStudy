@@ -159,97 +159,6 @@ def run_optimal_pension_analysis(df_all: pd.DataFrame, target_year: str):
                                  y_sort=m_order)
 
 
-def run_p_d_range_analysis(df_all: pd.DataFrame, target_year: str):
-  """
-  P-D-RANGE の分析を実行する。
-  """
-  df_survival = df_all[df_all["value_type"] == "survival"].copy()
-  run_best_combination_analysis(
-      df_survival,
-      target_year=target_year,
-      img_dir=IMG_DIR,
-      temp_dir=TEMP_DIR,
-      title_prefix="60歳リタイア",
-      threshold=0.02,
-      pref_order=["P60_D1", "P65_D1", "P60_D0", "P65_D0"],
-      width=500,
-      height=450)
-
-
-def run_p60_d1_analysis(df_all: pd.DataFrame, target_year: str):
-  """
-  P60-D1 の詳細分析を実行する。
-  """
-  df_survival = df_all[df_all["value_type"] == "survival"].copy()
-
-  # 1. ヒートマップ
-  run_p60_d1_heatmap(df_survival)
-
-  # 2. 予測モデルの評価
-  feature_set_type = FeatureSetType.ASSET_SPEND
-  fitting_results = run_fitting_analysis(df_survival,
-                                         target_year,
-                                         feature_set_type=feature_set_type)
-
-  # 3. ステップワイズ特徴量選択
-  logit_results = [r for r in fitting_results if r["use_logit"]]
-  best_eval = max(logit_results, key=lambda x: x["adj_r2"])
-
-  model_sw, selected_sw, poly_sw = run_stepwise_fitting_analysis(
-      df_survival,
-      target_year,
-      max_adj_r2=float(best_eval["adj_r2"]),
-      poly_deg=int(best_eval["poly_deg"]),
-      interaction_only=bool(best_eval["interaction_only"]),
-      use_logit=True,
-      feature_set_type=feature_set_type)
-
-  # 4. 生存達成データの生成
-  target_probs = [0.97, 0.95, 0.90, 0.80, 0.70]
-  plot_data = []
-  for p in target_probs:
-    anchors = get_contour_anchor_points(df_survival, p, target_year)
-    plot_data.extend(generate_smooth_contour_data(anchors, f"{p*100:g}%"))
-  df_plot_survival = pd.DataFrame(plot_data)
-
-  # 5. グラフ保存
-  save_contour_charts(df_plot_survival,
-                      target_probs,
-                      img_dir=IMG_DIR,
-                      rule_range=(2.5, 8.0))
-
-  # 6. Rule of Thumb
-  generate_rule_of_thumb(df_survival, target_probs, target_year)
-
-
-def run_p60_d1_heatmap(df_survival: pd.DataFrame):
-  """
-  P60, D1 のヒートマップを作成する。
-  """
-  print(f"\n\n{'='*20} P60, D1 ヒートマップ生成 {'='*20}")
-
-  if df_survival.empty:
-    return
-
-  df_h, m_order, r_order = prepare_heatmap_labels(df_survival)
-
-  year_target = str(NUM_YEARS)
-  title = f"60歳リタイア・年金60歳・{year_target}年後生存確率(%) (ダイナミックスペンディングON)"
-  output_name = f"grid_heatmap_{year_target}yr_p60_dyn_on.svg"
-  output_path = os.path.join(IMG_DIR, output_name)
-
-  create_heatmap(df_h,
-                 target_col=year_target,
-                 title=title,
-                 x_col="rule_label",
-                 x_title="初期支出率 (%ルール)",
-                 y_col="multiplier_label",
-                 y_title="支出レベル",
-                 output_path=output_path,
-                 x_sort=r_order,
-                 y_sort=m_order)
-
-
 def run_pen70_lifeplan_analysis(df_all: pd.DataFrame, target_year: str):
   """
   pen70-lifeplan の分析を実行する。
@@ -644,7 +553,7 @@ def main():
       type=str,
       default="optimal-pension",
       help=
-      "実験設定 (comma separated: optimal-pension, P-D-RANGE, P60-D1, pen70-lifeplan, pen70-formula, pen70-ds)"
+      "実験設定 (comma separated: optimal-pension, pen70-lifeplan, pen70-formula, pen70-ds)"
   )
   args = parser.parse_args()
 
@@ -664,19 +573,6 @@ def main():
     if et == "optimal-pension":
       run_optimal_pension_analysis(df_all, target_year)
       generate_dp_calc_json(df_all)
-    elif et == "P-D-RANGE":
-      run_best_combination_analysis(
-          df_all[df_all["value_type"] == "survival"].copy(),
-          target_year=target_year,
-          img_dir=IMG_DIR,
-          temp_dir=TEMP_DIR,
-          title_prefix="60歳リタイア",
-          threshold=0.02,
-          pref_order=["P60_D1", "P65_D1", "P60_D0", "P65_D0"],
-          width=500,
-          height=450)
-    elif et == "P60-D1":
-      run_p60_d1_analysis(df_all, target_year)
     elif et == "pen70-lifeplan":
       run_pen70_lifeplan_analysis(df_all, target_year)
     elif et == "pen70-formula":
