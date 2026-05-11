@@ -59,11 +59,11 @@ def run_optimal_pension_analysis(df_all: pd.DataFrame, target_year: str):
 
   create_pension_survival_curve(df_all,
                                 multiplier=1.0,
-                                rule=5.0,
-                                title="受給開始年齢別 生存確率推移 (支出レベル1.0, 初年度支出率5%)",
+                                rule=2.5,
+                                title="受給開始年齢別 生存確率推移 (支出レベル1.0, 初年度支出率2.5%)",
                                 output_path=os.path.join(
                                     IMG_DIR,
-                                    "survival_curve_pension_m1_r5.svg"),
+                                    "survival_curve_pension_m1_r2_5.svg"),
                                 start_age=START_AGE,
                                 num_years=NUM_YEARS)
 
@@ -125,6 +125,19 @@ def run_optimal_pension_analysis(df_all: pd.DataFrame, target_year: str):
 
     selected_row["combo_label"] = label
     return selected_row
+
+  # NEW: ドキュメント作成用のデータ出力
+  print("\n--- 最適年金受給開始年齢の生存確率 (ドキュメント用) ---")
+  doc_cases = [
+      (1.0, 4.0),
+      (1.0, 5.0),
+  ]
+  for m, r in doc_cases:
+    case_data = df_survival[(df_survival["spend_multiplier"] == m) &
+                            (df_survival["spending_rule"] == r)]
+    if not case_data.empty:
+      print(f"\n支出レベル: {m}, 初期支出率: {r}%")
+      print(case_data[["pension_start_age", target_year]])
 
   results = []
   for _, group in df_survival.groupby(dim_cols):
@@ -316,6 +329,32 @@ def run_pen65_lifeplan_analysis(df_all: pd.DataFrame, target_year: str):
                                x_sort=r_order_imp,
                                y_sort=m_order_imp,
                                height=405)
+
+    print_comparison_summary(df_r65, df_v1, target_year)
+
+
+def print_comparison_summary(df_r65: pd.DataFrame, df_v1: pd.DataFrame,
+                             target_year: str):
+  """
+  R65とV1の生存確率の比較サマリーを表示する。
+  """
+  print("\n--- R65 vs V1 生存確率の比較サマリー ---")
+  df_pivot_r65 = df_r65.pivot(index='spend_multiplier',
+                               columns='spending_rule',
+                               values=target_year)
+  df_pivot_v1 = df_v1.pivot(index='spend_multiplier',
+                            columns='spending_rule',
+                            values=target_year)
+
+  diff = (df_pivot_r65 - df_pivot_v1) * 100
+  print("\n改善幅 (R65 - V1) [パーセンテージポイント]:")
+  print(diff)
+
+  print("\nR65 生存確率 (%):")
+  print(df_pivot_r65 * 100)
+
+  print("\nV1 生存確率 (%):")
+  print(df_pivot_v1 * 100)
 
 
 def run_pen65_formula_analysis(df_all: pd.DataFrame, target_year: str):
