@@ -5,7 +5,7 @@ data/all_40yr/ の結果を分析・可視化するスクリプト。
 1. 最適な受給開始年齢の分析
 2. 支出額パーセンタイル推移の生成
 3. 2次元ヒートマップによる可視化 (支出レベル vs 支出率)
-4. pen65-lifeplan 分析 (リバランス戦略の比較)
+4. pen70-lifeplan 分析 (リバランス戦略の比較)
 """
 
 import argparse
@@ -167,8 +167,8 @@ def run_percentile_analysis(df_all: pd.DataFrame):
 
   # 代表的なケースを選択
   cases = [
-      (1.0, 4.0, 65),
-      (1.0, 5.0, 75),
+      (1.0, 4.0, 70),
+      (1.0, 5.0, 70),
   ]
 
   for s_mult, rule, p_age in cases:
@@ -192,11 +192,11 @@ def run_percentile_analysis(df_all: pd.DataFrame):
                                   num_years=NUM_YEARS)
 
 
-def run_pen65_lifeplan_analysis(df_all: pd.DataFrame, target_year: str):
+def run_pen70_lifeplan_analysis(df_all: pd.DataFrame, target_year: str):
   """
-  pen65-lifeplan の分析を実行する。
+  pen70-lifeplan の分析を実行する。
   """
-  print(f"\n\n{'='*20} pen65-lifeplan 分析 {'='*20}")
+  print(f"\n\n{'='*20} pen70-lifeplan 分析 {'='*20}")
 
   df_survival = df_all[df_all["value_type"] == "survival"].copy()
   if df_survival.empty:
@@ -205,7 +205,7 @@ def run_pen65_lifeplan_analysis(df_all: pd.DataFrame, target_year: str):
 
   # 戦略の略称マッピング
   strategy_map = {
-      "SpendAwareDPRebalance (R65-aware)": "R65",
+      "SpendAwareDPRebalance (R70-aware)": "R70",
       "DynamicV1Rebalance": "V1",
       "固定最適比率": "固定",
       "No dynamic rebalance": "なし"
@@ -276,7 +276,7 @@ def run_pen65_lifeplan_analysis(df_all: pd.DataFrame, target_year: str):
 
   # 戦略ごとのカラーマップ
   color_map = {
-      "R65": "#B2F5EA",  # Light teal
+      "R70": "#B2F5EA",  # Light teal
       "V1": "#FBD38D",  # Light orange
       "固定": "#FEB2B2",  # Light red
       "なし": "#CBD5E0"  # Light gray
@@ -299,24 +299,24 @@ def run_pen65_lifeplan_analysis(df_all: pd.DataFrame, target_year: str):
                                y_sort=m_order,
                                height=405)
 
-  # 改善幅の計算 (R65 vs V1)
-  df_r65 = df_survival[df_survival["strategy_short"] == "R65"].copy()
+  # 改善幅の計算 (R70 vs V1)
+  df_r70 = df_survival[df_survival["strategy_short"] == "R70"].copy()
   df_v1 = df_survival[df_survival["strategy_short"] == "V1"].copy()
 
-  if not df_r65.empty and not df_v1.empty:
-    df_imp = pd.merge(df_r65[[
+  if not df_r70.empty and not df_v1.empty:
+    df_imp = pd.merge(df_r70[[
         'spend_multiplier', 'spending_rule', 'initial_annual_cost', target_year
     ]],
                       df_v1[['spend_multiplier', 'spending_rule', target_year]],
                       on=['spend_multiplier', 'spending_rule'],
-                      suffixes=('_r65', '_v1'))
-    df_imp["improvement"] = df_imp[f"{target_year}_r65"] - df_imp[
+                      suffixes=('_r70', '_v1'))
+    df_imp["improvement"] = df_imp[f"{target_year}_r70"] - df_imp[
         f"{target_year}_v1"]
 
     df_imp, m_order_imp, r_order_imp = prepare_heatmap_labels(df_imp)
 
-    title_imp = f"R65のV1に対する改善幅 ({target_year}年後生存確率 差分)"
-    output_path_imp = os.path.join(IMG_DIR, "improvement_r65_vs_v1_heatmap.svg")
+    title_imp = f"R70のV1に対する改善幅 ({target_year}年後生存確率 差分)"
+    output_path_imp = os.path.join(IMG_DIR, "improvement_r70_vs_v1_heatmap.svg")
 
     create_improvement_heatmap(df_imp,
                                target_col="improvement",
@@ -330,46 +330,46 @@ def run_pen65_lifeplan_analysis(df_all: pd.DataFrame, target_year: str):
                                y_sort=m_order_imp,
                                height=405)
 
-    print_comparison_summary(df_r65, df_v1, target_year)
+    print_comparison_summary(df_r70, df_v1, target_year)
 
 
-def print_comparison_summary(df_r65: pd.DataFrame, df_v1: pd.DataFrame,
+def print_comparison_summary(df_r70: pd.DataFrame, df_v1: pd.DataFrame,
                              target_year: str):
   """
-  R65とV1の生存確率の比較サマリーを表示する。
+  R70とV1の生存確率の比較サマリーを表示する。
   """
-  print("\n--- R65 vs V1 生存確率の比較サマリー ---")
-  df_pivot_r65 = df_r65.pivot(index='spend_multiplier',
+  print("\n--- R70 vs V1 生存確率の比較サマリー ---")
+  df_pivot_r70 = df_r70.pivot(index='spend_multiplier',
                                columns='spending_rule',
                                values=target_year)
   df_pivot_v1 = df_v1.pivot(index='spend_multiplier',
                             columns='spending_rule',
                             values=target_year)
 
-  diff = (df_pivot_r65 - df_pivot_v1) * 100
-  print("\n改善幅 (R65 - V1) [パーセンテージポイント]:")
+  diff = (df_pivot_r70 - df_pivot_v1) * 100
+  print("\n改善幅 (R70 - V1) [パーセンテージポイント]:")
   print(diff)
 
-  print("\nR65 生存確率 (%):")
-  print(df_pivot_r65 * 100)
+  print("\nR70 生存確率 (%):")
+  print(df_pivot_r70 * 100)
 
   print("\nV1 生存確率 (%):")
   print(df_pivot_v1 * 100)
 
 
-def run_pen65_formula_analysis(df_all: pd.DataFrame, target_year: str):
+def run_pen70_formula_analysis(df_all: pd.DataFrame, target_year: str):
   """
-  pen65-formula の詳細分析を実行する。
+  pen70-formula の詳細分析を実行する。
   """
-  print(f"\n\n{'='*20} pen65-formula 分析 {'='*20}")
+  print(f"\n\n{'='*20} pen70-formula 分析 {'='*20}")
   df_survival = df_all[df_all["value_type"] == "survival"].copy()
   if df_survival.empty:
     return
 
   # 1. ヒートマップ
   df_h, m_order, r_order = prepare_heatmap_labels(df_survival)
-  title = f"40歳リタイア・年金65歳・{target_year}年後生存確率(%) (R65-aware)"
-  output_path = os.path.join(IMG_DIR, "pen65_formula_heatmap.svg")
+  title = f"40歳リタイア・年金70歳・{target_year}年後生存確率(%) (R70-aware)"
+  output_path = os.path.join(IMG_DIR, "pen70_formula_heatmap.svg")
 
   create_heatmap(df_h,
                  target_col=target_year,
@@ -394,7 +394,7 @@ def run_pen65_formula_analysis(df_all: pd.DataFrame, target_year: str):
   save_contour_charts(df_plot_survival,
                       target_probs,
                       img_dir=IMG_DIR,
-                      prefix="pen65_formula_",
+                      prefix="pen70_formula_",
                       rule_range=(1.5, 5.0))
 
   # 4. Rule of Thumb
@@ -408,7 +408,7 @@ def run_pen65_formula_analysis(df_all: pd.DataFrame, target_year: str):
     os.makedirs(DATA_OUT_DIR, exist_ok=True)
     out_json = {
         "start_age": START_AGE,
-        "pension_start": 65,
+        "pension_start": 70,
         "target_age": START_AGE + int(target_year),
         **coeffs
     }
@@ -418,19 +418,19 @@ def run_pen65_formula_analysis(df_all: pd.DataFrame, target_year: str):
     print(f"✅ {json_path} を保存しました。")
 
 
-def run_pen65_ds_analysis(df_all: pd.DataFrame, target_year: str):
+def run_pen70_ds_analysis(df_all: pd.DataFrame, target_year: str):
   """
-  pen65-ds の詳細分析を実行する。
+  pen70-ds の詳細分析を実行する。
   """
-  print(f"\n\n{'='*20} pen65-ds 分析 {'='*20}")
+  print(f"\n\n{'='*20} pen70-ds 分析 {'='*20}")
   df_survival = df_all[df_all["value_type"] == "survival"].copy()
   if df_survival.empty:
     return
 
   # 1. ヒートマップ
   df_h, m_order, r_order = prepare_heatmap_labels(df_survival)
-  title = f"40歳リタイア・年金65歳・{target_year}年後生存確率(%) (R65 + SpendAwareDS)"
-  output_path = os.path.join(IMG_DIR, "pen65_ds_heatmap.svg")
+  title = f"40歳リタイア・年金70歳・{target_year}年後生存確率(%) (R70 + SpendAwareDS)"
+  output_path = os.path.join(IMG_DIR, "pen70_ds_heatmap.svg")
 
   create_heatmap(df_h,
                  target_col=target_year,
@@ -443,8 +443,8 @@ def run_pen65_ds_analysis(df_all: pd.DataFrame, target_year: str):
                  x_sort=r_order,
                  y_sort=m_order)
 
-  # 2. pen65-formula との比較ヒートマップ
-  formula_path = "data/all_40yr/pen65-formula.csv"
+  # 2. pen70-formula との比較ヒートマップ
+  formula_path = "data/all_40yr/pen70-formula.csv"
   if os.path.exists(formula_path):
     df_formula = pd.read_csv(formula_path)
     df_f_surv = df_formula[df_formula["value_type"] == "survival"].copy()
@@ -503,24 +503,24 @@ def run_pen65_ds_analysis(df_all: pd.DataFrame, target_year: str):
       data.append({
           "Year": 0,
           "Survival Probability (%)": 100.0,
-          "Strategy": "pen65-ds"
+          "Strategy": "pen70-ds"
       })
       data.append({
           "Year": 0,
           "Survival Probability (%)": 100.0,
-          "Strategy": "pen65-formula"
+          "Strategy": "pen70-formula"
       })
 
       for i, yr in enumerate(year_cols):
         data.append({
             "Year": int(yr),
             "Survival Probability (%)": ds_vals[i] * 100,
-            "Strategy": "pen65-ds"
+            "Strategy": "pen70-ds"
         })
         data.append({
             "Year": int(yr),
             "Survival Probability (%)": fo_vals[i] * 100,
-            "Strategy": "pen65-formula"
+            "Strategy": "pen70-formula"
         })
 
       df_plot = pd.DataFrame(data)
@@ -560,8 +560,8 @@ def generate_dp_calc_json(df_all: pd.DataFrame):
     if m_key.endswith("_0"):
       m_key = m_key[:-2]
 
-    # モデルファイル名 (re40_pen65_95_m0_75.json など)
-    model_name = f"re40_pen65_95_m{m_key}.json"
+    # モデルファイル名 (re40_pen70_95_m0_75.json など)
+    model_name = f"re40_pen70_95_m{m_key}.json"
     src_path = os.path.join(model_src_dir, model_name)
     dst_path = os.path.join(DATA_OUT_DIR, model_name)
 
@@ -606,7 +606,7 @@ def main():
       "--exp_type",
       type=str,
       default="optimal-pension",
-      help="実験設定 (optimal-pension, pen65-lifeplan, pen65-formula, pen65-ds)")
+      help="実験設定 (optimal-pension, pen70-lifeplan, pen70-formula, pen70-ds)")
   args = parser.parse_args()
 
   exp_types = args.exp_type.split(",")
@@ -625,13 +625,13 @@ def main():
     if et == "optimal-pension":
       run_optimal_pension_analysis(df_all, target_year)
       run_percentile_analysis(df_all)
-    elif et == "pen65-lifeplan":
-      run_pen65_lifeplan_analysis(df_all, target_year)
-    elif et == "pen65-formula":
-      run_pen65_formula_analysis(df_all, target_year)
+    elif et == "pen70-lifeplan":
+      run_pen70_lifeplan_analysis(df_all, target_year)
+    elif et == "pen70-formula":
+      run_pen70_formula_analysis(df_all, target_year)
       generate_dp_calc_json(df_all)
-    elif et == "pen65-ds":
-      run_pen65_ds_analysis(df_all, target_year)
+    elif et == "pen70-ds":
+      run_pen70_ds_analysis(df_all, target_year)
     else:
       print(f"Unknown experiment type: {et}")
 

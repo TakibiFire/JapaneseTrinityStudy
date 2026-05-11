@@ -85,6 +85,18 @@ def re40_pen65_95(n_sim: int, seed: int = 42) -> Setup:
                                seed=seed)
 
 
+def re40_pen70_95(n_sim: int, seed: int = 42) -> Setup:
+  """
+  開始40歳、リタイア40歳、年金開始70歳、終了94歳末のシナリオ設定を構築します。
+  """
+  return create_standard_world(n_sim=n_sim,
+                               start_age=40,
+                               end_age_inclusive=94,
+                               retirement_start_age=40,
+                               pension_start_age=70,
+                               seed=seed)
+
+
 def re50_pen70_95(n_sim: int, seed: int = 42) -> Setup:
   """
   開始50歳、リタイア50歳、年金開始70歳、終了94歳末のシナリオ設定を構築します。
@@ -152,6 +164,51 @@ def re40_pen65_95_m2(n_sim: int, seed: int = 42) -> Setup:
 
 def re40_pen65_95_m3(n_sim: int, seed: int = 42) -> Setup:
   return _create_re40_pen65_with_mult(n_sim, 3.0, seed)
+
+
+def _create_re40_pen70_with_mult(n_sim: int,
+                                 multiplier: float,
+                                 seed: int = 42) -> Setup:
+  """
+  開始40歳、リタイア40歳、年金開始70歳、終了94歳末で、初期支出倍率を指定したシナリオ設定を構築します。
+  """
+  setup = re40_pen70_95(n_sim=n_sim, seed=seed)
+
+  base_spend_annual = get_annual_retired_spending_values(
+      [SpendingType.CONSUMPTION, SpendingType.NON_CONSUMPTION_EXCLUDE_PENSION],
+      40, 1)[0]
+  initial_annual_cost = base_spend_annual * multiplier
+
+  # Lifeplan の支出設定を上書き
+  setup.lifeplan = replace(
+      setup.lifeplan,
+      base_spend=CurveSpend(first_year_annual_amount=initial_annual_cost))
+
+  return setup
+
+
+def re40_pen70_95_m0_5(n_sim: int, seed: int = 42) -> Setup:
+  return _create_re40_pen70_with_mult(n_sim, 0.5, seed)
+
+
+def re40_pen70_95_m0_75(n_sim: int, seed: int = 42) -> Setup:
+  return _create_re40_pen70_with_mult(n_sim, 0.75, seed)
+
+
+def re40_pen70_95_m1(n_sim: int, seed: int = 42) -> Setup:
+  return _create_re40_pen70_with_mult(n_sim, 1.0, seed)
+
+
+def re40_pen70_95_m1_5(n_sim: int, seed: int = 42) -> Setup:
+  return _create_re40_pen70_with_mult(n_sim, 1.5, seed)
+
+
+def re40_pen70_95_m2(n_sim: int, seed: int = 42) -> Setup:
+  return _create_re40_pen70_with_mult(n_sim, 2.0, seed)
+
+
+def re40_pen70_95_m3(n_sim: int, seed: int = 42) -> Setup:
+  return _create_re40_pen70_with_mult(n_sim, 3.0, seed)
 
 
 def _create_re50_pen70_with_mult(n_sim: int,

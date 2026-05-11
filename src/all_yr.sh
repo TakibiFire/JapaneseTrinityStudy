@@ -19,8 +19,8 @@ EXP_TYPES_60YR=("optimal-pension" "pen70-lifeplan" "pen70-formula" "pen70-ds")
 SCENARIOS_50YR=("re50_pen70_95_m0_75" "re50_pen70_95_m1" "re50_pen70_95_m1_2" "re50_pen70_95_m1_5" "re50_pen70_95_m2" "re50_pen70_95_m3")
 EXP_TYPES_50YR=("optimal-pension" "pen70-lifeplan" "pen70-formula" "pen70-ds")
 
-SCENARIOS_40YR=("re40_pen65_95_m0_5" "re40_pen65_95_m0_75" "re40_pen65_95_m1" "re40_pen65_95_m1_5" "re40_pen65_95_m2" "re40_pen65_95_m3")
-EXP_TYPES_40YR=("optimal-pension" "pen65-lifeplan" "pen65-formula" "pen65-ds")
+SCENARIOS_40YR=("re40_pen70_95_m0_75" "re40_pen70_95_m1" "re40_pen70_95_m1_5" "re40_pen70_95_m2" "re40_pen70_95_m3")
+EXP_TYPES_40YR=("optimal-pension" "pen70-lifeplan" "pen70-formula" "pen70-ds")
 
 # 最適戦略データの削除
 delete_old_data() {
