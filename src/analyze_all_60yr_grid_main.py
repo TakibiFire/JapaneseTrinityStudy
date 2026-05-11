@@ -12,6 +12,7 @@ data/all_60yr/ の結果を分析・可視化するスクリプト。
 """
 
 import argparse
+import json
 import os
 
 import pandas as pd
@@ -34,6 +35,7 @@ from src.lib.visualize_all_yr import (calculate_preference_order,
 
 # 設定
 IMG_DIR = "docs/imgs/all_60yr"
+DATA_OUT_DIR = "docs/data/all_60yr"
 TEMP_DIR = "temp/all_60yr"
 BASE_SPEND_ANNUAL = 540.0
 NUM_YEARS = 35
@@ -434,7 +436,21 @@ def run_pen70_formula_analysis(df_all: pd.DataFrame, target_year: str):
   generate_rule_of_thumb(df_survival, target_probs, target_year)
 
   # 5. 詳細な近似モデルの分析
-  run_survival_formula_analysis(df_survival, target_year)
+  coeffs = run_survival_formula_analysis(df_survival, target_year)
+
+  # 6. JSON出力
+  if coeffs:
+    os.makedirs(DATA_OUT_DIR, exist_ok=True)
+    out_json = {
+        "start_age": START_AGE,
+        "pension_start": 70,
+        "target_age": START_AGE + int(target_year),
+        **coeffs
+    }
+    json_path = os.path.join(DATA_OUT_DIR, "formula.json")
+    with open(json_path, "w") as f:
+      json.dump(out_json, f, indent=2)
+    print(f"✅ {json_path} を保存しました。")
 
 
 def run_pen70_ds_analysis(df_all: pd.DataFrame, target_year: str):

@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>生存戦略シミュレーター (公式モデル)</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      line-height: 1.4;
+      color: #333;
+      margin: 0;
+      padding: 10px;
+      background-color: #f8f9fa;
+    }
+    .container {
+      max-width: 500px;
+      margin: 0 auto;
+      background: #fff;
+      padding: 14px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    h1 {
+      font-size: 1.1rem;
+      margin-top: 0;
+      margin-bottom: 0.8rem;
+      text-align: center;
+    }
+    .form-group {
+      margin-bottom: 0.8rem;
+    }
+    label {
+      display: block;
+      margin-bottom: 0.3rem;
+      font-weight: bold;
+      font-size: 0.8rem;
+    }
+    select {
+      width: 100%;
+      padding: 6px 8px;
+      border: 1px solid #ced4da;
+      border-radius: 4px;
+      box-sizing: border-box;
+      font-size: 0.95rem;
+      background-color: #e9ecef;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    input {
+      width: 100%;
+      padding: 6px 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-sizing: border-box;
+      font-size: 1rem;
+      background-color: #ffffff;
+    }
+    .input-row {
+      display: flex;
+      gap: 12px;
+    }
+    .input-row .form-group {
+      flex: 1;
+    }
+    .output-area {
+      min-height: 90px;
+      margin-top: 0.5rem;
+      padding-top: 0.8rem;
+      border-top: 2px solid #eee;
+    }
+    .warning {
+      display: none;
+      background-color: #fff3cd;
+      color: #856404;
+      padding: 10px;
+      border-radius: 4px;
+      font-size: 0.8rem;
+      border: 1px solid #ffeeba;
+    }
+    .result-group {
+      display: block;
+    }
+    .result-value {
+      font-size: 1.5rem;
+      font-weight: bold;
+      color: #007bff;
+      text-align: center;
+    }
+    .unit {
+      font-size: 0.8rem;
+      color: #666;
+      margin-left: 2px;
+    }
+    .range-info {
+      display: none;
+      font-size: 0.75rem;
+      color: #666;
+      margin-top: 0.8rem;
+      background: #f1f3f5;
+      padding: 8px;
+      border-radius: 4px;
+    }
+    .range-info b {
+      color: #333;
+    }
+    .note {
+      font-size: 0.7rem;
+      color: #888;
+      margin-top: 0.8rem;
+      border-top: 1px solid #eee;
+      padding-top: 0.5rem;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h1 id="title">リタイア生存戦略計算機</h1>
+
+  <div class="form-group">
+    <label for="mode">計算モード</label>
+    <select id="mode">
+      <option value="calc_prob">総資産と支出額から生存確率を求める</option>
+      <option value="calc_spend">総資産と目標生存確率から支出額を求める</option>
+      <option value="calc_money">支出額と目標生存確率から総資産を求める</option>
+    </select>
+  </div>
+
+  <div class="input-row">
+    <div class="form-group" id="group1">
+      <label id="label1" for="input1">総資産 (M)</label>
+      <input type="number" id="input1" value="10000" step="100">
+      <div class="unit" id="unit1">万円</div>
+    </div>
+    <div class="form-group" id="group2">
+      <label id="label2" for="input2">目標生存確率 (P)</label>
+      <input type="number" id="input2" value="95.0" step="1" min="1" max="100">
+      <div class="unit" id="unit2">%</div>
+    </div>
+  </div>
+
+  <div class="output-area">
+    <div id="warning" class="warning">
+      入力値が計算可能な範囲外です。
+    </div>
+
+    <div id="result_group" class="result-group">
+      <label id="label_res" style="text-align: center; display: block;">計算結果</label>
+      <div class="result-value">
+        <span id="res_val">---</span>
+        <span class="unit" id="unit_res">万円/年</span>
+      </div>
+    </div>
+
+    <div id="range_info" class="range-info">
+      <b>計算可能な範囲:</b><br>
+      <span id="range_text"></span>
+    </div>
+  </div>
+
+  <div id="note" class="note">
+    ※リタイア開始・年金受給モデルに基づく近似式を使用。
+  </div>
+</div>
+
+<script>
+  let config = {
+    rc1: 0, rc2: 0, rc3: 0, rc4: 0, rc5: 0,
+    start_age: 60, pension_start: 70, target_age: 95
+  };
+
+  const modeEl = document.getElementById('mode');
+  const input1El = document.getElementById('input1');
+  const input2El = document.getElementById('input2');
+  const label1El = document.getElementById('label1');
+  const label2El = document.getElementById('label2');
+  const unit1El = document.getElementById('unit1');
+  const unit2El = document.getElementById('unit2');
+  const labelResEl = document.getElementById('label_res');
+  const resValEl = document.getElementById('res_val');
+  const unitResEl = document.getElementById('unit_res');
+  const warningEl = document.getElementById('warning');
+  const resultGroupEl = document.getElementById('result_group');
+  const rangeInfoEl = document.getElementById('range_info');
+  const rangeTextEl = document.getElementById('range_text');
+  const noteEl = document.getElementById('note');
+  const titleEl = document.getElementById('title');
+
+  let state = {
+    M: 10000,
+    Spend: 400,
+    P: 95.0
+  };
+
+  async function init() {
+    const params = new URLSearchParams(window.location.search);
+    const dataKey = params.get('data') || 'all_60yr';
+    try {
+      const response = await fetch(`data/${dataKey}/formula.json`);
+      config = await response.json();
+      
+      titleEl.textContent = `${config.start_age}歳リタイア時の生存戦略計算機`;
+      noteEl.textContent = `※${config.start_age}歳リタイア・年金${config.pension_start}歳受給開始モデルに基づく近似式を使用。`;
+      
+      updateUI();
+    } catch (e) {
+      console.error("Failed to load formula data", e);
+      resValEl.textContent = "Error";
+    }
+  }
+
+  function updateUI() {
+    const mode = modeEl.value;
+    input1El.min = "";
+    input1El.max = "";
+    input2El.min = "";
+    input2El.max = "";
+
+    if (mode === 'calc_spend') {
+      label1El.textContent = '総資産 (M)';
+      unit1El.textContent = '万円';
+      input1El.step = '100';
+      input1El.value = Math.round(state.M);
+      
+      label2El.textContent = '目標生存確率 (P)';
+      unit2El.textContent = '%';
+      input2El.step = '1';
+      input2El.min = '1';
+      input2El.max = '100';
+      input2El.value = state.P.toFixed(1);
+
+      labelResEl.textContent = '計算結果: 年間支出額 (Spend)';
+      unitResEl.textContent = '万円/年';
+    } else if (mode === 'calc_money') {
+      label1El.textContent = '年間支出額 (Spend)';
+      unit1El.textContent = '万円/年';
+      input1El.step = '10';
+      input1El.value = Math.round(state.Spend);
+
+      label2El.textContent = '目標生存確率 (P)';
+      unit2El.textContent = '%';
+      input2El.step = '1';
+      input2El.min = '1';
+      input2El.max = '100';
+      input2El.value = state.P.toFixed(1);
+
+      labelResEl.textContent = '計算結果: 必要総資産 (M)';
+      unitResEl.textContent = '万円';
+    } else if (mode === 'calc_prob') {
+      label1El.textContent = '総資産 (M)';
+      unit1El.textContent = '万円';
+      input1El.step = '100';
+      input1El.value = Math.round(state.M);
+
+      label2El.textContent = '年間支出額 (Spend)';
+      unit2El.textContent = '万円/年';
+      input2El.step = '10';
+      input2El.value = Math.round(state.Spend);
+
+      labelResEl.textContent = '計算結果: 生存確率 (P)';
+      unitResEl.textContent = '%';
+    }
+    calculate();
+  }
+
+  function calculate() {
+    const mode = modeEl.value;
+    const v1 = parseFloat(input1El.value);
+    const v2 = parseFloat(input2El.value);
+
+    warningEl.style.display = 'none';
+    resultGroupEl.style.display = 'block';
+    rangeInfoEl.style.display = 'none';
+    noteEl.style.display = 'block';
+
+    if (isNaN(v1) || isNaN(v2)) {
+      resValEl.textContent = '---';
+      return;
+    }
+
+    if (mode === 'calc_spend') {
+      state.M = v1;
+      state.P = v2;
+    } else if (mode === 'calc_money') {
+      state.Spend = v1;
+      state.P = v2;
+    } else if (mode === 'calc_prob') {
+      state.M = v1;
+      state.Spend = v2;
+    }
+
+    const { rc1, rc2, rc3, rc4, rc5 } = config;
+
+    if (mode === 'calc_spend' || mode === 'calc_money') {
+      let P_val = v2 / 100;
+      if (P_val >= 1.0) P_val = 0.9999999999999999;
+      if (P_val <= 0.0) P_val = 0.0000000000000001;
+      const L = Math.log(P_val / (1 - P_val));
+
+      if (mode === 'calc_spend') {
+        const M = v1;
+        const result = (M * (rc2 - L * rc5) + (rc3 - L)) / (L * rc4 - rc1);
+        if (result < 0 || (rc4 * result + rc5 * M + 1) >= 0) {
+           showError();
+        } else {
+           state.Spend = result;
+           resValEl.textContent = Math.round(result).toLocaleString();
+        }
+      } else {
+        const Spend = v1;
+        const result = (Spend * (L * rc4 - rc1) + L - rc3) / (rc2 - L * rc5);
+        if (result < 0 || (rc4 * Spend + rc5 * result + 1) >= 0) {
+           showError();
+        } else {
+           state.M = result;
+           resValEl.textContent = Math.round(result).toLocaleString();
+        }
+      }
+    } else if (mode === 'calc_prob') {
+      const M = v1;
+      const Spend = v2;
+      const denom = rc4 * Spend + rc5 * M + 1;
+      if (denom >= 0) {
+        showError();
+        return;
+      }
+      const L = (rc1 * Spend + rc2 * M + rc3) / denom;
+      const P_result = Math.exp(L) / (1 + Math.exp(L));
+      state.P = P_result * 100;
+      resValEl.textContent = (P_result * 100).toFixed(1);
+    }
+  }
+
+  function showError() {
+    warningEl.style.display = 'block';
+    resultGroupEl.style.display = 'none';
+    rangeInfoEl.style.display = 'block';
+    rangeTextEl.textContent = "入力された条件ではモデルの計算可能範囲を超えています。";
+    noteEl.style.display = 'none';
+  }
+
+  modeEl.addEventListener('change', updateUI);
+  input1El.addEventListener('input', calculate);
+  input2El.addEventListener('input', calculate);
+
+  init();
+</script>
+
+</body>
+</html>
