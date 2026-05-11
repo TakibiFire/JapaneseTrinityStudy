@@ -8,53 +8,66 @@ import numpy as np
 import pandas as pd
 
 from src.lib.retired_spending import (BASE_AGES, CONSUMPTION_DATA,
-                                      NON_CONSUMPTION_DATA,
-                                      SINGLE_2019_BASE_AGES,
-                                      SINGLE_2019_CONSUMPTION_DATA,
-                                      SpendingType,
+                                      NON_CONSUMPTION_DATA, SpendingType,
                                       get_annual_retired_spending_values)
 
 
 def analyze_single_spending():
   """
-  単身世帯の2019年データに基づく支出推移を可視化する。
+  単身無職世帯の2025年データに基づく支出推移を可視化する。
   """
   start_age = 20
   end_age = 100  # inclusive
   target_ages = np.arange(start_age, end_age + 1)
+  num_years = end_age - start_age + 1
+
+  # 各支出種別の推計値を計算
   target_con = get_annual_retired_spending_values(
-      [SpendingType.SINGLE_2019_CONSUMPTION],
+      [SpendingType.SINGLE_2025_CONSUMPTION],
       start_age=start_age,
-      num_years=(end_age - start_age + 1))
+      num_years=num_years)
+  target_non_con = get_annual_retired_spending_values(
+      [SpendingType.UNEMPLOYED_SINGLE_2025_NON_CONSUMPTION_EXCLUDE_PENSION],
+      start_age=start_age,
+      num_years=num_years)
 
-  df_actual = pd.DataFrame({
-      "Age": SINGLE_2019_BASE_AGES,
-      "Value": SINGLE_2019_CONSUMPTION_DATA,
-      "支出種別": "消費支出 (2019年単身世帯)",
-      "データ": "実績"
-  })
+  df_spline = pd.concat([
+      pd.DataFrame({
+          "Age": target_ages,
+          "Value": target_con,
+          "支出種別": "消費支出",
+      }),
+      pd.DataFrame({
+          "Age": target_ages,
+          "Value": target_non_con,
+          "支出種別": "非消費支出 (年金除)",
+      }),
+      pd.DataFrame({
+          "Age": target_ages,
+          "Value": target_con + target_non_con,
+          "支出種別": "合計支出",
+      })
+  ])
 
-  df_spline = pd.DataFrame({
-      "Age": target_ages,
-      "Value": target_con,
-      "支出種別": "消費支出 (2019年単身世帯)",
-      "データ": "推計"
-  })
+  color_scale = alt.Color("支出種別:N",
+                          scale=alt.Scale(
+                              domain=["消費支出", "非消費支出 (年金除)", "合計支出"],
+                              range=["#1f77b4", "#ff7f0e", "#2ca02c"]),
+                          legend=alt.Legend(orient='top'))
 
-  chart_actual = alt.Chart(df_actual).mark_point(size=60, filled=True).encode(
+  chart = alt.Chart(df_spline).mark_line().encode(
       x=alt.X("Age:Q", title="年齢", scale=alt.Scale(domain=[20, 100])),
-      y=alt.Y("Value:Q", title="支出(円)"),
-      color=alt.value("#1f77b4"))
+      y=alt.Y("Value:Q", title="支出(万円)"),
+      color=color_scale,
+      strokeDash=alt.condition(alt.datum.支出種別 == "合計支出", alt.value([5, 5]),
+                               alt.value([0, 0])))
 
-  chart_spline = alt.Chart(df_spline).mark_line().encode(
-      x=alt.X("Age:Q", title="年齢", scale=alt.Scale(domain=[20, 100])),
-      y=alt.Y("Value:Q", title="支出(円)"),
-      color=alt.value("#1f77b4"))
-
-  chart = (chart_actual + chart_spline).properties(
-      width=600, height=350, title="単身世帯の年齢別消費支出推移（2019年全国家計構造調査）")
+  chart = chart.properties(width=600,
+                           height=350,
+                           title="単身無職世帯の年齢別支出推移（2025年 e-Stat 予測）")
 
   output_path = "docs/imgs/retired_spending/cost_by_age_single.svg"
+  os.makedirs(os.path.dirname(output_path), exist_ok=True)
   chart.save(output_path)
   print(f"単身世帯のグラフを保存しました: {output_path}")
 

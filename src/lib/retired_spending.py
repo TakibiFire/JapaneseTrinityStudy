@@ -16,7 +16,11 @@ AVERAGE_AGE_75PLUS = 83.88316897574647
 class SpendingType(Enum):
   """支出の種類を表す列挙型。"""
   CONSUMPTION = auto()  # 消費支出 (生活費)
-  SINGLE_2019_CONSUMPTION = auto()  # 単身世帯の消費支出 (2019年全国家計構造調査)
+  ALL_HOUSEHOLDS_2019_CONSUMPTION = auto()  # 総世帯の消費支出 (2019年全国家計構造調査)
+  SINGLE_2025_CONSUMPTION = auto()  # 単身世帯の消費支出 (2025年 e-Stat)
+  SINGLE_2025_NON_CONSUMPTION = auto()  # 単身世帯の非消費支出 (2025年 e-Stat)
+  UNEMPLOYED_SINGLE_2025_NON_CONSUMPTION_EXCLUDE_PENSION = auto(
+  )  # 高齢単身無職世帯の非消費支出 (年金除く)
   NON_CONSUMPTION = auto()  # 非消費支出 (税・保険料)
   NON_CONSUMPTION_EXCLUDE_PENSION = auto()  # 非消費支出 (年金保険料を除く)
 
@@ -29,11 +33,29 @@ NON_CONSUMPTION_DATA = np.array([90018, 129607, 141647, 41405, 34824, 30558
 CONSUMPTION_DATA = np.array([280544, 331526, 359951, 311281, 269015, 242840
                             ]) * 12.0 / 10000.0
 
-# 単身世帯の2019年全国家計構造調査に基づくデータポイント
+# 総世帯の2019年全国家計構造調査に基づくデータポイント
 # https://www.stat.go.jp/data/zenkokukakei/2019/pdf/gaiyou0305.pdf
-SINGLE_2019_BASE_AGES = np.array([25.0, 35.0, 45.0, 55.0, 65.0, 75.0, 85.0])
-SINGLE_2019_CONSUMPTION_DATA = np.array(
+ALL_HOUSEHOLDS_2019_BASE_AGES = np.array(
+    [25.0, 35.0, 45.0, 55.0, 65.0, 75.0, 85.0])
+ALL_HOUSEHOLDS_2019_CONSUMPTION_DATA = np.array(
     [168552, 222432, 254475, 283725, 258284, 225799, 190818]) * 12.0 / 10000.0
+
+# 単身世帯の2025年データポイント
+# https://www.e-stat.go.jp/dbview?sid=0002190004 単身世帯: 消費支出 2025
+# 34歳以下	35～59歳	60歳以上	65歳以上
+# 177,542	198,488	158,546	155,782
+# https://www.e-stat.go.jp/dbview?sid=0002190004 単身勤労世帯: 非消費支出
+# 34歳以下	35～59歳
+# 59,146	96,334
+# https://www.e-stat.go.jp/dbview?sid=0003000797 単身無職世帯
+# 実支出: 163,895, 消費支出: 150,965, 平均年齢 74.6
+# 差額 12,930を固定の非消費支出として扱う。
+SINGLE_2025_BASE_AGES = np.array([30.0, 47.5, 62.5, 75.0])
+SINGLE_2025_CONSUMPTION_DATA = np.array([177542, 198488, 179933, 155782
+                                        ]) * 12.0 / 10000.0
+SINGLE_2025_NON_CONSUMPTION_BASE_AGES = np.array([30.0, 47.5, 60.0, 75.0])
+SINGLE_2025_NON_CONSUMPTION_DATA = np.array([59146, 96334, 12930, 12930
+                                            ]) * 12.0 / 10000.0
 
 
 def calculate_average_age_75plus() -> float:
@@ -87,17 +109,45 @@ def get_annual_retired_spending_values(spending_types: List[SpendingType],
       con_full = np.append(CONSUMPTION_DATA, virtual_con)
       cs_con = CubicSpline(ages, con_full, bc_type='natural')
       total_values += np.maximum(cs_con(target_ages), virtual_con)
-    elif st == SpendingType.SINGLE_2019_CONSUMPTION:
-      # 単身世帯 2019年データの補完
-      last_age_s = SINGLE_2019_BASE_AGES[-1]
-      virtual_age_s = last_age_s + (last_age_s - SINGLE_2019_BASE_AGES[-2])
-      virtual_con_s = SINGLE_2019_CONSUMPTION_DATA[-1] * 0.9
-      ages_s = np.append(SINGLE_2019_BASE_AGES, virtual_age_s)
-      con_full_s = np.append(SINGLE_2019_CONSUMPTION_DATA, virtual_con_s)
+    elif st == SpendingType.ALL_HOUSEHOLDS_2019_CONSUMPTION:
+      # 総世帯 2019年データの補完
+      last_age_s = ALL_HOUSEHOLDS_2019_BASE_AGES[-1]
+      virtual_age_s = last_age_s + (last_age_s -
+                                    ALL_HOUSEHOLDS_2019_BASE_AGES[-2])
+      virtual_con_s = ALL_HOUSEHOLDS_2019_CONSUMPTION_DATA[-1] * 0.9
+      ages_s = np.append(ALL_HOUSEHOLDS_2019_BASE_AGES, virtual_age_s)
+      con_full_s = np.append(ALL_HOUSEHOLDS_2019_CONSUMPTION_DATA,
+                             virtual_con_s)
       cs_con_s = CubicSpline(ages_s, con_full_s, bc_type='natural')
       # ガード値が開始時の値を上回らないように調整 (168k < 171k のケースへの対応)
-      guard_s = min(virtual_con_s, SINGLE_2019_CONSUMPTION_DATA[0] * 0.9)
+      guard_s = min(virtual_con_s,
+                    ALL_HOUSEHOLDS_2019_CONSUMPTION_DATA[0] * 0.9)
       total_values += np.maximum(cs_con_s(target_ages), guard_s)
+    elif st == SpendingType.SINGLE_2025_CONSUMPTION:
+      # 単身世帯 2025年データの補完
+      last_age_s = SINGLE_2025_BASE_AGES[-1]
+      virtual_age_s = last_age_s + (last_age_s - SINGLE_2025_BASE_AGES[-2])
+      virtual_con_s = SINGLE_2025_CONSUMPTION_DATA[-1] * 0.9
+      ages_s = np.append(SINGLE_2025_BASE_AGES, virtual_age_s)
+      con_full_s = np.append(SINGLE_2025_CONSUMPTION_DATA, virtual_con_s)
+      cs_con_s = CubicSpline(ages_s, con_full_s, bc_type='natural')
+      guard_s = min(virtual_con_s, SINGLE_2025_CONSUMPTION_DATA[0] * 0.9)
+      total_values += np.maximum(cs_con_s(target_ages), guard_s)
+    elif st == SpendingType.SINGLE_2025_NON_CONSUMPTION:
+      # 単身勤労世帯の非消費支出 (34歳以下: 59,146, 35-59歳: 96,334)
+      # 60歳以降は無職世帯の 12,930 になると仮定
+      ages_s = np.array([30.0, 47.5, 60.0, 75.0])
+      vals_s = np.array([59146, 96334, 12930, 12930]) * 12.0 / 10000.0
+      last_age_s = ages_s[-1]
+      virtual_age_s = last_age_s + (last_age_s - ages_s[-2])
+      virtual_val_s = vals_s[-1] * 0.9
+      ages_ex = np.append(ages_s, virtual_age_s)
+      vals_ex = np.append(vals_s, virtual_val_s)
+      cs_s = CubicSpline(ages_ex, vals_ex, bc_type='natural')
+      total_values += np.maximum(cs_s(target_ages), virtual_val_s)
+    elif st == SpendingType.UNEMPLOYED_SINGLE_2025_NON_CONSUMPTION_EXCLUDE_PENSION:
+      # 高齢単身無職世帯の非消費支出 12,930円/月 = 15.516万円/年 (固定)
+      total_values += 12930.0 * 12.0 / 10000.0
     elif st == SpendingType.NON_CONSUMPTION:
       virtual_non_con = NON_CONSUMPTION_DATA[-1] * 0.9
       ages = np.append(BASE_AGES, virtual_age)

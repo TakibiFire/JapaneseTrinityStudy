@@ -21,9 +21,8 @@ def test_multipliers():
   assert m_con[0] == pytest.approx(1.0)
 
   # NON_CONSUMPTION
-  m_non = get_annual_retired_spending_multipliers([SpendingType.NON_CONSUMPTION],
-                                                  start_age=40,
-                                                  num_years=10)
+  m_non = get_annual_retired_spending_multipliers(
+      [SpendingType.NON_CONSUMPTION], start_age=40, num_years=10)
   assert len(m_non) == 10
   assert m_non[0] == pytest.approx(1.0)
 
@@ -37,11 +36,11 @@ def test_multipliers():
       [SpendingType.NON_CONSUMPTION], start_age=30, num_years=5)
   assert not np.array_equal(m_ex, m_non_30)
 
-  # SINGLE_2019_CONSUMPTION
-  m_single = get_annual_retired_spending_multipliers(
-      [SpendingType.SINGLE_2019_CONSUMPTION], start_age=30, num_years=5)
-  assert len(m_single) == 5
-  assert m_single[0] == pytest.approx(1.0)
+  # ALL_HOUSEHOLDS_2019_CONSUMPTION
+  m_all = get_annual_retired_spending_multipliers(
+      [SpendingType.ALL_HOUSEHOLDS_2019_CONSUMPTION], start_age=30, num_years=5)
+  assert len(m_all) == 5
+  assert m_all[0] == pytest.approx(1.0)
 
   # Multiple types
   m_both = get_annual_retired_spending_multipliers(
@@ -74,13 +73,13 @@ def test_annual_values():
   assert 400 < vals_35[0] < 450
 
 
-def test_single_2019_values():
-  # 2019年単身世帯データポイントの検証 (万円/年)
+def test_all_households_2019_values():
+  # 2019年総世帯データポイントの検証 (万円/年)
   # 年齢 25歳: 168,552 * 12 / 10000 = 202.2624
   # 年齢 55歳: 283,725 * 12 / 10000 = 340.47
   # 年齢 35歳: 222,432 * 12 / 10000 = 266.9184
   vals = get_annual_retired_spending_values(
-      [SpendingType.SINGLE_2019_CONSUMPTION],
+      [SpendingType.ALL_HOUSEHOLDS_2019_CONSUMPTION],
       start_age=25,
       num_years=31)  # 25から55まで
 
@@ -88,5 +87,28 @@ def test_single_2019_values():
   assert vals[30] == pytest.approx(340.47)
 
   vals_35 = get_annual_retired_spending_values(
-      [SpendingType.SINGLE_2019_CONSUMPTION], start_age=35, num_years=1)
+      [SpendingType.ALL_HOUSEHOLDS_2019_CONSUMPTION], start_age=35, num_years=1)
   assert vals_35[0] == pytest.approx(266.9184)
+
+
+def test_single_2025_values():
+  # 2025年単身世帯データポイントの検証 (万円/年)
+  # 年齢 30.0: 177,542 * 12 / 10000 = 213.0504
+  # 年齢 47.5: 198,488 * 12 / 10000 = 238.1856
+  # 年齢 62.5: 179,933 * 12 / 10000 = 215.9196
+  # 年齢 75.0: 155,782 * 12 / 10000 = 186.9384
+
+  # 整数年齢でチェック
+  vals = get_annual_retired_spending_values(
+      [SpendingType.SINGLE_2025_CONSUMPTION], start_age=30, num_years=46)
+
+  assert vals[0] == pytest.approx(213.0504)
+  # 75歳の値を確認
+  assert vals[45] == pytest.approx(186.9384)
+
+  # 非消費支出 (高齢単身無職世帯)
+  vals_non = get_annual_retired_spending_values(
+      [SpendingType.UNEMPLOYED_SINGLE_2025_NON_CONSUMPTION_EXCLUDE_PENSION],
+      start_age=65,
+      num_years=1)
+  assert vals_non[0] == pytest.approx(12930.0 * 12.0 / 10000.0)
