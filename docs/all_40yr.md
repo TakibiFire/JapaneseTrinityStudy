@@ -231,6 +231,8 @@ $$
 
 ちょっと簡易版なので上の表に載せた数字とわずかにずれますが、全ての生存確率で計算できるようにしてあります。
 
+「計算モード」を選んでから入力して下さい。
+
 <iframe 
   src="./retire_formula.html?data=all_40yr" 
   width="100%" 
@@ -239,8 +241,6 @@ $$
   scrolling="no" 
   style="max-width: 500px; display: block; margin: 0 auto; border: none;"
 ></iframe>
-
-「計算モード」を選んでから入力して下さい。
 
 ??? info "技術的な詳細：内部で使っている詳しい計算式"
 
