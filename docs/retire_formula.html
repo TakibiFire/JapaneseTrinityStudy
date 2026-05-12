@@ -166,7 +166,10 @@
 
 <script>
   let config = {
-    rc1: 0, rc2: 0, rc3: 0, rc4: 0, rc5: 0,
+    formula: {
+      method: "Direct Rational",
+      coefficients: { rc1: 0, rc2: 0, rc3: 0, rc4: 0, rc5: 0 }
+    },
     start_age: 60, pension_start: 70, target_age: 95
   };
 
@@ -201,7 +204,8 @@
       config = await response.json();
       
       titleEl.textContent = `${config.start_age}歳リタイア時の生存戦略計算機`;
-      noteEl.textContent = `※${config.start_age}歳リタイア・年金${config.pension_start}歳受給開始モデルに基づく近似式を使用。`;
+      const penText = config.pension_start ? `・年金${config.pension_start}歳受給開始` : "";
+      noteEl.textContent = `※${config.start_age}歳リタイア${penText}モデルに基づく近似式を使用。`;
       
       updateUI();
     } catch (e) {
@@ -290,7 +294,7 @@
       state.Spend = v2;
     }
 
-    const { rc1, rc2, rc3, rc4, rc5 } = config;
+    const { method, coefficients } = config.formula;
 
     if (mode === 'calc_spend' || mode === 'calc_money') {
       let P_val = v2 / 100;
@@ -300,32 +304,65 @@
 
       if (mode === 'calc_spend') {
         const M = v1;
-        const result = (M * (rc2 - L * rc5) + (rc3 - L)) / (L * rc4 - rc1);
-        if (result < 0 || (rc4 * result + rc5 * M + 1) >= 0) {
-           showError();
+        let result;
+        if (method === "Direct Rational") {
+          const { rc1, rc2, rc3, rc4, rc5 } = coefficients;
+          result = (M * (rc2 - L * rc5) + (rc3 - L)) / (L * rc4 - rc1);
+          if (result < 0 || (rc4 * result + rc5 * M + 1) >= 0) {
+            showError();
+            return;
+          }
         } else {
-           state.Spend = result;
-           resValEl.textContent = Math.round(result).toLocaleString();
+          const { ka, ia, kb, ib } = coefficients;
+          result = M / (ka * L + ia) + kb * L + ib;
         }
+        state.Spend = result;
+        resValEl.textContent = Math.round(result).toLocaleString();
       } else {
         const Spend = v1;
-        const result = (Spend * (L * rc4 - rc1) + L - rc3) / (rc2 - L * rc5);
-        if (result < 0 || (rc4 * Spend + rc5 * result + 1) >= 0) {
-           showError();
+        let result;
+        if (method === "Direct Rational") {
+          const { rc1, rc2, rc3, rc4, rc5 } = coefficients;
+          result = (Spend * (L * rc4 - rc1) + L - rc3) / (rc2 - L * rc5);
+          if (result < 0 || (rc4 * Spend + rc5 * result + 1) >= 0) {
+            showError();
+            return;
+          }
         } else {
-           state.M = result;
-           resValEl.textContent = Math.round(result).toLocaleString();
+          const { ka, ia, kb, ib } = coefficients;
+          result = (Spend - kb * L - ib) * (ka * L + ia);
         }
+        state.M = result;
+        resValEl.textContent = Math.round(result).toLocaleString();
       }
     } else if (mode === 'calc_prob') {
       const M = v1;
       const Spend = v2;
-      const denom = rc4 * Spend + rc5 * M + 1;
-      if (denom >= 0) {
-        showError();
-        return;
+      let L;
+      if (method === "Direct Rational") {
+        const { rc1, rc2, rc3, rc4, rc5 } = coefficients;
+        const denom = rc4 * Spend + rc5 * M + 1;
+        if (denom >= 0) {
+          showError();
+          return;
+        }
+        L = (rc1 * Spend + rc2 * M + rc3) / denom;
+      } else {
+        const { ka, ia, kb, ib } = coefficients;
+        const A = ka * kb;
+        const B = ka * ib + ia * kb - ka * Spend;
+        const C = ia * ib - ia * Spend + M;
+        const disc = B * B - 4 * A * C;
+        if (disc < 0) {
+          showError();
+          return;
+        }
+        // Quadratic root selection (the smaller root is usually the one)
+        L = (-B - Math.sqrt(disc)) / (2 * A);
+        if (L < -4 || L > 8) { // Check if the other root is better
+           L = (-B + Math.sqrt(disc)) / (2 * A);
+        }
       }
-      const L = (rc1 * Spend + rc2 * M + rc3) / denom;
       const P_result = Math.exp(L) / (1 + Math.exp(L));
       state.P = P_result * 100;
       resValEl.textContent = (P_result * 100).toFixed(1);

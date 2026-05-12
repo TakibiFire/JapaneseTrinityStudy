@@ -268,10 +268,37 @@ def run_survival_formula_analysis(df_survival: pd.DataFrame,
           f"| {p*100:g}% | {ta*100:.2f}% | {a_func(lp)*100:.2f}% | {tb:.1f} | {b_func(lp):.1f} |"
       )
 
+  # Compare R2 to select the best model among supported ones
+  supported_models = [
+      ("Direct Rational", df_fit_f["p_rat"], {
+          "rc1": rc1,
+          "rc2": rc2,
+          "rc3": rc3,
+          "rc4": rc4,
+          "rc5": rc5
+      }),
+      ("Hyper-Alpha + Lin-Beta", df_fit_f["p_h1_o"], {
+          "ka": ka_o,
+          "ia": ia_o,
+          "kb": kb_o,
+          "ib": ib_o
+      }),
+  ]
+
+  best_model_name = ""
+  best_r2 = -np.inf
+  best_coeffs = {}
+
+  for name, pred, coeffs in supported_models:
+    valid_pred = df_fit_f.dropna(subset=[pred.name])
+    r2 = r2_score(valid_pred['logit_p'], valid_pred[pred.name])
+    if r2 > best_r2:
+      best_r2 = r2
+      best_model_name = name
+      best_coeffs = coeffs
+
   return {
-      "rc1": rc1,
-      "rc2": rc2,
-      "rc3": rc3,
-      "rc4": rc4,
-      "rc5": rc5,
+      "method": best_model_name,
+      "r2": best_r2,
+      "coefficients": best_coeffs,
   }

@@ -410,7 +410,7 @@ def run_pen70_formula_analysis(df_all: pd.DataFrame, target_year: str):
         "start_age": START_AGE,
         "pension_start": 70,
         "target_age": START_AGE + int(target_year),
-        **coeffs
+        "formula": coeffs
     }
     json_path = os.path.join(DATA_OUT_DIR, "formula.json")
     with open(json_path, "w") as f:
