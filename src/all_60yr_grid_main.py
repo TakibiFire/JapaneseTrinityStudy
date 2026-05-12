@@ -62,7 +62,7 @@ def get_optimal_pension_setup(
   Returns:
     (Setup, int, combinations) のタプル。
   """
-  spend_multipliers = [0.5, 0.75, 1.0, 1.5, 2.0, 3.0]
+  spend_multipliers = [0.75, 1.0, 1.5, 2.0, 3.0]
   spending_rules = [2.5, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
   N_SIM = 2000
   pension_start_ages = [60, 65, 70, 75]

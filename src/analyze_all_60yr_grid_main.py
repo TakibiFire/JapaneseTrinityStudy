@@ -499,7 +499,6 @@ def main():
 
     if et == "optimal-pension":
       run_optimal_pension_analysis(df_all, target_year)
-      generate_dp_calc_json(df_all)
     elif et == "pen70-lifeplan":
       run_pen70_lifeplan_analysis(df_all, target_year)
     elif et == "pen70-formula":

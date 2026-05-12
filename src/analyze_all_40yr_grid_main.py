@@ -156,7 +156,8 @@ def run_optimal_pension_analysis(df_all: pd.DataFrame, target_year: str):
                                  y_title="支出レベル",
                                  output_path=output_path,
                                  x_sort=r_order,
-                                 y_sort=m_order)
+                                 y_sort=m_order,
+                                 all_ages=[f"{int(a)}歳" for a in pref_order])
 
 
 def run_percentile_analysis(df_all: pd.DataFrame):

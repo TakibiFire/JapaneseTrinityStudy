@@ -535,7 +535,8 @@ def create_optimal_pension_heatmap(df_best: pd.DataFrame,
                                    x_sort: Optional[List[Any]] = None,
                                    y_sort: Optional[List[Any]] = None,
                                    width: int = 500,
-                                   height: int = 450):
+                                   height: int = 450,
+                                   all_ages: Optional[List[str]] = None):
   """
   最適な年金受給開始年齢を可視化するヒートマップ。
   """
@@ -549,6 +550,9 @@ def create_optimal_pension_heatmap(df_best: pd.DataFrame,
       "73歳": "#FC8181",  # Pink/Red
       "75歳": "#FEB2B2"  # Light red
   }
+  if all_ages is not None:
+    color_map = {k: v for k, v in color_map.items() if k in all_ages}
+
   return create_best_strategy_heatmap(df_best, title, x_col, x_title, y_col,
                                       y_title, output_path, "display_age",
                                       "受給開始年齢", color_map, x_sort, y_sort,
@@ -687,7 +691,8 @@ def run_optimal_pension_age_analysis(df_all: pd.DataFrame,
                                  y_title="支出レベル",
                                  output_path=output_path,
                                  x_sort=r_order,
-                                 y_sort=m_order)
+                                 y_sort=m_order,
+                                 all_ages=[f"{int(a)}歳" for a in pref_order])
 
 
 def create_improvement_heatmap(df: pd.DataFrame,
