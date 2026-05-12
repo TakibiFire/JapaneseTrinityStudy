@@ -57,7 +57,7 @@ def run_optimal_pension_analysis(df_all: pd.DataFrame, target_year: str):
                                 num_years=NUM_YEARS)
 
   run_optimal_pension_age_analysis(df_all, target_year, IMG_DIR, START_AGE,
-                                   NUM_YEARS)
+                                   NUM_YEARS, shorten_labels=True)
 
 
 def run_percentile_analysis(df_all: pd.DataFrame):

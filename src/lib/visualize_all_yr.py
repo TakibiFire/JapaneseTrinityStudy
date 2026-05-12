@@ -538,6 +538,7 @@ def run_optimal_pension_age_analysis(df_all: pd.DataFrame,
                                  output_path=output_path,
                                  x_sort=r_order,
                                  y_sort=m_order,
+                                 height=(len(m_order) * 50 + 70),
                                  all_ages=[f"{int(a)}歳" for a in pref_order])
 
 

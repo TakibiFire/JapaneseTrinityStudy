@@ -70,7 +70,7 @@ def run_optimal_pension_analysis(df_all: pd.DataFrame, target_year: str):
 
   # 共通の分析関数を呼び出し
   run_optimal_pension_age_analysis(df_all, target_year, IMG_DIR, START_AGE,
-                                   NUM_YEARS)
+                                   NUM_YEARS, shorten_labels=True)
 
 
 def run_pen70_lifeplan_analysis(df_all: pd.DataFrame, target_year: str):
