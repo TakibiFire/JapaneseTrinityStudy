@@ -65,7 +65,8 @@ def mock_models_json(tmp_path):
 
 def test_predictor_initialization(mock_models_json):
   """初期化のテスト。"""
-  predictor = DPOptimalStrategyPredictor(mock_models_json, win_threshold_type=WinThresholdType.V1)
+  predictor = DPOptimalStrategyPredictor(mock_models_json,
+                                         win_threshold_type=WinThresholdType.V1)
   # 内部モデルが正しくロードされているか
   assert len(predictor.get_a_opt_model(35).r_points) == 2
   assert predictor.get_a_opt_model(35).r_min_a == 0.02
@@ -76,7 +77,8 @@ def test_predictor_initialization(mock_models_json):
 
 def test_predict_r_from_ar1(mock_models_json):
   """predict_r_from_ar1 のテスト。"""
-  predictor = DPOptimalStrategyPredictor(mock_models_json, win_threshold_type=WinThresholdType.V1)
+  predictor = DPOptimalStrategyPredictor(mock_models_json,
+                                         win_threshold_type=WinThresholdType.V1)
 
   # age 35: cpi_prev_coef=25.0, cpi_curr_coef=25.0, intercept=50.0, resid=0.0
   # cpi_prev=1.0, cpi_curr=1.2, wealth=1000.0
@@ -99,7 +101,8 @@ def test_predict_r_from_ar1(mock_models_json):
 
 def test_predict_a_opt_scalar(mock_models_json):
   """predict_a_opt のスカラー入力テスト。"""
-  predictor = DPOptimalStrategyPredictor(mock_models_json, win_threshold_type=WinThresholdType.V1)
+  predictor = DPOptimalStrategyPredictor(mock_models_json,
+                                         win_threshold_type=WinThresholdType.V1)
 
   # R <= r_min_a (0.02) -> 1.0
   assert predictor.predict_a_opt(35, 0.01) == 1.0
@@ -118,7 +121,8 @@ def test_predict_a_opt_scalar(mock_models_json):
 
 def test_predict_p_surv_scalar_boundaries(mock_models_json):
   """predict_p_surv の境界条件テスト（スカラー）。"""
-  predictor = DPOptimalStrategyPredictor(mock_models_json, win_threshold_type=WinThresholdType.V1)
+  predictor = DPOptimalStrategyPredictor(mock_models_json,
+                                         win_threshold_type=WinThresholdType.V1)
 
   # R <= r_min_p (0.02) -> p_max (0.9)
   assert predictor.predict_p_surv(35, 0.01) == 0.9
@@ -134,7 +138,8 @@ def test_predict_p_surv_scalar_boundaries(mock_models_json):
 
 def test_predict_p_surv_scalar_middle(mock_models_json):
   """predict_p_surv の中間値テスト（スカラー）。"""
-  predictor = DPOptimalStrategyPredictor(mock_models_json, win_threshold_type=WinThresholdType.V1)
+  predictor = DPOptimalStrategyPredictor(mock_models_json,
+                                         win_threshold_type=WinThresholdType.V1)
 
   # R=0.06 は 0.02 と 0.10 の中間 -> (0.9 + 0.1) / 2 = 0.5
   val = predictor.predict_p_surv(35, 0.06)
@@ -144,7 +149,8 @@ def test_predict_p_surv_scalar_middle(mock_models_json):
 
 def test_vectorized_predictions(mock_models_json):
   """ベクトル化された予測のテスト。"""
-  predictor = DPOptimalStrategyPredictor(mock_models_json, win_threshold_type=WinThresholdType.V1)
+  predictor = DPOptimalStrategyPredictor(mock_models_json,
+                                         win_threshold_type=WinThresholdType.V1)
   r_vals = np.array([0.01, 0.06, 0.11])
 
   # 最適 A の予測
@@ -166,7 +172,8 @@ def test_vectorized_predictions(mock_models_json):
 
 def test_error_handling(mock_models_json):
   """エラーハンドリングのテスト。"""
-  predictor = DPOptimalStrategyPredictor(mock_models_json, win_threshold_type=WinThresholdType.V1)
+  predictor = DPOptimalStrategyPredictor(mock_models_json,
+                                         win_threshold_type=WinThresholdType.V1)
 
   # 未サポートの年齢
   with pytest.raises(ValueError,
@@ -180,7 +187,8 @@ def test_error_handling(mock_models_json):
 
 def test_winning_threshold_calculation(mock_models_json):
   """勝利しきい値の計算テスト。"""
-  predictor = DPOptimalStrategyPredictor(mock_models_json, win_threshold_type=WinThresholdType.V1)
+  predictor = DPOptimalStrategyPredictor(mock_models_json,
+                                         win_threshold_type=WinThresholdType.V1)
 
   # age 36 をテスト。
   # last_y_withdraw = 100.0 (age 35 の実績)
@@ -198,7 +206,8 @@ def test_winning_threshold_calculation(mock_models_json):
 
 def test_get_a_opt_with_winning_threshold(mock_models_json):
   """勝利しきい値を考慮した A の予測テスト。"""
-  predictor = DPOptimalStrategyPredictor(mock_models_json, win_threshold_type=WinThresholdType.V1)
+  predictor = DPOptimalStrategyPredictor(mock_models_json,
+                                         win_threshold_type=WinThresholdType.V1)
 
   # z_score=2.0 のとき、しきい値 = 1068.41583
   # ケース1: 資産がしきい値を超える場合 (initial_wealth = 2000.0)
@@ -244,7 +253,8 @@ def test_get_a_opt_with_winning_threshold(mock_models_json):
 
 def test_get_a_opt_with_winning_threshold_vectorized(mock_models_json):
   """勝利しきい値を考慮した A の予測テスト（ベクトル化）。"""
-  predictor = DPOptimalStrategyPredictor(mock_models_json, win_threshold_type=WinThresholdType.V1)
+  predictor = DPOptimalStrategyPredictor(mock_models_json,
+                                         win_threshold_type=WinThresholdType.V1)
 
   # z_score=2.0 のとき、しきい値 = 1068.41583
   wealth = np.array([2000.0, 1000.0])

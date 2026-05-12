@@ -284,7 +284,8 @@ class DPOptimalStrategyPredictor:
       last_gross_withdraw: Optional[Union[float, np.ndarray]] = None,
       z_score_for_winning: float = 2.326,
       z_score_for_next_spend: float = 0.0,
-      precomputed_r: Optional[Union[float, np.ndarray]] = None) -> Union[float, np.ndarray]:
+      precomputed_r: Optional[Union[float, np.ndarray]] = None
+  ) -> Union[float, np.ndarray]:
     """
     勝利しきい値を考慮して、最適な資産配分 A を決定します。
 
@@ -331,7 +332,8 @@ class DPOptimalStrategyPredictor:
       else:
         expected_growth = self.get_spend_multiplier(age - 1, age)
         if z_score_for_next_spend != 0:
-          expected_growth *= self.get_unexpected_cpi_jump(z_score_for_next_spend)
+          expected_growth *= self.get_unexpected_cpi_jump(
+              z_score_for_next_spend)
         expected_y_n = last_y_withdraw * expected_growth
         r = expected_y_n / initial_wealth
       return cast(float, self.predict_a_opt(age, r))
@@ -360,7 +362,8 @@ class DPOptimalStrategyPredictor:
       else:
         expected_growth = self.get_spend_multiplier(age - 1, age)
         if z_score_for_next_spend != 0:
-          expected_growth *= self.get_unexpected_cpi_jump(z_score_for_next_spend)
+          expected_growth *= self.get_unexpected_cpi_jump(
+              z_score_for_next_spend)
         expected_y_n = last_y_arr[not_won_mask] * expected_growth
         r = expected_y_n / wealth_arr[not_won_mask]
       res[not_won_mask] = self.predict_a_opt(age, r)

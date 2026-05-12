@@ -21,7 +21,8 @@ def main():
   df = pd.read_csv(csv_path)
 
   # 表示用にラベルを加工
-  df['Combination'] = df['mode'] + " (miny=" + df['min_y'].astype(str) + ") / " + df['win_type']
+  df['Combination'] = df['mode'] + " (miny=" + df['min_y'].astype(
+      str) + ") / " + df['win_type']
 
   # 各組み合わせのポイントを計算
   combinations = df['Combination'].unique()
@@ -52,7 +53,8 @@ def main():
     print(f"{c:<25}: {p} points")
 
   print("\n=== Final Strategy Rankings (Sum of Survival Rates) ===")
-  sum_survival = df.groupby('Combination')['survival_rate'].sum().sort_values(ascending=False)
+  sum_survival = df.groupby('Combination')['survival_rate'].sum().sort_values(
+      ascending=False)
   for c, s in sum_survival.items():
     print(f"{c:<25}: {s:.4f}")
 
@@ -90,7 +92,8 @@ def main():
       ]).properties(
           width=600,
           height=500,
-          title='Comparison of DP Experimental Approaches (Top 6 + Baseline)').interactive()
+          title='Comparison of DP Experimental Approaches (Top 6 + Baseline)'
+      ).interactive()
 
   output_path = os.path.join(img_dir, "exp_dp_full_comparison_single.svg")
   chart.save(output_path)

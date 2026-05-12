@@ -66,11 +66,7 @@ def get_chart_opt_a(age, json_data):
   a_pred_guarded[r_grid >= r_max] = 1.0
 
   # プロット用データの準備
-  plot_raw = pd.DataFrame({
-      'r': r_grid,
-      'a': a_pred_raw,
-      'type': 'PCHIP Raw'
-  })
+  plot_raw = pd.DataFrame({'r': r_grid, 'a': a_pred_raw, 'type': 'PCHIP Raw'})
   plot_guarded = pd.DataFrame({
       'r': r_grid,
       'a': a_pred_guarded,
@@ -80,10 +76,13 @@ def get_chart_opt_a(age, json_data):
   chart_lines = alt.Chart(pd.concat(
       [plot_raw, plot_guarded])).mark_line(clip=True).encode(
           x=alt.X('r:Q',
-                  scale=alt.Scale(type='log', domain=[r_start, r_end],
+                  scale=alt.Scale(type='log',
+                                  domain=[r_start, r_end],
                                   clamp=True),
                   title='R (Spending Rate)'),
-          y=alt.Y('a:Q', title='Opt A (Equity Ratio)', scale=alt.Scale(domain=[0, 1.1])),
+          y=alt.Y('a:Q',
+                  title='Opt A (Equity Ratio)',
+                  scale=alt.Scale(domain=[0, 1.1])),
           color=alt.Color('type:N',
                           scale=alt.Scale(domain=['PCHIP Raw', 'Guarded'],
                                           range=['#4c78a8', '#e45756'])))
@@ -147,27 +146,20 @@ def get_chart_opt_p(age, json_data):
   p_pred_guarded[r_grid >= r_max] = p_min
 
   # プロット用データの準備
-  plot_raw = pd.DataFrame({
-      'r': r_grid,
-      'p': p_pred_raw,
-      'type': 'PCHIP Raw'
-  })
+  plot_raw = pd.DataFrame({'r': r_grid, 'p': p_pred_raw, 'type': 'PCHIP Raw'})
   plot_guarded = pd.DataFrame({
       'r': r_grid,
       'p': p_pred_guarded,
       'type': 'Guarded'
   })
   # アンカーポイント
-  plot_anchors = pd.DataFrame({
-      'r': r_pts,
-      'p': p_pts,
-      'type': 'Anchors'
-  })
+  plot_anchors = pd.DataFrame({'r': r_pts, 'p': p_pts, 'type': 'Anchors'})
 
-  chart_lines = alt.Chart(pd.concat([plot_raw, plot_guarded])).mark_line(
-      clip=True).encode(
+  chart_lines = alt.Chart(pd.concat(
+      [plot_raw, plot_guarded])).mark_line(clip=True).encode(
           x=alt.X('r:Q',
-                  scale=alt.Scale(type='log', domain=[r_start, r_end],
+                  scale=alt.Scale(type='log',
+                                  domain=[r_start, r_end],
                                   clamp=True),
                   title='R (Spending Rate)'),
           y=alt.Y('p:Q', title='P_surv', scale=alt.Scale(domain=[-0.1, 1.1])),
@@ -175,8 +167,10 @@ def get_chart_opt_p(age, json_data):
                           scale=alt.Scale(domain=['PCHIP Raw', 'Guarded'],
                                           range=['#4c78a8', '#e45756'])))
 
-  chart_anchors = alt.Chart(plot_anchors).mark_point(
-      size=60, color='black', shape='diamond').encode(x='r:Q', y='p:Q')
+  chart_anchors = alt.Chart(plot_anchors).mark_point(size=60,
+                                                     color='black',
+                                                     shape='diamond').encode(
+                                                         x='r:Q', y='p:Q')
 
   # R_min/R_max の垂直線を追加
   rules_df = pd.DataFrame({
@@ -210,8 +204,11 @@ def parse_ages(age_str: str) -> list[int]:
 
 
 if __name__ == "__main__":
-  parser = argparse.ArgumentParser(description='Visualize DP model fits (A and P).')
-  parser.add_argument('--ages', type=str, help='Ages to process (e.g., 61,65-70)')
+  parser = argparse.ArgumentParser(
+      description='Visualize DP model fits (A and P).')
+  parser.add_argument('--ages',
+                      type=str,
+                      help='Ages to process (e.g., 61,65-70)')
   parser.add_argument('--json',
                       type=str,
                       required=True,

@@ -1,12 +1,11 @@
 """コアシミュレーションロジックのテスト。"""
-from typing import Any, Dict, List, Optional, Union, cast
+from typing import Any, Dict, List, Optional, cast
 
 import numpy as np
 import pytest
 
-from src.core import (DynamicSpending, SimulationResult, Strategy,
-                      ZeroRiskAsset, simulate_strategy)
-from src.lib.asset_generator import Asset, CpiAsset, MonthlySimpleNormal
+from src.core import (DynamicSpending, Strategy, ZeroRiskAsset,
+                      simulate_strategy)
 from src.lib.cashflow_generator import (BaseSpendConfig, CashflowConfig,
                                         CashflowRule, CashflowType,
                                         PensionConfig, SuddenSpendConfig,
@@ -398,15 +397,12 @@ def test_simulate_with_dynamic_rebalance():
   n_months = 12
   prices = {"A": np.ones((1, 13)), "Cash": np.ones((1, 13))}
 
-  def dummy_rebalance_fn(
-      total_net: np.ndarray,
-      cur_ann_spend: np.ndarray,
-      rem_years: float,
-      post_tax_net: np.ndarray,
-      prev_gross_ann_spend: np.ndarray,
-      current_prices: Optional[Dict[str, np.ndarray]],
-      prev_prices: Optional[Dict[str, np.ndarray]],
-      need_debug: np.ndarray) -> DRResult:
+  def dummy_rebalance_fn(total_net: np.ndarray, cur_ann_spend: np.ndarray,
+                         rem_years: float, post_tax_net: np.ndarray,
+                         prev_gross_ann_spend: np.ndarray,
+                         current_prices: Optional[Dict[str, np.ndarray]],
+                         prev_prices: Optional[Dict[str, np.ndarray]],
+                         need_debug: np.ndarray) -> DRResult:
     return DRResult(target_ratios={"A": 0.8, "Cash": 0.2}, debug=None)
 
   strategy = Strategy(name="Test",
@@ -704,15 +700,12 @@ def test_simulate_strategy_skip_last_rebalance():
 
   call_months = []
 
-  def recording_rebalance_fn(
-      total_net: np.ndarray,
-      cur_ann_spend: np.ndarray,
-      rem_years: float,
-      post_tax_net: np.ndarray,
-      prev_gross_ann_spend: np.ndarray,
-      current_prices: Optional[Dict[str, np.ndarray]],
-      prev_prices: Optional[Dict[str, np.ndarray]],
-      need_debug: np.ndarray) -> DRResult:
+  def recording_rebalance_fn(total_net: np.ndarray, cur_ann_spend: np.ndarray,
+                             rem_years: float, post_tax_net: np.ndarray,
+                             prev_gross_ann_spend: np.ndarray,
+                             current_prices: Optional[Dict[str, np.ndarray]],
+                             prev_prices: Optional[Dict[str, np.ndarray]],
+                             need_debug: np.ndarray) -> DRResult:
     # 現在の経過月を逆算（rem_years は (total_months - (m+1))/12 + 0.25）
     # ここでは単純に呼び出された回数やフラグを記録する
     call_months.append(True)
@@ -748,15 +741,12 @@ def test_simulate_strategy_do_intermediate_rebalance():
 
   call_months = []
 
-  def recording_rebalance_fn(
-      total_net: np.ndarray,
-      cur_ann_spend: np.ndarray,
-      rem_years: float,
-      post_tax_net: np.ndarray,
-      prev_gross_ann_spend: np.ndarray,
-      current_prices: Optional[Dict[str, np.ndarray]],
-      prev_prices: Optional[Dict[str, np.ndarray]],
-      need_debug: np.ndarray) -> DRResult:
+  def recording_rebalance_fn(total_net: np.ndarray, cur_ann_spend: np.ndarray,
+                             rem_years: float, post_tax_net: np.ndarray,
+                             prev_gross_ann_spend: np.ndarray,
+                             current_prices: Optional[Dict[str, np.ndarray]],
+                             prev_prices: Optional[Dict[str, np.ndarray]],
+                             need_debug: np.ndarray) -> DRResult:
     call_months.append(True)
     return DRResult(target_ratios={"A": 1.0, "Cash": 0.0}, debug=None)
 

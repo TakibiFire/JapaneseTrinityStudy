@@ -5,9 +5,8 @@ analyze_monthly_cpi_main.py
 AICを用いて最適なラグ数 p を自動的に選択する。
 """
 
-from typing import Any, List, Tuple, cast
+from typing import Tuple
 
-import altair as alt
 import numpy as np
 import pandas as pd
 

@@ -10,9 +10,8 @@ analyze_ppp_main.py
 """
 
 import csv
-import math
 from datetime import datetime
-from typing import Dict, List, Tuple
+from typing import List
 
 import altair as alt
 import numpy as np

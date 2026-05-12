@@ -8,7 +8,7 @@ data/dynamic_rebalance_summary.csv を読み込み、
 """
 
 import os
-from typing import List, Tuple, cast
+from typing import Tuple, cast
 
 import altair as alt
 import pandas as pd

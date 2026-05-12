@@ -3,7 +3,7 @@
 """
 
 import dataclasses
-from typing import Dict, List, Optional, Union
+from typing import List, Optional
 
 import numpy as np
 

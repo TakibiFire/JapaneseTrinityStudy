@@ -23,7 +23,7 @@ Optimal Strategy のモデルフィッティングを行うスクリプト。
 import argparse
 import json
 import os
-from typing import Any, Dict, List, Optional, Tuple, Union, cast
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 import numpy as np
 import pandas as pd
@@ -178,11 +178,14 @@ def main():
                       type=str,
                       default=None,
                       help="出力ファイルのパス。指定しない場合はデフォルトのパスを使用")
-  parser.add_argument("--tie_breaker_method",
-                      type=str,
-                      choices=["legacy", "goal_based", "survival_first_goal_based"],
-                      default="survival_first_goal_based",
-                      help="タイブレークの手法 (legacy: 最大の A を選択, goal_based: 勝利確率を考慮, survival_first_goal_based: 生存確率 100% の場合のみ勝利確率を考慮)")
+  parser.add_argument(
+      "--tie_breaker_method",
+      type=str,
+      choices=["legacy", "goal_based", "survival_first_goal_based"],
+      default="survival_first_goal_based",
+      help=
+      "タイブレークの手法 (legacy: 最大の A を選択, goal_based: 勝利確率を考慮, survival_first_goal_based: 生存確率 100% の場合のみ勝利確率を考慮)"
+  )
   parser.add_argument("--disable_shortcuts",
                       action="store_true",
                       help="A のサンプリングの高速化（ショートカット）を無効化する")
@@ -672,7 +675,9 @@ def main():
 
         # タイブレーク用の追加指標: 勝利確率
         p_win = 0.0
-        if args.tie_breaker_method in ["goal_based", "survival_first_goal_based"]:
+        if args.tie_breaker_method in [
+            "goal_based", "survival_first_goal_based"
+        ]:
           if age == end_age - 1:
             # 最終年は生存確率そのものを勝利確率とする
             p_win = avg_survival

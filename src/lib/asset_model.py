@@ -8,7 +8,6 @@ import warnings
 import numpy as np
 import pandas as pd
 from scipy import stats
-from sklearn import metrics
 
 logger = logging.getLogger(__name__)
 

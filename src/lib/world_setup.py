@@ -81,15 +81,13 @@ def create_single_world(
                              cpi_type=CpiType.JAPAN_AR12,
                              fx_type=FxType.USDJPY)
 
-  lifeplan = Lifeplan(
-      base_spend=CurveSpend(spending_types=(
-          SpendingType.SINGLE_2025_CONSUMPTION,
-          SpendingType.UNEMPLOYED_SINGLE_2025_NON_CONSUMPTION_EXCLUDE_PENSION
-      )),
-      retirement_start_age=retirement_start_age,
-      pension_status=PensionStatus.FULL,
-      pension_start_age=pension_start_age,
-      household_size=1)
+  lifeplan = Lifeplan(base_spend=CurveSpend(spending_types=(
+      SpendingType.SINGLE_2025_CONSUMPTION,
+      SpendingType.UNEMPLOYED_SINGLE_2025_NON_CONSUMPTION_EXCLUDE_PENSION)),
+                      retirement_start_age=retirement_start_age,
+                      pension_status=PensionStatus.FULL,
+                      pension_start_age=pension_start_age,
+                      household_size=1)
 
   strategy_spec = StrategySpec(
       initial_money=10000.0,  # プレースホルダ

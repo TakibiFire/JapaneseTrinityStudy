@@ -38,3 +38,19 @@ The generated files will be placed in the `dist/` directory.
 *   `*.py`: Python scripts for various simulations and visualizations.
 *   `commands.sh`: Utility script for formatting and documentation tasks.
 *   `src/input.css`: Entry point for Tailwind CSS.
+
+## Code cleanup
+
+Remove unused imports
+
+```
+ruff check --fix --select F401 src/
+ruff check --fix --select F401 tests/
+```
+
+Format all files
+
+```
+yapf --in-place --recursive src/
+yapf --in-place --recursive tests/
+```

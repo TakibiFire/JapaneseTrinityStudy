@@ -17,9 +17,7 @@ from src.lib.survival_contours import (generate_rule_of_thumb,
                                        get_contour_anchor_points,
                                        save_contour_charts)
 from src.lib.survival_formula_analysis import run_survival_formula_analysis
-from src.lib.visualize_all_yr import (calculate_preference_order,
-                                      create_heatmap,
-                                      create_optimal_pension_heatmap,
+from src.lib.visualize_all_yr import (create_heatmap,
                                       create_pension_survival_curve,
                                       prepare_heatmap_labels,
                                       run_optimal_pension_age_analysis)

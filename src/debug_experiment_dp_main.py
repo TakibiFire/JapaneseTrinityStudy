@@ -2,7 +2,6 @@ import os
 import re
 import sys
 from dataclasses import replace
-from typing import Any, Dict, List, Union, cast
 
 import numpy as np
 
@@ -157,10 +156,18 @@ def main():
     print(f"Selected RHS win paths: {selected_v2}")
 
   print("\nColumn Definitions:")
-  print("  X_N    : Total net assets at the start of the age (post-tax estimate).")
-  print("  pY_N   : Predicted net withdrawal for the upcoming year (used for DP planning).")
-  print("  Y_prev : Actual net withdrawal of the previous year (observed by the simulator).")
-  print("  W_N    : Winning Threshold (Minimum assets required for a 'safe' outcome).")
+  print(
+      "  X_N    : Total net assets at the start of the age (post-tax estimate)."
+  )
+  print(
+      "  pY_N   : Predicted net withdrawal for the upcoming year (used for DP planning)."
+  )
+  print(
+      "  Y_prev : Actual net withdrawal of the previous year (observed by the simulator)."
+  )
+  print(
+      "  W_N    : Winning Threshold (Minimum assets required for a 'safe' outcome)."
+  )
   print("  A      : Optimal risky asset (ORUKAN) allocation ratio [0.0 - 1.0].")
   print("  P_pred : Predicted survival probability from the current state.")
 
@@ -204,7 +211,7 @@ def main():
       d1, d2 = data_v1.get(age), data_v2.get(age)
       if not d1 and not d2:
         continue
-      
+
       cpi_val = 0.0
       if d1:
         cpi_val = d1['cpi']

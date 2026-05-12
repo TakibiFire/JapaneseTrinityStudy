@@ -82,9 +82,9 @@ def main():
 
   results1 = {
       exp.name:
-      simulate_strategy(exp.strategy,
-                        exp.monthly_prices,
-                        monthly_cashflows=exp.monthly_cashflows)
+          simulate_strategy(exp.strategy,
+                            exp.monthly_prices,
+                            monthly_cashflows=exp.monthly_cashflows)
       for exp in create_experiment_setup(exp1_setup)[1:]
   }
 
@@ -118,9 +118,9 @@ def main():
 
   results2 = {
       exp.name:
-      simulate_strategy(exp.strategy,
-                        exp.monthly_prices,
-                        monthly_cashflows=exp.monthly_cashflows)
+          simulate_strategy(exp.strategy,
+                            exp.monthly_prices,
+                            monthly_cashflows=exp.monthly_cashflows)
       for exp in create_experiment_setup(exp2_setup)[1:]
   }
 
@@ -155,9 +155,9 @@ def main():
 
   results3 = {
       exp.name:
-      simulate_strategy(exp.strategy,
-                        exp.monthly_prices,
-                        monthly_cashflows=exp.monthly_cashflows)
+          simulate_strategy(exp.strategy,
+                            exp.monthly_prices,
+                            monthly_cashflows=exp.monthly_cashflows)
       for exp in create_experiment_setup(exp3_setup)[1:]
   }
 

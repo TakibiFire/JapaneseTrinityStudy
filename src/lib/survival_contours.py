@@ -18,8 +18,7 @@ from sklearn.linear_model import LinearRegression
 def get_contour_anchor_points(
     df: pd.DataFrame,
     target_prob: float,
-    target_year: str = "35"
-) -> List[Tuple[float, float, float]]:
+    target_year: str = "35") -> List[Tuple[float, float, float]]:
   """
   指定された目標生存確率を達成する、正確な (初期支出率, 支出レベル, 初期資産) のポイントを抽出する。
   支出レベル(initial_annual_cost)ごとに、確率と支出率の関係を PCHIP で補間し、
@@ -66,11 +65,10 @@ def get_contour_anchor_points(
   return anchor_points
 
 
-def generate_smooth_contour_data(
-    anchor_points: List[Tuple[float, float, float]],
-    target_label: str,
-    num_points: int = 100
-) -> List[Dict[str, Any]]:
+def generate_smooth_contour_data(anchor_points: List[Tuple[float, float,
+                                                           float]],
+                                 target_label: str,
+                                 num_points: int = 100) -> List[Dict[str, Any]]:
   """
   アンカーポイントを基に、描画用の滑らかで高密度なデータポイントを生成する。
   Spend(支出レベル)に対するRule(支出率)の曲線をPCHIPで補間する。
@@ -108,11 +106,12 @@ def generate_smooth_contour_data(
   return plot_data
 
 
-def save_contour_charts(df_plot: pd.DataFrame,
-                        target_probs: List[float],
-                        img_dir: str,
-                        prefix: str = "",
-                        rule_range: Tuple[float, float] = (2.8, 7.0)) -> None:
+def save_contour_charts(
+    df_plot: pd.DataFrame,
+    target_probs: List[float],
+    img_dir: str,
+    prefix: str = "",
+    rule_range: Tuple[float, float] = (2.8, 7.0)) -> None:
   """
   生成された高密度データから、生存確率達成ラインの3種のグラフを作成・保存する。
 
@@ -134,15 +133,19 @@ def save_contour_charts(df_plot: pd.DataFrame,
   chart1 = alt.Chart(df_plot).mark_line(point=True, clip=True).encode(
       x=alt.X('spending_rule:Q',
               title='初期支出率 (%)',
-              scale=alt.Scale(domain=[0, df_plot["spending_rule"].max() * 1.1])),
-      y=alt.Y('annual_spend_man:Q',
-              title='支出レベル (万円/年)',
-              scale=alt.Scale(domain=[0, df_plot["annual_spend_man"].max() * 1.1])),
+              scale=alt.Scale(domain=[0, df_plot["spending_rule"].max() *
+                                      1.1])),
+      y=alt.Y(
+          'annual_spend_man:Q',
+          title='支出レベル (万円/年)',
+          scale=alt.Scale(domain=[0, df_plot["annual_spend_man"].max() * 1.1])),
       color=alt.Color('target_prob:N',
                       title='目標生存確率',
                       sort=prob_order,
-                      scale=alt.Scale(domain=prob_order))
-  ).properties(title="生存確率達成ライン (初期支出率 vs 支出レベル)", width=600, height=400)
+                      scale=alt.Scale(domain=prob_order))).properties(
+                          title="生存確率達成ライン (初期支出率 vs 支出レベル)",
+                          width=600,
+                          height=400)
 
   path1 = os.path.join(img_dir, f"{prefix}survival_rule_vs_spend.svg")
   chart1.save(path1)
@@ -152,15 +155,19 @@ def save_contour_charts(df_plot: pd.DataFrame,
   chart2 = alt.Chart(df_plot).mark_line(point=True, clip=True).encode(
       x=alt.X('initial_money:Q',
               title='総資産 (万円)',
-              scale=alt.Scale(domain=[0, df_plot["initial_money"].max() * 1.05])),
-      y=alt.Y('annual_spend_man:Q',
-              title='支出レベル (万円/年)',
-              scale=alt.Scale(domain=[0, df_plot["annual_spend_man"].max() * 1.1])),
+              scale=alt.Scale(domain=[0, df_plot["initial_money"].max() *
+                                      1.05])),
+      y=alt.Y(
+          'annual_spend_man:Q',
+          title='支出レベル (万円/年)',
+          scale=alt.Scale(domain=[0, df_plot["annual_spend_man"].max() * 1.1])),
       color=alt.Color('target_prob:N',
                       title='目標生存確率',
                       sort=prob_order,
-                      scale=alt.Scale(domain=prob_order))
-  ).properties(title="生存確率達成ライン (総資産 vs 支出レベル)", width=600, height=400)
+                      scale=alt.Scale(domain=prob_order))).properties(
+                          title="生存確率達成ライン (総資産 vs 支出レベル)",
+                          width=600,
+                          height=400)
 
   path2 = os.path.join(img_dir, f"{prefix}survival_asset_vs_spend.svg")
   chart2.save(path2)
@@ -170,26 +177,28 @@ def save_contour_charts(df_plot: pd.DataFrame,
   chart3 = alt.Chart(df_plot).mark_line(point=True, clip=True).encode(
       x=alt.X('initial_money:Q',
               title='総資産 (万円)',
-              scale=alt.Scale(domain=[0, df_plot["initial_money"].max() * 1.05])),
+              scale=alt.Scale(domain=[0, df_plot["initial_money"].max() *
+                                      1.05])),
       y=alt.Y('spending_rule:Q',
               title='初期支出率 (%)',
-              scale=alt.Scale(domain=[0, df_plot["spending_rule"].max() * 1.1])),
+              scale=alt.Scale(domain=[0, df_plot["spending_rule"].max() *
+                                      1.1])),
       color=alt.Color('target_prob:N',
                       title='目標生存確率',
                       sort=prob_order,
-                      scale=alt.Scale(domain=prob_order))
-  ).properties(title="生存確率達成ライン (総資産 vs 初期支出率)", width=600, height=400)
+                      scale=alt.Scale(domain=prob_order))).properties(
+                          title="生存確率達成ライン (総資産 vs 初期支出率)",
+                          width=600,
+                          height=400)
 
   path3 = os.path.join(img_dir, f"{prefix}survival_asset_vs_rule.svg")
   chart3.save(path3)
   print(f"✅ {path3} に保存しました。")
 
 
-def generate_rule_of_thumb(
-    df: pd.DataFrame,
-    target_probs: List[float],
-    target_year: str = "35"
-) -> None:
+def generate_rule_of_thumb(df: pd.DataFrame,
+                           target_probs: List[float],
+                           target_year: str = "35") -> None:
   """
   アンカーポイントに対して線形回帰を行い、人間が理解しやすい簡略化された公式を生成する。
   Spend = a * M + b の形式を特定し、ターミナルに出力する。

@@ -41,8 +41,8 @@ def main():
   tie_breakers = ["legacy", "goal_based", "survival_first_goal_based"]
   min_y_values = [0, 5, 25]
   model_files = [
-      f"re60_pen70_95_tb{tb}_miny{miny}_n1000"
-      for tb in tie_breakers for miny in min_y_values
+      f"re60_pen70_95_tb{tb}_miny{miny}_n1000" for tb in tie_breakers
+      for miny in min_y_values
   ]
 
   # 実験パラメータ

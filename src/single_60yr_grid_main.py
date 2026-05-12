@@ -43,7 +43,8 @@ SEED = 43
 
 
 def get_optimal_pension_setup(
-    base_spend_annual: float) -> Tuple[Setup, int, List[Tuple[int, float, float]]]:
+    base_spend_annual: float
+) -> Tuple[Setup, int, List[Tuple[int, float, float]]]:
   """
   optimal-pension 実験設定を生成する。
 
@@ -59,12 +60,13 @@ def get_optimal_pension_setup(
   pension_start_ages = [60, 62, 65, 68, 71, 73, 75]
 
   # 1. ベースライン設定 (create_single_world を使用)
-  exp_setup = create_single_world(n_sim=N_SIM,
-                                  start_age=START_AGE,
-                                  end_age_inclusive=START_AGE + YEARS - 1,
-                                  retirement_start_age=START_AGE,
-                                  pension_start_age=65,  # 後で上書き
-                                  seed=SEED)
+  exp_setup = create_single_world(
+      n_sim=N_SIM,
+      start_age=START_AGE,
+      end_age_inclusive=START_AGE + YEARS - 1,
+      retirement_start_age=START_AGE,
+      pension_start_age=65,  # 後で上書き
+      seed=SEED)
 
   # 戦略のデフォルト設定 (DynamicV1Rebalance)
   baseline_strategy = StrategySpec(
@@ -94,9 +96,8 @@ def get_optimal_pension_setup(
         base_spend=CurveSpend(
             first_year_annual_amount=initial_annual_cost,
             spending_types=(
-                SpendingType.SINGLE_2025_CONSUMPTION,
-                SpendingType.UNEMPLOYED_SINGLE_2025_NON_CONSUMPTION_EXCLUDE_PENSION
-            )))
+                SpendingType.SINGLE_2025_CONSUMPTION, SpendingType.
+                UNEMPLOYED_SINGLE_2025_NON_CONSUMPTION_EXCLUDE_PENSION)))
 
     new_strategy = replace(baseline_strategy,
                            initial_money=float(init_money),
@@ -129,11 +130,10 @@ def main():
   os.makedirs(data_dir, exist_ok=True)
 
   # 初年度支出ベースライン (単身世帯用)
-  base_spend_annual = get_annual_retired_spending_values(
-      [
-          SpendingType.SINGLE_2025_CONSUMPTION,
-          SpendingType.UNEMPLOYED_SINGLE_2025_NON_CONSUMPTION_EXCLUDE_PENSION
-      ], START_AGE, 1)[0]
+  base_spend_annual = get_annual_retired_spending_values([
+      SpendingType.SINGLE_2025_CONSUMPTION,
+      SpendingType.UNEMPLOYED_SINGLE_2025_NON_CONSUMPTION_EXCLUDE_PENSION
+  ], START_AGE, 1)[0]
 
   exp_setup: Setup
   n_sim_val: int

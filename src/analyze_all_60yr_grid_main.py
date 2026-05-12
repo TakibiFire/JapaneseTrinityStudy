@@ -18,22 +18,15 @@ import shutil
 
 import pandas as pd
 
-from src.lib.fitting_all_yr import (FeatureSetType, run_fitting_analysis,
-                                    run_stepwise_fitting_analysis)
 from src.lib.survival_contours import (generate_rule_of_thumb,
                                        generate_smooth_contour_data,
                                        get_contour_anchor_points,
                                        save_contour_charts)
 from src.lib.survival_formula_analysis import run_survival_formula_analysis
-from src.lib.visualize_all_yr import (calculate_preference_order,
-                                      create_best_strategy_heatmap,
-                                      create_heatmap,
-                                      create_improvement_heatmap,
-                                      create_optimal_pension_heatmap,
-                                      create_pension_survival_curve,
-                                      prepare_heatmap_labels,
-                                      run_best_combination_analysis,
-                                      run_optimal_pension_age_analysis)
+from src.lib.visualize_all_yr import (
+    calculate_preference_order, create_best_strategy_heatmap, create_heatmap,
+    create_improvement_heatmap, create_pension_survival_curve,
+    prepare_heatmap_labels, run_optimal_pension_age_analysis)
 
 # 設定
 IMG_DIR = "docs/imgs/all_60yr"

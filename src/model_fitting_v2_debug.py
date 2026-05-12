@@ -24,7 +24,7 @@ Optimal Strategy V2 モデルデバッグツール。
 """
 
 import argparse
-from typing import Any, List, Union, cast
+from typing import Any, List, cast
 
 import numpy as np
 
@@ -39,8 +39,7 @@ from src.lib.cashflow_generator import (CashflowConfig, PensionConfig,
 from src.lib.dp_predictor import DPOptimalStrategyPredictor
 from src.lib.retired_spending import (SpendingType,
                                       get_annual_retired_spending_values)
-from src.lib.simulation_defaults import (AcwiModelKey,
-                                         get_acwi_fat_tail_config,
+from src.lib.simulation_defaults import (AcwiModelKey, get_acwi_fat_tail_config,
                                          get_cpi_ar12_config)
 
 # 共通定数

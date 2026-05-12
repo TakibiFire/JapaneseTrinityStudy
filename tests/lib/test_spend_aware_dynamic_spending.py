@@ -43,16 +43,16 @@ def test_no_adjustment(base_strategy):
   cpi_m_minus_12 = np.ones(n_sim)
   other_net_m = np.zeros(n_sim)
 
-  new_spend = strategy.evaluate(
-      m=m,
-      active_paths=active_paths,
-      current_net_worth=net_worth,
-      tax_cost_m=np.zeros_like(net_worth),
-      prev_actual_amount=prev_base_spend_y,
-      other_net_m=other_net_m,
-      precomputed_cf_m=cpi_m * strategy.annual_cost_real[m // 12],
-      precomputed_cf_prev_m=cpi_m_minus_12 *
-      strategy.annual_cost_real[max(0, m // 12 - 1)])
+  new_spend = strategy.evaluate(m=m,
+                                active_paths=active_paths,
+                                current_net_worth=net_worth,
+                                tax_cost_m=np.zeros_like(net_worth),
+                                prev_actual_amount=prev_base_spend_y,
+                                other_net_m=other_net_m,
+                                precomputed_cf_m=cpi_m *
+                                strategy.annual_cost_real[m // 12],
+                                precomputed_cf_prev_m=cpi_m_minus_12 *
+                                strategy.annual_cost_real[max(0, m // 12 - 1)])
 
   # ターゲット支出（400.0）のまま維持されるはず
   np.testing.assert_allclose(new_spend, 400.0)
@@ -74,16 +74,16 @@ def test_hard_floor(base_strategy):
   cpi_m_minus_12 = np.ones(n_sim)
   other_net_m = np.zeros(n_sim)
 
-  new_spend = strategy.evaluate(
-      m=m,
-      active_paths=active_paths,
-      current_net_worth=net_worth,
-      tax_cost_m=np.zeros_like(net_worth),
-      prev_actual_amount=prev_base_spend_y,
-      other_net_m=other_net_m,
-      precomputed_cf_m=cpi_m * strategy.annual_cost_real[m // 12],
-      precomputed_cf_prev_m=cpi_m_minus_12 *
-      strategy.annual_cost_real[max(0, m // 12 - 1)])
+  new_spend = strategy.evaluate(m=m,
+                                active_paths=active_paths,
+                                current_net_worth=net_worth,
+                                tax_cost_m=np.zeros_like(net_worth),
+                                prev_actual_amount=prev_base_spend_y,
+                                other_net_m=other_net_m,
+                                precomputed_cf_m=cpi_m *
+                                strategy.annual_cost_real[m // 12],
+                                precomputed_cf_prev_m=cpi_m_minus_12 *
+                                strategy.annual_cost_real[max(0, m // 12 - 1)])
 
   # ターゲット * lower_mult = 400 * 0.9 = 360.0 になるはず
   np.testing.assert_allclose(new_spend, 360.0)
@@ -110,16 +110,16 @@ def test_bisection_to_p_low(base_strategy):
   other_net_m = np.array([0.0])
   active_paths = np.array([True])
 
-  new_spend = strategy.evaluate(
-      m=m,
-      active_paths=active_paths,
-      current_net_worth=net_worth,
-      tax_cost_m=np.zeros_like(net_worth),
-      prev_actual_amount=prev_base_spend_y,
-      other_net_m=other_net_m,
-      precomputed_cf_m=cpi_m * strategy.annual_cost_real[m // 12],
-      precomputed_cf_prev_m=cpi_m_minus_12 *
-      strategy.annual_cost_real[max(0, m // 12 - 1)])
+  new_spend = strategy.evaluate(m=m,
+                                active_paths=active_paths,
+                                current_net_worth=net_worth,
+                                tax_cost_m=np.zeros_like(net_worth),
+                                prev_actual_amount=prev_base_spend_y,
+                                other_net_m=other_net_m,
+                                precomputed_cf_m=cpi_m *
+                                strategy.annual_cost_real[m // 12],
+                                precomputed_cf_prev_m=cpi_m_minus_12 *
+                                strategy.annual_cost_real[max(0, m // 12 - 1)])
 
   # 約 380.0 になるはず
   assert new_spend[0] == pytest.approx(380.0, abs=0.1)
@@ -141,16 +141,16 @@ def test_hard_ceiling(base_strategy):
   cpi_m_minus_12 = np.ones(n_sim)
   other_net_m = np.zeros(n_sim)
 
-  new_spend = strategy.evaluate(
-      m=m,
-      active_paths=active_paths,
-      current_net_worth=net_worth,
-      tax_cost_m=np.zeros_like(net_worth),
-      prev_actual_amount=prev_base_spend_y,
-      other_net_m=other_net_m,
-      precomputed_cf_m=cpi_m * strategy.annual_cost_real[m // 12],
-      precomputed_cf_prev_m=cpi_m_minus_12 *
-      strategy.annual_cost_real[max(0, m // 12 - 1)])
+  new_spend = strategy.evaluate(m=m,
+                                active_paths=active_paths,
+                                current_net_worth=net_worth,
+                                tax_cost_m=np.zeros_like(net_worth),
+                                prev_actual_amount=prev_base_spend_y,
+                                other_net_m=other_net_m,
+                                precomputed_cf_m=cpi_m *
+                                strategy.annual_cost_real[m // 12],
+                                precomputed_cf_prev_m=cpi_m_minus_12 *
+                                strategy.annual_cost_real[max(0, m // 12 - 1)])
 
   # ターゲット * upper_mult = 400 * 1.2 = 480.0 になるはず
   np.testing.assert_allclose(new_spend, 480.0)
@@ -177,16 +177,16 @@ def test_bisection_to_p_high(base_strategy):
   other_net_m = np.array([0.0])
   active_paths = np.array([True])
 
-  new_spend = strategy.evaluate(
-      m=m,
-      active_paths=active_paths,
-      current_net_worth=net_worth,
-      tax_cost_m=np.zeros_like(net_worth),
-      prev_actual_amount=prev_base_spend_y,
-      other_net_m=other_net_m,
-      precomputed_cf_m=cpi_m * strategy.annual_cost_real[m // 12],
-      precomputed_cf_prev_m=cpi_m_minus_12 *
-      strategy.annual_cost_real[max(0, m // 12 - 1)])
+  new_spend = strategy.evaluate(m=m,
+                                active_paths=active_paths,
+                                current_net_worth=net_worth,
+                                tax_cost_m=np.zeros_like(net_worth),
+                                prev_actual_amount=prev_base_spend_y,
+                                other_net_m=other_net_m,
+                                precomputed_cf_m=cpi_m *
+                                strategy.annual_cost_real[m // 12],
+                                precomputed_cf_prev_m=cpi_m_minus_12 *
+                                strategy.annual_cost_real[max(0, m // 12 - 1)])
 
   # 約 440.0 になるはず
   assert new_spend[0] == pytest.approx(440.0, abs=0.1)
@@ -236,16 +236,16 @@ def test_mixed_paths(base_strategy):
   other_net_m = np.zeros(n_sim)
   active_paths = np.ones(n_sim, dtype=bool)
 
-  new_spend = strategy.evaluate(
-      m=m,
-      active_paths=active_paths,
-      current_net_worth=net_worth,
-      tax_cost_m=np.zeros_like(net_worth),
-      prev_actual_amount=prev_base_spend_y,
-      other_net_m=other_net_m,
-      precomputed_cf_m=cpi_m * strategy.annual_cost_real[m // 12],
-      precomputed_cf_prev_m=cpi_m_minus_12 *
-      strategy.annual_cost_real[max(0, m // 12 - 1)])
+  new_spend = strategy.evaluate(m=m,
+                                active_paths=active_paths,
+                                current_net_worth=net_worth,
+                                tax_cost_m=np.zeros_like(net_worth),
+                                prev_actual_amount=prev_base_spend_y,
+                                other_net_m=other_net_m,
+                                precomputed_cf_m=cpi_m *
+                                strategy.annual_cost_real[m // 12],
+                                precomputed_cf_prev_m=cpi_m_minus_12 *
+                                strategy.annual_cost_real[max(0, m // 12 - 1)])
 
   assert new_spend[0] == 400.0
   assert new_spend[1] == 360.0

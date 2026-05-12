@@ -1,11 +1,8 @@
-import hashlib
-
 import numpy as np
 import pytest
 
-from src.lib.asset_generator import (Asset, AssetConfigType, CpiAsset,
-                                     Distribution, SlideAdjustedCpiAsset,
-                                     YearlyLogNormalArithmetic,
+from src.lib.asset_generator import (AssetConfigType, CpiAsset, Distribution,
+                                     SlideAdjustedCpiAsset,
                                      generate_monthly_asset_prices)
 
 

@@ -1,7 +1,6 @@
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
-import pytest
 
 from src.lib.data_collection import fetch_asset_data, fetch_shiller_sp500
 

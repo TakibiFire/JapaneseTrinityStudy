@@ -33,6 +33,6 @@ class DRResult:
 # 7. prev_prices: 前年のアセット価格辞書 (n_sim,)
 # 8. need_debug: デバッグ情報を出力すべきパスのマスク (n_sim,)
 DynamicRebalanceFn = Callable[[
-    np.ndarray, np.ndarray, float, np.ndarray, np.ndarray,
-    Optional[Dict[str, np.ndarray]], Optional[Dict[str, np.ndarray]], np.ndarray
+    np.ndarray, np.ndarray, float, np.ndarray, np.ndarray, Optional[Dict[
+        str, np.ndarray]], Optional[Dict[str, np.ndarray]], np.ndarray
 ], DRResult]

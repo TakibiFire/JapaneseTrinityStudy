@@ -4,7 +4,7 @@
 
 import os
 import webbrowser
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import altair as alt
 import numpy as np

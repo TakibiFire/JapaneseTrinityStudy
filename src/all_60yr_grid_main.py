@@ -31,18 +31,14 @@ import numpy as np
 import pandas as pd
 
 from src.core import simulate_strategy
-from src.lib.dynamic_rebalance import (calculate_optimal_strategy,
-                                       calculate_safe_target_ratio)
+from src.lib.dynamic_rebalance import (calculate_optimal_strategy)
 from src.lib.retired_spending import (SpendingType,
                                       get_annual_retired_spending_values)
-from src.lib.scenario_builder import (ConstantSpend, CpiType, CurveSpend,
-                                      DynamicV1Adjustment, DynamicV1Rebalance,
-                                      FixedRebalance, FxType, Lifeplan,
-                                      PensionStatus, PredefinedStock,
-                                      PredefinedZeroRisk, Setup,
-                                      SpendAwareAdjustment,
-                                      SpendAwareDPRebalance, StrategySpec,
-                                      WorldConfig, create_experiment_setup)
+from src.lib.scenario_builder import (
+    ConstantSpend, CpiType, CurveSpend, DynamicV1Rebalance, FixedRebalance,
+    FxType, Lifeplan, PensionStatus, PredefinedStock, PredefinedZeroRisk, Setup,
+    SpendAwareAdjustment, SpendAwareDPRebalance, StrategySpec, WorldConfig,
+    create_experiment_setup)
 from src.lib.world_setup import re60_pen70_95
 
 # 共通設定
@@ -52,7 +48,8 @@ SEED = 43
 
 
 def get_optimal_pension_setup(
-    base_spend_annual: float) -> Tuple[Setup, int, List[Tuple[int, float, float]]]:
+    base_spend_annual: float
+) -> Tuple[Setup, int, List[Tuple[int, float, float]]]:
   """
   optimal-pension 実験設定を生成する。
 
@@ -142,7 +139,8 @@ def get_pen70_lifeplan_setup(
   exp_setup.name = "pen70-lifeplan"
 
   # 2. グリッドパラメータ
-  combinations = list(product(spend_multipliers, spending_rules, strategy_names))
+  combinations = list(product(spend_multipliers, spending_rules,
+                              strategy_names))
 
   for (spend_mult, rule, strat_name) in combinations:
     initial_annual_cost = base_spend_annual * spend_mult
@@ -153,12 +151,12 @@ def get_pen70_lifeplan_setup(
         base_spend=CurveSpend(first_year_annual_amount=initial_annual_cost))
 
     # 戦略の設定
-    spec = StrategySpec(
-        initial_money=float(init_money),
-        initial_asset_ratio=((PredefinedStock.ORUKAN_155, 1.0),
-                             (PredefinedZeroRisk.ZERO_RISK_4PCT, 0.0)),
-        selling_priority=(PredefinedStock.ORUKAN_155,
-                          PredefinedZeroRisk.ZERO_RISK_4PCT))
+    spec = StrategySpec(initial_money=float(init_money),
+                        initial_asset_ratio=((PredefinedStock.ORUKAN_155, 1.0),
+                                             (PredefinedZeroRisk.ZERO_RISK_4PCT,
+                                              0.0)),
+                        selling_priority=(PredefinedStock.ORUKAN_155,
+                                          PredefinedZeroRisk.ZERO_RISK_4PCT))
 
     if strat_name == "No dynamic rebalance":
       spec = replace(spec, rebalance=FixedRebalance())
@@ -190,8 +188,7 @@ def get_pen70_lifeplan_setup(
                      rebalance=SpendAwareDPRebalance(
                          risky_asset=PredefinedStock.ORUKAN_155,
                          zero_risk_asset=PredefinedZeroRisk.ZERO_RISK_4PCT,
-                         model_name=model_path)
-                     )
+                         model_name=model_path))
 
     exp_setup.add_experiment(
         name=f"Mult_{spend_mult}_Rule_{rule}%_{strat_name}",
@@ -208,7 +205,9 @@ def get_pen70_formula_setup(
   pen70-formula 実験設定を生成する。
   """
   spend_multipliers = [0.75, 1.0, 1.2, 1.5, 2.0, 3.0]
-  spending_rules = [2.8, 3.0, 3.33, 3.66, 4.0, 4.33, 4.66, 5.0, 5.5, 6.0, 7.0, 8.0]
+  spending_rules = [
+      2.8, 3.0, 3.33, 3.66, 4.0, 4.33, 4.66, 5.0, 5.5, 6.0, 7.0, 8.0
+  ]
   strategy_names = ["SpendAwareDPRebalance (R70-aware)"]
   N_SIM = 2000
 
@@ -217,7 +216,8 @@ def get_pen70_formula_setup(
   exp_setup.name = "pen70-formula"
 
   # 2. グリッドパラメータ
-  combinations = list(product(spend_multipliers, spending_rules, strategy_names))
+  combinations = list(product(spend_multipliers, spending_rules,
+                              strategy_names))
 
   for (spend_mult, rule, strat_name) in combinations:
     initial_annual_cost = base_spend_annual * spend_mult
@@ -228,12 +228,12 @@ def get_pen70_formula_setup(
         base_spend=CurveSpend(first_year_annual_amount=initial_annual_cost))
 
     # 戦略の設定
-    spec = StrategySpec(
-        initial_money=float(init_money),
-        initial_asset_ratio=((PredefinedStock.ORUKAN_155, 1.0),
-                             (PredefinedZeroRisk.ZERO_RISK_4PCT, 0.0)),
-        selling_priority=(PredefinedStock.ORUKAN_155,
-                          PredefinedZeroRisk.ZERO_RISK_4PCT))
+    spec = StrategySpec(initial_money=float(init_money),
+                        initial_asset_ratio=((PredefinedStock.ORUKAN_155, 1.0),
+                                             (PredefinedZeroRisk.ZERO_RISK_4PCT,
+                                              0.0)),
+                        selling_priority=(PredefinedStock.ORUKAN_155,
+                                          PredefinedZeroRisk.ZERO_RISK_4PCT))
 
     if strat_name == "SpendAwareDPRebalance (R70-aware)":
       # 倍率に応じたモデルを選択
@@ -271,7 +271,9 @@ def get_pen70_ds_setup(
   SpendAwareAdjustment を有効化した pen70-formula 相当の設定。
   """
   spend_multipliers = [0.75, 1.0, 1.2, 1.5, 2.0, 3.0]
-  spending_rules = [2.8, 3.0, 3.33, 3.66, 4.0, 4.33, 4.66, 5.0, 5.5, 6.0, 7.0, 8.0]
+  spending_rules = [
+      2.8, 3.0, 3.33, 3.66, 4.0, 4.33, 4.66, 5.0, 5.5, 6.0, 7.0, 8.0
+  ]
   strategy_names = ["SpendAwareDPRebalance (R70-aware)"]
   N_SIM = 2000
 
@@ -280,7 +282,8 @@ def get_pen70_ds_setup(
   exp_setup.name = "pen70-ds"
 
   # 2. グリッドパラメータ
-  combinations = list(product(spend_multipliers, spending_rules, strategy_names))
+  combinations = list(product(spend_multipliers, spending_rules,
+                              strategy_names))
 
   for (spend_mult, rule, strat_name) in combinations:
     initial_annual_cost = base_spend_annual * spend_mult
@@ -331,10 +334,11 @@ def main():
   # 引数の処理
   parser = argparse.ArgumentParser(
       description="60歳リタイア開始・95歳開始（94歳末）までの生存確率を分析するグリッドサーチスクリプト。")
-  parser.add_argument("--exp_type",
-                      type=str,
-                      default="optimal-pension",
-                      help="実験設定 (optimal-pension, pen70-lifeplan, pen70-formula, pen70-ds)")
+  parser.add_argument(
+      "--exp_type",
+      type=str,
+      default="optimal-pension",
+      help="実験設定 (optimal-pension, pen70-lifeplan, pen70-formula, pen70-ds)")
   args = parser.parse_args()
 
   # 設定
@@ -431,7 +435,6 @@ def main():
   df = pd.DataFrame(results)
   df.to_csv(csv_path, index=False, encoding="utf-8-sig", float_format="%.4f")
   print(f"完了。結果を {csv_path} に保存しました。")
-
 
 
 if __name__ == "__main__":

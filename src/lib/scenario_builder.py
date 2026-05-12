@@ -30,8 +30,7 @@ from src.lib.life_table import FEMALE_MORTALITY_RATES, MALE_MORTALITY_RATES
 from src.lib.retired_spending import (SpendingType,
                                       get_annual_retired_spending_multipliers,
                                       get_annual_retired_spending_values)
-from src.lib.simulation_defaults import (AcwiModelKey,
-                                         get_acwi_fat_tail_config,
+from src.lib.simulation_defaults import (AcwiModelKey, get_acwi_fat_tail_config,
                                          get_cpi_ar12_1981_config,
                                          get_cpi_ar12_config)
 from src.lib.spend_aware_dynamic_spending import SpendAwareDynamicSpending
@@ -936,8 +935,7 @@ def _build_strategy(variant: _ExperimentVariant, cf_map: Dict[str, str],
         elif reb.zero_risk_asset == PredefinedZeroRisk.CASH:
           zr_yield = 0.0
         else:
-          raise ValueError(
-              f"リバランスの振り分け先に指定できない資産です: {reb.zero_risk_asset}")
+          raise ValueError(f"リバランスの振り分け先に指定できない資産です: {reb.zero_risk_asset}")
 
         # calculate_optimal_strategy はインフレ率 0.0177 を前提にチューニングされている
         ratio = calculate_optimal_strategy(s_rate,

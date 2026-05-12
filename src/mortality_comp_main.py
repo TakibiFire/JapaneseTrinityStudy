@@ -35,8 +35,7 @@ from src.lib.scenario_builder import (ConstantSpend, CpiType, FxType, Gender,
                                       Lifeplan, PensionStatus, PredefinedStock,
                                       Setup, StrategySpec, WorldConfig,
                                       create_experiment_setup)
-from src.lib.visualize import (create_styled_summary,
-                               create_survival_probability_chart)
+from src.lib.visualize import (create_styled_summary)
 
 # 出力先ディレクトリ
 IMG_DIR = "docs/imgs/mortality/"

@@ -8,14 +8,13 @@
 """
 
 import os
-from typing import Dict, List, Union
+from typing import List, Union
 
 from scipy import stats
 
 from src.core import Strategy, simulate_strategy
 from src.lib.asset_generator import (Asset, CpiAsset, DerivedAsset, ForexAsset,
-                                     MonthlyLogDist, MonthlyLogNormal,
-                                     YearlyLogNormalArithmetic,
+                                     MonthlyLogDist, YearlyLogNormalArithmetic,
                                      generate_monthly_asset_prices)
 from src.lib.cashflow_generator import (BaseSpendConfig, CashflowRule,
                                         CashflowType, generate_cashflows)

@@ -16,8 +16,6 @@
 import os
 from typing import Dict, List, Union
 
-import numpy as np
-
 from src.core import Strategy, ZeroRiskAsset, simulate_strategy
 from src.lib.asset_generator import (Asset, CpiAsset, ForexAsset,
                                      YearlyLogNormalArithmetic,

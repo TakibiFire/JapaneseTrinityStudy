@@ -12,12 +12,12 @@ import argparse
 import os
 from collections import defaultdict
 from dataclasses import replace
-from typing import Dict, List, Union
+from typing import Dict, Union
 
 import numpy as np
 import pandas as pd
 
-from src.core import SimulationResult, simulate_strategy
+from src.core import simulate_strategy
 from src.lib.retired_spending import (SpendingType,
                                       get_annual_retired_spending_values)
 from src.lib.scenario_builder import (CurveSpend, DynamicV1Adjustment, FxType,

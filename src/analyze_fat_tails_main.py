@@ -8,7 +8,6 @@ S&P500およびACWIの価格データを用いたファットテールの分析�
 """
 
 import os
-from typing import Any, Dict, List
 
 import altair as alt
 import numpy as np

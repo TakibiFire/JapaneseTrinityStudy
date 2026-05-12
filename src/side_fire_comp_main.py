@@ -48,14 +48,14 @@ def main():
                       n_years=YEARS,
                       start_age=START_AGE,
                       cpi_type=CpiType.FIXED_1_77)
-  baseline_lifeplan = Lifeplan(base_spend=ConstantSpend(
-      annual_amount=ANNUAL_COST),
-                               retirement_start_age=START_AGE,
-                               pension_status=PensionStatus.NONE)
+  baseline_lifeplan = Lifeplan(
+      base_spend=ConstantSpend(annual_amount=ANNUAL_COST),
+      retirement_start_age=START_AGE,
+      pension_status=PensionStatus.NONE)
   baseline_strategy = StrategySpec(
       initial_money=INITIAL_MONEY,
-      initial_asset_ratio=((PredefinedStock.SIMPLE_7_15_ORUKAN, 1.0), ),
-      selling_priority=(PredefinedStock.SIMPLE_7_15_ORUKAN, ))
+      initial_asset_ratio=((PredefinedStock.SIMPLE_7_15_ORUKAN, 1.0),),
+      selling_priority=(PredefinedStock.SIMPLE_7_15_ORUKAN,))
 
   exp_setup = Setup(name="baseline",
                     world=world,
@@ -182,7 +182,11 @@ def main():
   with open(os.path.join(DATA_DIR, "exp1.md"), "w", encoding="utf-8") as f:
     f.write(exp1_table)
 
-  exp1_results = {k: v for k, v in results.items() if k.startswith(("固定+", "ダイナ+")) and not k.startswith(("固定+  ", "ダイナ+  "))}
+  exp1_results = {
+      k: v
+      for k, v in results.items()
+      if k.startswith(("固定+", "ダイナ+")) and not k.startswith(("固定+  ", "ダイナ+  "))
+  }
   visualize_and_save(exp1_results,
                      os.path.join(TEMP_DIR, "exp1_temp.html"),
                      distribution_image_file=os.path.join(
@@ -210,7 +214,9 @@ def main():
   with open(os.path.join(DATA_DIR, "exp2.md"), "w", encoding="utf-8") as f:
     f.write(exp2_table)
 
-  exp2_results = {k: v for k, v in results.items() if k.startswith(("固定+  ", "ダイナ+  "))}
+  exp2_results = {
+      k: v for k, v in results.items() if k.startswith(("固定+  ", "ダイナ+  "))
+  }
   visualize_and_save(exp2_results,
                      os.path.join(TEMP_DIR, "exp2_temp.html"),
                      distribution_image_file=os.path.join(

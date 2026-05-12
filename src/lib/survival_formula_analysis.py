@@ -207,20 +207,21 @@ def run_survival_formula_analysis(df_survival: pd.DataFrame,
   df_fit_f["p_rat"] = (rc1 * df_fit_f["Spend"] + rc2 * df_fit_f["M"] + rc3) / (
       rc4 * df_fit_f["Spend"] + rc5 * df_fit_f["M"] + 1)
 
-  models = [("Quadratic (Unified)", df_fit_f["p_quad"],
-             lambda l: qa1 * l**2 + qa2 * l + qa3,
-             lambda l: qb1 * l**2 + qb2 * l + qb3),
-            ("Simple Linear", df_fit_f["p_lin"], lambda l: km * l + cm,
-             lambda l: kc * l + cc),
-            ("Hyper-Alpha + Lin-Beta", df_fit_f["p_h1"], lambda l: 1 /
-             (ka * l + ia), lambda l: kb * l + ib),
-            ("Rational (Pade [1/1])", df_fit_f["p_rational"], lambda l:
-             (ra1 * l + ra2) / (l + ra3), lambda l: (rb1 * l + rb2) /
-             (l + rb3)),
-            ("Hyper-Alpha + Lin-Beta (Optimized)", df_fit_f["p_h1_o"],
-             lambda l: 1 / (ka_o * l + ia_o), lambda l: kb_o * l + ib_o),
-            ("Direct Rational", df_fit_f["p_rat"], lambda l: (rc2 - l * rc5) /
-             (l * rc4 - rc1), lambda l: (rc3 - l) / (l * rc4 - rc1))]
+  models = [
+      ("Quadratic (Unified)", df_fit_f["p_quad"],
+       lambda l: qa1 * l**2 + qa2 * l + qa3,
+       lambda l: qb1 * l**2 + qb2 * l + qb3),
+      ("Simple Linear", df_fit_f["p_lin"], lambda l: km * l + cm,
+       lambda l: kc * l + cc),
+      ("Hyper-Alpha + Lin-Beta", df_fit_f["p_h1"], lambda l: 1 /
+       (ka * l + ia), lambda l: kb * l + ib),
+      ("Rational (Pade [1/1])", df_fit_f["p_rational"], lambda l:
+       (ra1 * l + ra2) / (l + ra3), lambda l: (rb1 * l + rb2) / (l + rb3)),
+      ("Hyper-Alpha + Lin-Beta (Optimized)", df_fit_f["p_h1_o"], lambda l: 1 /
+       (ka_o * l + ia_o), lambda l: kb_o * l + ib_o),
+      ("Direct Rational", df_fit_f["p_rat"], lambda l: (rc2 - l * rc5) /
+       (l * rc4 - rc1), lambda l: (rc3 - l) / (l * rc4 - rc1))
+  ]
 
   for name, pred, a_func, b_func in models:
     print(f"\n--- {name} ---")
