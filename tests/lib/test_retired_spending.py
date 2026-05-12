@@ -1,10 +1,32 @@
 import numpy as np
 import pytest
 
+from src.lib.life_table import FEMALE_MORTALITY_RATES, MALE_MORTALITY_RATES
 from src.lib.retired_spending import (AVERAGE_AGE_75PLUS, SpendingType,
-                                      calculate_average_age_75plus,
                                       get_annual_retired_spending_multipliers,
                                       get_annual_retired_spending_values)
+
+
+def calculate_average_age_75plus() -> float:
+  """
+  生命表データを用いて75歳以上の平均年齢を推計する。
+  """
+  m_surv = [1.0]
+  f_surv = [1.0]
+  for m in MALE_MORTALITY_RATES:
+    m_surv.append(m_surv[-1] * (1 - m))
+  for f in FEMALE_MORTALITY_RATES:
+    f_surv.append(f_surv[-1] * (1 - f))
+
+  pop_sum = 0.0
+  age_sum = 0.0
+  # 75歳から105歳まで
+  for x in range(75, len(MALE_MORTALITY_RATES)):
+    pop = (m_surv[x] + f_surv[x]) / 2.0
+    pop_sum += pop
+    age_sum += pop * (x + 0.5)
+
+  return age_sum / pop_sum
 
 
 def test_average_age_consistency():

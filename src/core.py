@@ -11,7 +11,7 @@ from typing import Dict, List, Optional, Union, cast
 import numpy as np
 
 from src.lib.cashflow_generator import CashflowRule, CashflowType
-from src.lib.dynamic_rebalance_type import (DynamicRebalanceFn)
+from src.lib.dynamic_rebalance_type import DynamicRebalanceFn
 
 # ---------------------------------------------------------------------------
 # 1. データ構造 (Dataclasses)
@@ -99,23 +99,6 @@ class DynamicSpending:
 
     new_base_nom[active_paths] = res_active
     return new_base_nom
-
-  def calculate_nominal_spend(self, m: int, net_worth: np.ndarray,
-                              prev_base_spend_y: np.ndarray, cpi_m: np.ndarray,
-                              cpi_m_minus_12: np.ndarray,
-                              other_net_m: np.ndarray,
-                              active_paths: np.ndarray) -> np.ndarray:
-    """
-    (Deprecated) 旧エンジン用の計算メソッド。
-    """
-    return self.evaluate(m=m,
-                         active_paths=active_paths,
-                         current_net_worth=net_worth,
-                         tax_cost_m=np.zeros_like(net_worth),
-                         prev_actual_amount=prev_base_spend_y,
-                         other_net_m=other_net_m,
-                         precomputed_cf_m=cpi_m,
-                         precomputed_cf_prev_m=cpi_m_minus_12)
 
 
 @dataclasses.dataclass

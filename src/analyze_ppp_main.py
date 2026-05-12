@@ -97,7 +97,7 @@ def main() -> None:
   print(f"データポイント数: {len(df)}")
 
   # 回帰分析
-  slope, intercept, r_value, p_value, std_err = stats.linregress(
+  slope, intercept, r_value, p_value, unused_std_err = stats.linregress(
       df["FX_log_ret"], df["CPI_log_ret"])
 
   print("\n--- 回帰分析結果 (Δlog(CPI) = a * Δlog(FX) + b) ---")

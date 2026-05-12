@@ -20,19 +20,19 @@ from src.lib.survival_contours import (generate_rule_of_thumb,
                                        get_contour_anchor_points,
                                        save_contour_charts)
 from src.lib.survival_formula_analysis import run_survival_formula_analysis
-from src.lib.visualize_all_yr import (
-    calculate_preference_order, create_best_strategy_heatmap, create_heatmap,
-    create_improvement_heatmap, create_optimal_pension_heatmap,
-    create_pension_survival_curve, create_spend_percentile_chart,
-    prepare_heatmap_labels)
+from src.lib.visualize_all_yr import (calculate_preference_order,
+                                      create_best_strategy_heatmap,
+                                      create_heatmap,
+                                      create_improvement_heatmap,
+                                      create_optimal_pension_heatmap,
+                                      create_pension_survival_curve,
+                                      create_spend_percentile_chart,
+                                      prepare_heatmap_labels)
 
 # 設定
 IMG_DIR = "docs/imgs/all_50yr"
 DATA_OUT_DIR = "docs/data/all_50yr"
 TEMP_DIR = "temp/all_50yr"
-# BASE_SPEND_ANNUAL (574.0万円) = 統計データの50歳時平均支出 (552.5万円) + 国民年金保険料 (21.5万円)
-# シミュレーションでは、国民年金保険料は固定額、生活費のみを倍率 (spend_mult) でスケーリングしている。
-BASE_SPEND_ANNUAL = 574.0
 NUM_YEARS = 45
 START_AGE = 50
 
@@ -392,8 +392,7 @@ def run_pen70_formula_analysis(df_all: pd.DataFrame, target_year: str):
   save_contour_charts(df_plot_survival,
                       target_probs,
                       img_dir=IMG_DIR,
-                      prefix="pen70_formula_",
-                      rule_range=(2.38, 7.0))
+                      prefix="pen70_formula_")
 
   # 4. Rule of Thumb
   generate_rule_of_thumb(df_survival, target_probs, target_year)

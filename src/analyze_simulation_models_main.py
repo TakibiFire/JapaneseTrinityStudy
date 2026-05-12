@@ -175,7 +175,7 @@ def main():
 
   overlap = monthly_returns[['ACWI_log', 'SP500_log']].dropna()
   overlap = overlap[overlap.index <= end_date]
-  slope, intercept, r_value, p_value, std_err = stats.linregress(
+  slope, intercept, r_value, unused_p_value, unused_std_err = stats.linregress(
       overlap['SP500_log'], overlap['ACWI_log'])
   print(
       f"Linear Fit: ACWI = {slope:.4f} * SP500 {intercept:+.6f} (R^2 = {r_value**2:.4f})"

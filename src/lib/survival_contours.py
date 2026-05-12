@@ -110,8 +110,7 @@ def save_contour_charts(
     df_plot: pd.DataFrame,
     target_probs: List[float],
     img_dir: str,
-    prefix: str = "",
-    rule_range: Tuple[float, float] = (2.8, 7.0)) -> None:
+    prefix: str = "") -> None:
   """
   生成された高密度データから、生存確率達成ラインの3種のグラフを作成・保存する。
 
@@ -120,7 +119,6 @@ def save_contour_charts(
     target_probs: 描画対象の目標生存確率のリスト (ソート順指定のため)
     img_dir: 保存先ディレクトリ
     prefix: 保存ファイル名のプレフィックス
-    rule_range: 初期支出率の表示範囲 (domain)
   """
   if df_plot.empty:
     print("曲線を描画できるデータがありませんでした。")

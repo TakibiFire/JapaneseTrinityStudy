@@ -23,16 +23,18 @@ from src.lib.survival_contours import (generate_rule_of_thumb,
                                        get_contour_anchor_points,
                                        save_contour_charts)
 from src.lib.survival_formula_analysis import run_survival_formula_analysis
-from src.lib.visualize_all_yr import (
-    calculate_preference_order, create_best_strategy_heatmap, create_heatmap,
-    create_improvement_heatmap, create_pension_survival_curve,
-    prepare_heatmap_labels, run_optimal_pension_age_analysis)
+from src.lib.visualize_all_yr import (calculate_preference_order,
+                                      create_best_strategy_heatmap,
+                                      create_heatmap,
+                                      create_improvement_heatmap,
+                                      create_pension_survival_curve,
+                                      prepare_heatmap_labels,
+                                      run_optimal_pension_age_analysis)
 
 # 設定
 IMG_DIR = "docs/imgs/all_60yr"
 DATA_OUT_DIR = "docs/data/all_60yr"
 TEMP_DIR = "temp/all_60yr"
-BASE_SPEND_ANNUAL = 540.0
 NUM_YEARS = 35
 START_AGE = 60
 
@@ -259,8 +261,7 @@ def run_pen70_formula_analysis(df_all: pd.DataFrame, target_year: str):
   save_contour_charts(df_plot_survival,
                       target_probs,
                       img_dir=IMG_DIR,
-                      prefix="pen70_formula_",
-                      rule_range=(2.8, 8.0))
+                      prefix="pen70_formula_")
 
   # 4. Rule of Thumb
   generate_rule_of_thumb(df_survival, target_probs, target_year)

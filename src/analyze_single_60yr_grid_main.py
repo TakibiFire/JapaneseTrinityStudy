@@ -114,8 +114,7 @@ def run_formula_analysis(df_all: pd.DataFrame, target_year: str):
   save_contour_charts(df_plot_survival,
                       target_probs,
                       img_dir=IMG_DIR,
-                      prefix="single_combined_",
-                      rule_range=(2.5, 25.0))
+                      prefix="single_combined_")
 
   # 5. Rule of Thumb
   generate_rule_of_thumb(df_best_grid, target_probs, target_year)

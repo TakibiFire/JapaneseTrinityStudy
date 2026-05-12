@@ -52,7 +52,8 @@ def fit_ar_p(rets: np.ndarray, p: int) -> Tuple[float, float, float]:
   for i in range(1, p + 1):
     X[:, i] = rets[p - i:-i]
 
-  beta, residuals, rank, s = np.linalg.lstsq(X, Y, rcond=None)  # type: ignore
+  beta, residuals, unused_rank, unused_s = np.linalg.lstsq(
+      X, Y, rcond=None)  # type: ignore
 
   if residuals.size > 0:
     rss = float(residuals[0])

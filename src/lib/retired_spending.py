@@ -7,8 +7,6 @@ from typing import List
 import numpy as np
 from scipy.interpolate import CubicSpline
 
-from src.lib.life_table import FEMALE_MORTALITY_RATES, MALE_MORTALITY_RATES
-
 # 生命表に基づき推計された75歳以上の平均年齢 (calculate_average_age_75plus() の結果)
 AVERAGE_AGE_75PLUS = 83.88316897574647
 
@@ -53,31 +51,6 @@ ALL_HOUSEHOLDS_2019_CONSUMPTION_DATA = np.array(
 SINGLE_2025_BASE_AGES = np.array([30.0, 47.5, 62.5, 75.0])
 SINGLE_2025_CONSUMPTION_DATA = np.array([177542, 198488, 179933, 155782
                                         ]) * 12.0 / 10000.0
-SINGLE_2025_NON_CONSUMPTION_BASE_AGES = np.array([30.0, 47.5, 60.0, 75.0])
-SINGLE_2025_NON_CONSUMPTION_DATA = np.array([59146, 96334, 12930, 12930
-                                            ]) * 12.0 / 10000.0
-
-
-def calculate_average_age_75plus() -> float:
-  """
-  生命表データを用いて75歳以上の平均年齢を推計する。
-  """
-  m_surv = [1.0]
-  f_surv = [1.0]
-  for m in MALE_MORTALITY_RATES:
-    m_surv.append(m_surv[-1] * (1 - m))
-  for f in FEMALE_MORTALITY_RATES:
-    f_surv.append(f_surv[-1] * (1 - f))
-
-  pop_sum = 0.0
-  age_sum = 0.0
-  # 75歳から105歳まで
-  for x in range(75, len(MALE_MORTALITY_RATES)):
-    pop = (m_surv[x] + f_surv[x]) / 2.0
-    pop_sum += pop
-    age_sum += pop * (x + 0.5)
-
-  return age_sum / pop_sum
 
 
 def get_annual_retired_spending_values(spending_types: List[SpendingType],
