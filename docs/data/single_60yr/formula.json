@@ -1,6 +1,5 @@
 {
   "start_age": 60,
-  "household": "single",
   "target_age": 95,
   "formula": {
     "method": "Hyper-Alpha + Lin-Beta",
@@ -11,5 +10,6 @@
       "kb": 1.657698209668534,
       "ib": 171.479535362017
     }
-  }
+  },
+  "household": "single"
 }

@@ -94,7 +94,7 @@ def run_formula_analysis(df_all: pd.DataFrame, target_year: str):
       title=title,
       prefix="single_combined_",
       target_probs=target_probs,
-      output_json=None,
+      output_json="formula.json",
       generate_heatmap=False)
 
 
