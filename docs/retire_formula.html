@@ -314,7 +314,13 @@
           }
         } else {
           const { ka, ia, kb, ib } = coefficients;
-          result = M / (ka * L + ia) + kb * L + ib;
+          // For Hyper-Alpha + Lin-Beta, cap L at the vertex to keep it in the monotonic range
+          let L_calc = L;
+          if (M > 0 && ka > 0 && kb > 0) {
+            const L_vertex = (Math.sqrt(M * ka / kb) - ia) / ka;
+            if (L_calc > L_vertex) L_calc = L_vertex;
+          }
+          result = M / (ka * L_calc + ia) + kb * L_calc + ib;
         }
         state.Spend = result;
         resValEl.textContent = Math.round(result).toLocaleString();
@@ -330,7 +336,11 @@
           }
         } else {
           const { ka, ia, kb, ib } = coefficients;
-          result = (Spend - kb * L - ib) * (ka * L + ia);
+          // For Hyper-Alpha + Lin-Beta, cap L at the vertex
+          let L_calc = L;
+          if (L_calc > 8.0) L_calc = 8.0; 
+          result = (Spend - kb * L_calc - ib) * (ka * L_calc + ia);
+          if (result < 0) result = 0;
         }
         state.M = result;
         resValEl.textContent = Math.round(result).toLocaleString();
@@ -353,14 +363,44 @@
         const B = ka * ib + ia * kb - ka * Spend;
         const C = ia * ib - ia * Spend + M;
         const disc = B * B - 4 * A * C;
-        if (disc < 0) {
-          showError();
-          return;
+
+        // Find vertex to determine the valid range of the U-shaped curve
+        let L_vertex = 10.0; 
+        let minSpend = -Infinity;
+        if (M > 0 && ka > 0 && kb > 0) {
+          L_vertex = (Math.sqrt(M * ka / kb) - ia) / ka;
+          minSpend = M / (ka * L_vertex + ia) + kb * L_vertex + ib;
         }
-        // Quadratic root selection (the smaller root is usually the one)
-        L = (-B - Math.sqrt(disc)) / (2 * A);
-        if (L < -4 || L > 8) { // Check if the other root is better
-           L = (-B + Math.sqrt(disc)) / (2 * A);
+
+        const L_asymptote = -ia / ka;
+
+        if (disc < 0 || (minSpend !== -Infinity && Spend < minSpend)) {
+          // If spending is below the model's minimum, it's very safe
+          if (M > 0 && Spend < (M / ia + ib) * 1.5) {
+            L = Math.max(8.0, L_vertex); 
+          } else {
+            showError();
+            return;
+          }
+        } else {
+          // Pick the root in the valid monotonic range (-ia/ka, L_vertex)
+          const sqrtDisc = Math.sqrt(disc);
+          const L1 = (-B - sqrtDisc) / (2 * A);
+          const L2 = (-B + sqrtDisc) / (2 * A);
+
+          if (L1 > L_asymptote && L1 <= L_vertex + 0.01) {
+            L = L1;
+          } else if (L2 > L_asymptote && L2 <= L_vertex + 0.01) {
+            L = L2;
+          } else {
+            // Fallback for very safe spending that might hit the other branch
+            if (M > 0 && Spend < (M / ia + ib)) {
+              L = Math.max(8.0, L_vertex);
+            } else {
+              showError();
+              return;
+            }
+          }
         }
       }
       const P_result = Math.exp(L) / (1 + Math.exp(L));
