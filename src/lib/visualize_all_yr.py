@@ -341,9 +341,7 @@ def run_best_combination_analysis(
   df_best.to_csv(csv_output, index=False)
   print(f"✅ {csv_output} にCSVを保存しました。")
 
-  print(
-      f"\n--- {title_prefix} {target_year}年後生存確率を最大化する組み合わせの分布 ---"
-  )
+  print(f"\n--- {title_prefix} {target_year}年後生存確率を最大化する組み合わせの分布 ---")
   counts = df_best["display_combo"].value_counts().sort_index()
   print(counts.to_string())
 
@@ -455,10 +453,8 @@ def create_spend_percentile_chart(df: pd.DataFrame,
   print(f"✅ {output_path} に保存しました。")
 
 
-def calculate_preference_order(df_survival: pd.DataFrame,
-                               target_year: str,
-                               threshold: float,
-                               dim_cols: List[str],
+def calculate_preference_order(df_survival: pd.DataFrame, target_year: str,
+                               threshold: float, dim_cols: List[str],
                                value_col: str) -> List[Any]:
   """
   全グリッドセルにおける出現頻度に基づいて優先順位を自動計算する。
@@ -467,8 +463,8 @@ def calculate_preference_order(df_survival: pd.DataFrame,
 
   for _, group in df_survival.groupby(dim_cols):
     max_prob = float(group[target_year].max())
-    within_threshold = group[group[target_year] >=
-                             (max_prob - threshold)][value_col].tolist()
+    within_threshold = group[group[target_year] >= (
+        max_prob - threshold)][value_col].tolist()
     for val in within_threshold:
       if pd.isna(val):
         continue
@@ -545,14 +541,153 @@ def create_optimal_pension_heatmap(df_best: pd.DataFrame,
   """
   color_map = {
       "60歳": "#FBD38D",  # Light orange
+      "62歳": "#F6AD55",  # Orange
       "65歳": "#9AE6B4",  # Light green
+      "68歳": "#68D391",  # Green
       "70歳": "#B2F5EA",  # Light teal
+      "71歳": "#81E6D9",  # Teal
+      "73歳": "#FC8181",  # Pink/Red
       "75歳": "#FEB2B2"  # Light red
   }
   return create_best_strategy_heatmap(df_best, title, x_col, x_title, y_col,
                                       y_title, output_path, "display_age",
                                       "受給開始年齢", color_map, x_sort, y_sort,
                                       width, height)
+
+
+def format_age_range_label(selected_ages: List[float],
+                           all_ages: List[float]) -> str:
+  """
+  選ばれた年齢のリストを、連続している場合は範囲（-）を使って短縮表記する。
+  例: [60, 62, 65] で all_ages=[60, 62, 65, 68, 70] の場合 -> "60-65"
+  """
+  if not selected_ages:
+    return ""
+
+  # 数値としてソート
+  selected_sorted = sorted([int(a) for a in selected_ages])
+  all_sorted = sorted([int(a) for a in all_ages])
+
+  # all_ages におけるインデックスを取得
+  try:
+    indices = [all_sorted.index(a) for a in selected_sorted]
+  except ValueError:
+    # 含まれていない年齢がある場合はそのままカンマ区切りで返す
+    return ", ".join([f"{int(a)}" for a in selected_sorted])
+
+  ranges = []
+  if not indices:
+    return ""
+
+  start_idx = indices[0]
+  prev_idx = indices[0]
+
+  for i in range(1, len(indices)):
+    curr_idx = indices[i]
+    if curr_idx == prev_idx + 1:
+      prev_idx = curr_idx
+    else:
+      if start_idx == prev_idx:
+        ranges.append(f"{all_sorted[start_idx]}")
+      else:
+        ranges.append(f"{all_sorted[start_idx]}-{all_sorted[prev_idx]}")
+      start_idx = curr_idx
+      prev_idx = curr_idx
+
+  if start_idx == prev_idx:
+    ranges.append(f"{all_sorted[start_idx]}")
+  else:
+    ranges.append(f"{all_sorted[start_idx]}-{all_sorted[prev_idx]}")
+
+  return ", ".join(ranges)
+
+
+def run_optimal_pension_age_analysis(df_all: pd.DataFrame,
+                                     target_year: str,
+                                     img_dir: str,
+                                     start_age: int,
+                                     num_years: int,
+                                     threshold: float = 0.01,
+                                     shorten_labels: bool = False,
+                                     output_prefix: str = ""):
+  """
+  最適な年金受給開始年齢を分析し、ヒートマップと生存曲線を作成する。
+  """
+  df_survival = df_all[df_all["value_type"] == "survival"].copy()
+  if df_survival.empty:
+    print("Error: Survival data not found.")
+    return
+
+  # 優先順位を自動計算
+  dim_cols = ['spend_multiplier', 'spending_rule']
+  pref_order = calculate_preference_order(df_survival, target_year, threshold,
+                                          dim_cols, "pension_start_age")
+  print(f"Computed preference order for pension ages: {pref_order}")
+
+  all_ages = sorted(df_survival["pension_start_age"].unique().tolist())
+
+  def get_best_age(group: pd.DataFrame) -> pd.Series:
+    max_prob = float(group[target_year].max())
+    pref_map = {age: i for i, age in enumerate(pref_order)}
+    temp_group = group.copy()
+    temp_group["pref_score"] = temp_group["pension_start_age"].map(pref_map)
+    sorted_group = temp_group.sort_values(by=[target_year, "pref_score"],
+                                          ascending=[False, True])
+
+    within_threshold_rows = sorted_group[sorted_group[target_year] >= (
+        max_prob - threshold)]
+    within_threshold_ages = sorted(
+        within_threshold_rows["pension_start_age"].tolist())
+
+    selected_row = None
+    for age in pref_order:
+      if age in within_threshold_ages:
+        selected_row = group[group["pension_start_age"] == age].iloc[0].copy()
+        break
+    if selected_row is None:
+      selected_row = within_threshold_rows.iloc[0].copy()
+
+    selected_row["display_age"] = f"{int(selected_row['pension_start_age'])}歳"
+
+    # ラベル作成
+    label = f"{max_prob*100:.1f}%"
+    if shorten_labels:
+      age_str = format_age_range_label(within_threshold_ages, all_ages)
+      label += f"\n{age_str}"
+    else:
+      # 旧来の形式
+      line2 = f"{int(within_threshold_ages[0])}歳"
+      if len(within_threshold_ages) >= 2:
+        line2 += f", {int(within_threshold_ages[1])}歳"
+      label += f"\n{line2}"
+      if len(within_threshold_ages) >= 3:
+        line3 = f"{int(within_threshold_ages[2])}歳"
+        if len(within_threshold_ages) >= 4:
+          line3 += f", {int(within_threshold_ages[3])}歳"
+        label += f"\n{line3}"
+
+    selected_row["combo_label"] = label
+    return selected_row
+
+  results = []
+  for _, group in df_survival.groupby(dim_cols):
+    results.append(get_best_age(group))
+  df_best = pd.DataFrame(results)
+
+  df_best, m_order, r_order = prepare_heatmap_labels(df_best)
+
+  title = f"最適年金受給開始年齢 ({target_year}年後生存確率, 優先: {'>'.join([f'{int(a)}歳' for a in pref_order])}, 許容差{threshold*100:g}%)"
+  output_path = os.path.join(img_dir,
+                             f"{output_prefix}optimal_pension_age_heatmap.svg")
+  create_optimal_pension_heatmap(df_best,
+                                 title=title,
+                                 x_col="rule_label",
+                                 x_title="初期支出率 (%ルール)",
+                                 y_col="multiplier_label",
+                                 y_title="支出レベル",
+                                 output_path=output_path,
+                                 x_sort=r_order,
+                                 y_sort=m_order)
 
 
 def create_improvement_heatmap(df: pd.DataFrame,
@@ -586,14 +721,15 @@ def create_improvement_heatmap(df: pd.DataFrame,
   )
 
   heatmap = base.mark_rect().encode(
-      color=alt.Color('val:Q',
-                      title='改善幅 (%)',
-                      scale=alt.Scale(scheme='blues')))
+      color=alt.Color('val:Q', title='改善幅 (%)', scale=alt.Scale(
+          scheme='blues')))
 
-  text = base.mark_text(baseline='middle').encode(
-      text=alt.Text('val_pct:Q', format='.1f'),
-      color=alt.condition(alt.datum.val > 0.1, alt.value('white'),
-                          alt.value('black')))
+  text = base.mark_text(baseline='middle').encode(text=alt.Text('val_pct:Q',
+                                                                format='.1f'),
+                                                  color=alt.condition(
+                                                      alt.datum.val > 0.1,
+                                                      alt.value('white'),
+                                                      alt.value('black')))
 
   chart = (heatmap + text).properties(title=title, width=width, height=height)
 
@@ -602,13 +738,9 @@ def create_improvement_heatmap(df: pd.DataFrame,
   print(f"✅ {output_path} に保存しました。")
 
 
-def create_pension_survival_curve(df: pd.DataFrame,
-                                 multiplier: float,
-                                 rule: float,
-                                 title: str,
-                                 output_path: str,
-                                 start_age: int,
-                                 num_years: int):
+def create_pension_survival_curve(df: pd.DataFrame, multiplier: float,
+                                  rule: float, title: str, output_path: str,
+                                  start_age: int, num_years: int):
   """
   指定された multiplier と rule における、受給開始年齢別の生存確率推移を描画する。
   """

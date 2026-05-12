@@ -61,6 +61,46 @@ def create_standard_world(
   return Setup("standard_world", world_config, lifeplan, strategy_spec)
 
 
+def create_single_world(
+    n_sim: int,
+    start_age: int,
+    end_age_inclusive: int,
+    retirement_start_age: int,
+    pension_start_age: int,
+    seed: int = 42,
+) -> Setup:
+  """
+  単身世帯向けの世界設定（Setupオブジェクト）を構築します。
+  """
+  years = end_age_inclusive + 1 - start_age
+
+  world_config = WorldConfig(n_sim=n_sim,
+                             n_years=years,
+                             start_age=start_age,
+                             seed=seed,
+                             cpi_type=CpiType.JAPAN_AR12,
+                             fx_type=FxType.USDJPY)
+
+  lifeplan = Lifeplan(
+      base_spend=CurveSpend(spending_types=(
+          SpendingType.SINGLE_2025_CONSUMPTION,
+          SpendingType.UNEMPLOYED_SINGLE_2025_NON_CONSUMPTION_EXCLUDE_PENSION
+      )),
+      retirement_start_age=retirement_start_age,
+      pension_status=PensionStatus.FULL,
+      pension_start_age=pension_start_age,
+      household_size=1)
+
+  strategy_spec = StrategySpec(
+      initial_money=10000.0,  # プレースホルダ
+      initial_asset_ratio=((PredefinedStock.ORUKAN_155, 1.0),
+                           (PredefinedZeroRisk.ZERO_RISK_4PCT, 0.0)),
+      selling_priority=(PredefinedStock.ORUKAN_155,
+                        PredefinedZeroRisk.ZERO_RISK_4PCT))
+
+  return Setup("single_world", world_config, lifeplan, strategy_spec)
+
+
 def re40_pen60_95(n_sim: int, seed: int = 42) -> Setup:
   """
   開始40歳、リタイア40歳、年金開始60歳、終了94歳末のシナリオ設定を構築します。

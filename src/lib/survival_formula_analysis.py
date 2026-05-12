@@ -11,6 +11,7 @@
 
 import numpy as np
 import pandas as pd
+from scipy.optimize import minimize
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import r2_score
 
@@ -92,9 +93,9 @@ def run_survival_formula_analysis(df_survival: pd.DataFrame,
       return np.nan
     root1 = (-B_coeff + np.sqrt(disc)) / (2 * A_coeff)
     root2 = (-B_coeff - np.sqrt(disc)) / (2 * A_coeff)
-    if 0.3 <= root1 <= 4.5:
+    if -2.0 <= root1 <= 8.0:
       return root1
-    if 0.3 <= root2 <= 4.5:
+    if -2.0 <= root2 <= 8.0:
       return root2
     return root1
 
@@ -123,7 +124,64 @@ def run_survival_formula_analysis(df_survival: pd.DataFrame,
       return np.nan
     return (-B + np.sqrt(disc)) / (2 * A)
 
-  # --- [Idea 4] Direct Rational Fit ---
+  # --- [Idea 4] Rational (Pade [1/1]) for alpha and beta ---
+  # alpha = (ra1*L + ra2) / (L + ra3)  => alpha*L = ra1*L + ra2 - ra3*alpha
+  X_ra = np.column_stack([L, np.ones_like(L), -res_df_f["alpha"]])
+  mod_ra = LinearRegression(fit_intercept=False).fit(X_ra,
+                                                     L * res_df_f["alpha"])
+  ra1, ra2, ra3 = mod_ra.coef_
+  # beta = (rb1*L + rb2) / (L + rb3)   => beta*L = rb1*L + rb2 - rb3*beta
+  X_rb = np.column_stack([L, np.ones_like(L), -res_df_f["beta"]])
+  mod_rb = LinearRegression(fit_intercept=False).fit(X_rb, L * res_df_f["beta"])
+  rb1, rb2, rb3 = mod_rb.coef_
+
+  def solve_logit_rational(m, spend):
+    A = ra1 * m + rb1 - spend
+    B = (ra1 * rb3 + ra2) * m + rb1 * ra3 + rb2 - spend * (ra3 + rb3)
+    C = ra2 * rb3 * m + rb2 * ra3 - spend * (ra3 * rb3)
+    disc = B**2 - 4 * A * C
+    if disc < 0:
+      return np.nan
+    root1 = (-B + np.sqrt(disc)) / (2 * A)
+    root2 = (-B - np.sqrt(disc)) / (2 * A)
+    if -2.0 <= root1 <= 8.0:
+      return root1
+    if -2.0 <= root2 <= 8.0:
+      return root2
+    return root1
+
+  # --- [Idea 6] Hyper-Alpha + Lin-Beta (Optimized) ---
+  def solve_logit_h1_opt(m, spend, ka, ia, kb, ib):
+    # (ka*kb)L^2 + (ka*ib + ia*kb - ka*Spend)L + (ia*ib + M - ia*Spend) = 0
+    A = ka * kb
+    B = ka * ib + ia * kb - ka * spend
+    C = ia * ib + m - ia * spend
+    disc = B**2 - 4 * A * C
+    if disc < 0:
+      return np.nan
+    # 物理的に妥当な小さい方の解を選択 (root2)
+    return (-B - np.sqrt(disc)) / (2 * A)
+
+  def loss_h1_opt(params, m_arr, s_arr, l_true):
+    ka_opt, ia_opt, kb_opt, ib_opt = params
+    l_pred = np.array([
+        solve_logit_h1_opt(m, s, ka_opt, ia_opt, kb_opt, ib_opt)
+        for m, s in zip(m_arr, s_arr)
+    ])
+    mask = ~np.isnan(l_pred)
+    if not np.any(mask):
+      return 1e10
+    return np.mean((l_pred[mask] - l_true[mask])**2)
+
+  # 初期値として Idea 3 の結果を使用
+  res_opt = minimize(loss_h1_opt,
+                     x0=[ka, ia, kb, ib],
+                     args=(df_fit_f["M"].values, df_fit_f["Spend"].values,
+                           df_fit_f["logit_p"].values),
+                     method='Nelder-Mead')
+  ka_o, ia_o, kb_o, ib_o = res_opt.x
+
+  # --- [Idea 5] Direct Rational Fit ---
   X_r = pd.DataFrame({
       "Spend": df_fit_f["Spend"],
       "M": df_fit_f["M"],
@@ -141,6 +199,11 @@ def run_survival_formula_analysis(df_survival: pd.DataFrame,
                        (cm * df_fit_f["M"] + cc)) / (km * df_fit_f["M"] + kc)
   df_fit_f["p_h1"] = df_fit_f.apply(
       lambda r: solve_logit_h1(r["M"], r["Spend"]), axis=1)
+  df_fit_f["p_rational"] = df_fit_f.apply(
+      lambda r: solve_logit_rational(r["M"], r["Spend"]), axis=1)
+  df_fit_f["p_h1_o"] = df_fit_f.apply(
+      lambda r: solve_logit_h1_opt(r["M"], r["Spend"], ka_o, ia_o, kb_o, ib_o),
+      axis=1)
   df_fit_f["p_rat"] = (rc1 * df_fit_f["Spend"] + rc2 * df_fit_f["M"] + rc3) / (
       rc4 * df_fit_f["Spend"] + rc5 * df_fit_f["M"] + 1)
 
@@ -151,6 +214,11 @@ def run_survival_formula_analysis(df_survival: pd.DataFrame,
              lambda l: kc * l + cc),
             ("Hyper-Alpha + Lin-Beta", df_fit_f["p_h1"], lambda l: 1 /
              (ka * l + ia), lambda l: kb * l + ib),
+            ("Rational (Pade [1/1])", df_fit_f["p_rational"], lambda l:
+             (ra1 * l + ra2) / (l + ra3), lambda l: (rb1 * l + rb2) /
+             (l + rb3)),
+            ("Hyper-Alpha + Lin-Beta (Optimized)", df_fit_f["p_h1_o"],
+             lambda l: 1 / (ka_o * l + ia_o), lambda l: kb_o * l + ib_o),
             ("Direct Rational", df_fit_f["p_rat"], lambda l: (rc2 - l * rc5) /
              (l * rc4 - rc1), lambda l: (rc3 - l) / (l * rc4 - rc1))]
 
@@ -171,6 +239,12 @@ def run_survival_formula_analysis(df_survival: pd.DataFrame,
     elif name == "Hyper-Alpha + Lin-Beta":
       print(f"alpha = 1 / ({ka:.6f} * L + {ia:.6f})")
       print(f"beta = {kb:.4f} * L + {ib:.1f}")
+    elif name == "Rational (Pade [1/1])":
+      print(f"alpha = ({ra1:.6f} * L + {ra2:.6f}) / (L + {ra3:.6f})")
+      print(f"beta = ({rb1:.6f} * L + {rb2:.6f}) / (L + {rb3:.6f})")
+    elif name == "Hyper-Alpha + Lin-Beta (Optimized)":
+      print(f"alpha = 1 / ({ka_o:.6f} * L + {ia_o:.6f})")
+      print(f"beta = {kb_o:.4f} * L + {ib_o:.1f}")
     elif name == "Direct Rational":
       # Output with more precision for small coefficients
       print(
