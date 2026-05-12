@@ -2,12 +2,19 @@
 各年数（50年、60年等）のグリッド分析結果を処理・可視化するための共通ライブラリ。
 """
 
+import json
 import os
+import shutil
 from typing import Any, Dict, List, Optional
 
 import altair as alt
 import pandas as pd
 
+from src.lib.survival_contours import (generate_rule_of_thumb,
+                                       generate_smooth_contour_data,
+                                       get_contour_anchor_points,
+                                       save_contour_charts)
+from src.lib.survival_formula_analysis import run_survival_formula_analysis
 from src.lib.visualize import create_survival_probability_chart
 
 
@@ -630,3 +637,450 @@ def create_pension_survival_curve(df: pd.DataFrame, multiplier: float,
   os.makedirs(os.path.dirname(output_path), exist_ok=True)
   chart.save(output_path)
   print(f"✅ {output_path} に保存しました。")
+
+
+def run_lifeplan_analysis(df_all: pd.DataFrame,
+                          target_year: str,
+                          img_dir: str,
+                          threshold: float = 0.01):
+  """
+  リバランス戦略（R70, V1, 固定, なし）の比較分析を実行する。
+
+  Args:
+    df_all: 実験結果のデータフレーム
+    target_year: ターゲット年 (str)
+    img_dir: 画像保存ディレクトリ
+    threshold: 許容差 (デフォルト 0.01)
+  """
+  print(f"\n\n{'='*20} リバランス戦略の分析 (lifeplan) {'='*20}")
+
+  df_survival = df_all[df_all["value_type"] == "survival"].copy()
+  if df_survival.empty:
+    print("Error: Survival data not found.")
+    return
+
+  # 戦略の略称マッピング
+  strategy_map = {
+      "SpendAwareDPRebalance (R70-aware)": "R70",
+      "DynamicV1Rebalance": "V1",
+      "固定最適比率": "固定",
+      "No dynamic rebalance": "なし"
+  }
+
+  df_survival["strategy_short"] = df_survival["strategy"].map(strategy_map)
+
+  dim_cols = ['spend_multiplier', 'spending_rule']
+
+  # 優先順位を自動計算 (閾値内の出現頻度順)
+  pref_order = calculate_preference_order(df_survival, target_year, threshold,
+                                          dim_cols, "strategy_short")
+  print(f"Computed preference order for strategies: {pref_order}")
+
+  def get_best_strategy(group: pd.DataFrame) -> pd.Series:
+    max_prob = float(group[target_year].max())
+
+    # 0. 優先順位を数値化 (値が小さいほど高優先)
+    pref_map = {name: i for i, name in enumerate(pref_order)}
+    temp_group = group.copy()
+    temp_group["pref_score"] = temp_group["strategy_short"].map(pref_map)
+
+    # 1. 生存確率の降順、同じなら優先順位の昇順でソート
+    sorted_group = temp_group.sort_values(by=[target_year, "pref_score"],
+                                          ascending=[False, True])
+
+    # 2. 閾値内の全戦略を取得
+    within_threshold_rows = sorted_group[sorted_group[target_year] >= (
+        max_prob - threshold)]
+    within_threshold_names = within_threshold_rows["strategy_short"].tolist()
+
+    # 3. 色決定用の代表戦略 (優先順位に従う)
+    selected_row = None
+    for strat in pref_order:
+      if strat in within_threshold_names:
+        selected_row = group[group["strategy_short"] == strat].iloc[0].copy()
+        break
+
+    if selected_row is None:
+      selected_row = within_threshold_rows.iloc[0].copy()
+
+    selected_row["display_strategy"] = selected_row["strategy_short"]
+
+    # 4. ラベル作成
+    label = f"{max_prob*100:.1f}%"
+    line2 = within_threshold_names[0]
+    if len(within_threshold_names) >= 2:
+      line2 += f", {within_threshold_names[1]}"
+    label += f"\n{line2}"
+
+    if len(within_threshold_names) >= 3:
+      line3 = within_threshold_names[2]
+      if len(within_threshold_names) >= 4:
+        line3 += f", {within_threshold_names[3]}"
+      label += f"\n{line3}"
+
+    selected_row["combo_label"] = label
+    return selected_row
+
+  results = []
+  for _, group in df_survival.groupby(dim_cols):
+    results.append(get_best_strategy(group))
+  df_best = pd.DataFrame(results)
+
+  df_best, m_order, r_order = prepare_heatmap_labels(df_best)
+
+  # 戦略ごとのカラーマップ
+  color_map = {
+      "R70": "#B2F5EA",  # Light teal
+      "V1": "#FBD38D",  # Light orange
+      "固定": "#FEB2B2",  # Light red
+      "なし": "#CBD5E0"  # Light gray
+  }
+
+  title = f"最適リバランス戦略 ({target_year}年後生存確率, 優先: {'>'.join(pref_order)}, 許容差{threshold*100:g}%)"
+  output_path = os.path.join(img_dir, "best_rebalance_strategy_heatmap.svg")
+
+  create_best_strategy_heatmap(df_best,
+                               title=title,
+                               x_col="rule_label",
+                               x_title="初期支出率 (%ルール)",
+                               y_col="multiplier_label",
+                               y_title="支出レベル",
+                               output_path=output_path,
+                               color_col="display_strategy",
+                               color_title="最適戦略",
+                               color_map=color_map,
+                               x_sort=r_order,
+                               y_sort=m_order,
+                               height=405)
+
+  # 改善幅の計算 (R70 vs V1)
+  df_r70 = df_survival[df_survival["strategy_short"] == "R70"].copy()
+  df_v1 = df_survival[df_survival["strategy_short"] == "V1"].copy()
+
+  if not df_r70.empty and not df_v1.empty:
+    df_imp = pd.merge(df_r70[[
+        'spend_multiplier', 'spending_rule', 'initial_annual_cost', target_year
+    ]],
+                      df_v1[['spend_multiplier', 'spending_rule', target_year]],
+                      on=['spend_multiplier', 'spending_rule'],
+                      suffixes=('_r70', '_v1'))
+    df_imp["improvement"] = df_imp[f"{target_year}_r70"] - df_imp[
+        f"{target_year}_v1"]
+
+    df_imp, m_order_imp, r_order_imp = prepare_heatmap_labels(df_imp)
+
+    title_imp = f"R70のV1に対する改善幅 ({target_year}年後生存確率 差分)"
+    output_path_imp = os.path.join(img_dir, "improvement_r70_vs_v1_heatmap.svg")
+
+    create_improvement_heatmap(df_imp,
+                               target_col="improvement",
+                               title=title_imp,
+                               x_col="rule_label",
+                               x_title="初期支出率 (%ルール)",
+                               y_col="multiplier_label",
+                               y_title="支出レベル",
+                               output_path=output_path_imp,
+                               x_sort=r_order_imp,
+                               y_sort=m_order_imp,
+                               height=405)
+
+    print_comparison_summary(df_r70, df_v1, target_year)
+
+
+def print_comparison_summary(df_r70: pd.DataFrame, df_v1: pd.DataFrame,
+                             target_year: str):
+  """
+  R70とV1の生存確率の比較サマリーを表示する。
+
+  Args:
+    df_r70: R70の結果データフレーム (spend_multiplier, spending_rule, target_yearが必要)
+    df_v1: V1の結果データフレーム (spend_multiplier, spending_rule, target_yearが必要)
+    target_year: ターゲット年 (str)
+  """
+  print("\n--- R70 vs V1 生存確率の比較サマリー ---")
+  df_pivot_r70 = df_r70.pivot(index='spend_multiplier',
+                              columns='spending_rule',
+                              values=target_year)
+  df_pivot_v1 = df_v1.pivot(index='spend_multiplier',
+                            columns='spending_rule',
+                            values=target_year)
+
+  diff = (df_pivot_r70 - df_pivot_v1) * 100
+  print("\n改善幅 (R70 - V1) [パーセンテージポイント]:")
+  print(diff)
+
+  print("\nR70 生存確率 (%):")
+  print(df_pivot_r70 * 100)
+
+  print("\nV1 生存確率 (%):")
+  print(df_pivot_v1 * 100)
+
+
+def run_common_formula_analysis(df_survival: pd.DataFrame,
+                                target_year: str,
+                                img_dir: str,
+                                data_out_dir: str,
+                                start_age: int,
+                                pension_start: int,
+                                title: str,
+                                prefix: str,
+                                target_probs: Optional[List[float]] = None,
+                                output_json: Optional[str] = None,
+                                generate_heatmap: bool = True):
+  """
+  生存確率グリッドに対して、ヒートマップ作成、コンター作成、モデルフィッティング、JSON保存を行う。
+
+  Args:
+    df_survival: 生存確率のデータフレーム (spend_multiplier, spending_rule, target_yearが必要)
+    target_year: ターゲット年 (str)
+    img_dir: 画像保存ディレクトリ
+    data_out_dir: データ保存ディレクトリ
+    start_age: リタイア開始年齢
+    pension_start: 年金受給開始年齢
+    title: ヒートマップのタイトル
+    prefix: 保存ファイル名の接頭辞
+    target_probs: 可視化対象の生存確率リスト (デフォルト: [0.97, 0.95, 0.90, 0.80, 0.70])
+    output_json: 保存するJSONファイル名 (Noneの場合は保存しない)
+    generate_heatmap: ヒートマップを生成するかどうか
+  """
+  print(f"\n\n{'='*20} 生存確率式の分析 ({prefix}) {'='*20}")
+
+  if target_probs is None:
+    target_probs = [0.97, 0.95, 0.90, 0.80, 0.70]
+
+  # 1. ヒートマップ
+  if generate_heatmap:
+    df_h, m_order, r_order = prepare_heatmap_labels(df_survival)
+    output_path = os.path.join(img_dir, f"{prefix}heatmap.svg")
+
+    create_heatmap(df_h,
+                   target_col=target_year,
+                   title=title,
+                   x_col="rule_label",
+                   x_title="初期支出率 (%ルール)",
+                   y_col="multiplier_label",
+                   y_title="支出レベル",
+                   output_path=output_path,
+                   x_sort=r_order,
+                   y_sort=m_order)
+
+  # 2. 生存達成データの生成
+  plot_data = []
+  for p in target_probs:
+    anchors = get_contour_anchor_points(df_survival, p, target_year)
+    plot_data.extend(generate_smooth_contour_data(anchors, f"{p*100:g}%"))
+  df_plot_survival = pd.DataFrame(plot_data)
+
+  # 3. グラフ保存
+  save_contour_charts(df_plot_survival,
+                      target_probs,
+                      img_dir=img_dir,
+                      prefix=prefix)
+
+  # 4. Rule of Thumb
+  generate_rule_of_thumb(df_survival, target_probs, target_year)
+
+  # 5. 詳細な近似モデルの分析
+  coeffs = run_survival_formula_analysis(df_survival, target_year)
+
+  # 6. JSON出力
+  if coeffs and output_json:
+    os.makedirs(data_out_dir, exist_ok=True)
+    out_json = {
+        "start_age": start_age,
+        "target_age": start_age + int(target_year),
+        "formula": coeffs
+    }
+    if pension_start > 0:
+      out_json["pension_start"] = pension_start
+
+    # household 情報がある場合は追加
+    if "household" in df_survival.columns:
+      out_json["household"] = df_survival["household"].iloc[0]
+
+    json_path = os.path.join(data_out_dir, output_json)
+    with open(json_path, "w") as f:
+      json.dump(out_json, f, indent=2)
+    print(f"✅ {json_path} を保存しました。")
+
+
+def run_ds_comparison_analysis(df_survival: pd.DataFrame,
+                               df_formula_survival: pd.DataFrame,
+                               target_year: str, img_dir: str, num_years: int,
+                               start_age: int, title_main: str,
+                               output_prefix: str,
+                               comp_cases: Optional[List[tuple[float, float]]] = None):
+  """
+  SpendAwareDSとBase Formulaの比較分析を実行する。
+
+  Args:
+    df_survival: DSの結果データフレーム (spend_multiplier, spending_rule, target_yearが必要)
+    df_formula_survival: Base Formulaの結果データフレーム (spend_multiplier, spending_rule, target_yearが必要)
+    target_year: ターゲット年 (str)
+    img_dir: 画像保存ディレクトリ
+    num_years: シミュレーション期間
+    start_age: リタイア開始年齢
+    title_main: ヒートマップのメインタイトル
+    output_prefix: 接頭辞
+    comp_cases: 比較するケースのリスト [(multiplier, rule), ...]。Noneの場合は生成しない。
+  """
+  print(f"\n\n{'='*20} SpendAwareDS 比較分析 {'='*20}")
+
+  # 1. ヒートマップ
+  df_h, m_order, r_order = prepare_heatmap_labels(df_survival)
+  output_path = os.path.join(img_dir, f"{output_prefix}heatmap.svg")
+
+  create_heatmap(df_h,
+                 target_col=target_year,
+                 title=title_main,
+                 x_col="rule_label",
+                 x_title="初期支出率 (%ルール)",
+                 y_col="multiplier_label",
+                 y_title="支出レベル",
+                 output_path=output_path,
+                 x_sort=r_order,
+                 y_sort=m_order)
+
+  # 2. 比較ヒートマップ
+  df_comp = pd.merge(
+      df_survival[[
+          'spend_multiplier', 'spending_rule', 'initial_annual_cost',
+          target_year
+      ]],
+      df_formula_survival[['spend_multiplier', 'spending_rule', target_year]],
+      on=['spend_multiplier', 'spending_rule'],
+      suffixes=('_ds', '_formula'))
+
+  df_comp["improvement"] = df_comp[f"{target_year}_ds"] - df_comp[
+      f"{target_year}_formula"]
+
+  df_comp, m_order_comp, r_order_comp = prepare_heatmap_labels(df_comp)
+
+  title_imp = f"SpendAwareDSによる改善幅 ({target_year}年後生存確率 差分)"
+  output_path_imp = os.path.join(img_dir,
+                                 f"{output_prefix}improvement_ds_vs_formula_heatmap.svg")
+
+  create_improvement_heatmap(df_comp,
+                             target_col="improvement",
+                             title=title_imp,
+                             x_col="rule_label",
+                             x_title="初期支出率 (%ルール)",
+                             y_col="multiplier_label",
+                             y_title="支出レベル",
+                             output_path=output_path_imp,
+                             x_sort=r_order_comp,
+                             y_sort=m_order_comp,
+                             height=405)
+
+  # 3. 生存確率曲線の比較
+  if comp_cases:
+    for m, r in comp_cases:
+      ds_row = df_survival[(df_survival["spend_multiplier"] == m) &
+                           (df_survival["spending_rule"] == r)]
+      fo_row = df_formula_survival[(df_formula_survival["spend_multiplier"] == m)
+                                   & (df_formula_survival["spending_rule"] == r)]
+
+      if ds_row.empty or fo_row.empty:
+        continue
+
+      year_cols = [str(i) for i in range(1, num_years + 1)]
+      ds_vals = ds_row[year_cols].values[0]
+      fo_vals = fo_row[year_cols].values[0]
+
+      data = []
+      # Year 0
+      data.append({
+          "Year": 0,
+          "Survival Probability (%)": 100.0,
+          "Strategy": "pen70-ds"
+      })
+      data.append({
+          "Year": 0,
+          "Survival Probability (%)": 100.0,
+          "Strategy": "pen70-formula"
+      })
+
+      for i, yr in enumerate(year_cols):
+        data.append({
+            "Year": int(yr),
+            "Survival Probability (%)": ds_vals[i] * 100,
+            "Strategy": "pen70-ds"
+        })
+        data.append({
+            "Year": int(yr),
+            "Survival Probability (%)": fo_vals[i] * 100,
+            "Strategy": "pen70-formula"
+        })
+
+      df_plot = pd.DataFrame(data)
+      _, chart = create_survival_probability_chart(df_plot=df_plot,
+                                                   start_age=start_age,
+                                                   height=300)
+      chart = chart.properties(title=f"DS vs Formula 生存確率 (m={m}, r={r}%)")
+      filename = f"{output_prefix}comp_ds_formula_m{str(m).replace('.', '_')}_r{str(r).replace('.', '_')}.svg"
+      chart.save(os.path.join(img_dir, filename))
+      print(f"✅ {filename} に保存しました。")
+
+
+def generate_dp_calc_json_common(df_all: pd.DataFrame,
+                                 data_out_dir: str,
+                                 start_age: int,
+                                 num_years: int,
+                                 model_prefix: str,
+                                 model_src_dir: str = "data/optimal_strategy_dp"):
+  """
+  生存確率計算機（DP版）のための設定JSONを生成する共通関数。
+
+  Args:
+    df_all: 実験結果のデータフレーム (value_type='survival'が必要)
+    data_out_dir: データ保存ディレクトリ
+    start_age: リタイア開始年齢
+    num_years: シミュレーション期間
+    model_prefix: モデルファイルの接頭辞 (例: 're60_pen70_95')
+    model_src_dir: モデルファイルのソースディレクトリ
+  """
+  print(f"\n\n{'='*20} DP計算機用JSONの生成 {'='*20}")
+
+  df_survival = df_all[df_all["value_type"] == "survival"].copy()
+  multipliers = sorted(df_survival["spend_multiplier"].unique())
+  base_spends = {}
+  models = {}
+
+  for m in multipliers:
+    m_val = float(m)
+    m_key = str(m_val).replace(".", "_") if m_val % 1 != 0 else str(int(m_val))
+    if m_key.endswith("_0"):
+      m_key = m_key[:-2]
+
+    # モデルファイル名 (例: re60_pen70_95_m0_75.json)
+    model_name = f"{model_prefix}_m{m_key}.json"
+    src_path = os.path.join(model_src_dir, model_name)
+    dst_path = os.path.join(data_out_dir, model_name)
+
+    if os.path.exists(src_path):
+      shutil.copy(src_path, dst_path)
+      print(f"Copied {src_path} -> {dst_path}")
+      models[str(m_val)] = model_name
+      m_rows = df_survival[df_survival["spend_multiplier"] == m]
+      base_spends[str(m_val)] = round(
+          float(m_rows.iloc[0]["initial_annual_cost"]))
+    elif os.path.exists(dst_path):
+      models[str(m_val)] = model_name
+      m_rows = df_survival[df_survival["spend_multiplier"] == m]
+      base_spends[str(m_val)] = round(
+          float(m_rows.iloc[0]["initial_annual_cost"]))
+    else:
+      print(f"Warning: Model file not found: {src_path}")
+
+  out_json = {
+      "start_age": start_age,
+      "target_age": start_age + int(num_years),
+      "models": models,
+      "base_spends": base_spends
+  }
+
+  os.makedirs(data_out_dir, exist_ok=True)
+  json_path = os.path.join(data_out_dir, "dp_calc.json")
+  with open(json_path, "w") as f:
+    json.dump(out_json, f, indent=2)
+  print(f"✅ {json_path} を保存しました。")

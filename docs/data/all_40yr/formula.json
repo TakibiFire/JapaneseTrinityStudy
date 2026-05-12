@@ -1,6 +1,5 @@
 {
   "start_age": 40,
-  "pension_start": 70,
   "target_age": 95,
   "formula": {
     "method": "Hyper-Alpha + Lin-Beta",
@@ -11,5 +10,6 @@
       "kb": 5.702676601880597,
       "ib": 95.27809239038082
     }
-  }
+  },
+  "pension_start": 70
 }

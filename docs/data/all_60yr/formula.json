@@ -1,6 +1,5 @@
 {
   "start_age": 60,
-  "pension_start": 70,
   "target_age": 95,
   "formula": {
     "method": "Direct Rational",
@@ -12,5 +11,6 @@
       "rc4": -0.002987191648134078,
       "rc5": -3.463608541323059e-06
     }
-  }
+  },
+  "pension_start": 70
 }

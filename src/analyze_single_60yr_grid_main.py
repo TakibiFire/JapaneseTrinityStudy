@@ -7,19 +7,13 @@ data/single_60yr/ の結果を分析・可視化するスクリプト（単身�
 """
 
 import argparse
-import json
 import os
 
 import pandas as pd
 
-from src.lib.survival_contours import (generate_rule_of_thumb,
-                                       generate_smooth_contour_data,
-                                       get_contour_anchor_points,
-                                       save_contour_charts)
-from src.lib.survival_formula_analysis import run_survival_formula_analysis
-from src.lib.visualize_all_yr import (create_heatmap,
-                                      create_pension_survival_curve,
+from src.lib.visualize_all_yr import (create_pension_survival_curve,
                                       prepare_heatmap_labels,
+                                      run_common_formula_analysis,
                                       run_optimal_pension_age_analysis)
 
 # 設定
@@ -85,56 +79,23 @@ def run_formula_analysis(df_all: pd.DataFrame, target_year: str):
     best_rows.append(best_row)
 
   df_best_grid = pd.DataFrame(best_rows)
+  df_best_grid["household"] = "single"
 
-  # 2. ヒートマップ
-  df_h, m_order, r_order = prepare_heatmap_labels(df_best_grid)
   title = f"単身世帯 最適化生存確率 (全年金開始年齢のうち最大値) - {target_year}年後"
-  output_path = os.path.join(IMG_DIR, "best_combined_survival_heatmap.svg")
-
-  create_heatmap(df_h,
-                 target_col=target_year,
-                 title=title,
-                 x_col="rule_label",
-                 x_title="初期支出率 (%ルール)",
-                 y_col="multiplier_label",
-                 y_title="支出レベル",
-                 output_path=output_path,
-                 x_sort=r_order,
-                 y_sort=m_order)
-
-  # 3. 生存達成データの生成
   target_probs = [0.97, 0.95, 0.90, 0.85, 0.80, 0.70, 0.65, 0.60]
-  plot_data = []
-  for p in target_probs:
-    anchors = get_contour_anchor_points(df_best_grid, p, target_year)
-    plot_data.extend(generate_smooth_contour_data(anchors, f"{p*100:g}%"))
-  df_plot_survival = pd.DataFrame(plot_data)
 
-  # 4. グラフ保存
-  save_contour_charts(df_plot_survival,
-                      target_probs,
-                      img_dir=IMG_DIR,
-                      prefix="single_combined_")
-
-  # 5. Rule of Thumb
-  generate_rule_of_thumb(df_best_grid, target_probs, target_year)
-
-  # 6. 詳細な近似モデルの分析
-  coeffs = run_survival_formula_analysis(df_best_grid, target_year)
-
-  # 7. JSON出力
-  if coeffs:
-    os.makedirs(DATA_OUT_DIR, exist_ok=True)
-    out_json = {
-        "start_age": START_AGE,
-        "household": "single",
-        "target_age": START_AGE + int(target_year),
-        "formula": coeffs
-    }
-    json_path = os.path.join(DATA_OUT_DIR, "formula.json")
-    with open(json_path, "w") as f:
-      json.dump(out_json, f, indent=2)
-    print(f"✅ {json_path} を保存しました。")
+  run_common_formula_analysis(
+      df_best_grid,
+      target_year,
+      IMG_DIR,
+      DATA_OUT_DIR,
+      START_AGE,
+      pension_start=0,  # 最良を選択しているため
+      title=title,
+      prefix="single_combined_",
+      target_probs=target_probs,
+      output_json=None,
+      generate_heatmap=False)
 
 
 def main():
