@@ -49,12 +49,12 @@ def run_optimal_pension_analysis(df_all: pd.DataFrame, target_year: str):
                                 num_years=NUM_YEARS)
 
   create_pension_survival_curve(df_all,
-                                multiplier=1.0,
-                                rule=5.0,
-                                title="受給開始年齢別 生存確率推移 (支出レベル1.0, 初年度支出率5%)",
+                                multiplier=1.5,
+                                rule=7.0,
+                                title="受給開始年齢別 生存確率推移 (支出レベル1.5, 初年度支出率7%)",
                                 output_path=os.path.join(
                                     IMG_DIR,
-                                    "survival_curve_pension_m1_r5.svg"),
+                                    "survival_curve_pension_m1_5_r7.svg"),
                                 start_age=START_AGE,
                                 num_years=NUM_YEARS)
 

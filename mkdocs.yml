@@ -122,10 +122,12 @@ nav:
   - ライフプランに基づく戦略:
     - ライフプランを考慮した<br>最適配分を繰り返す<br>（進化版ダイナミックリバランス）: spend_aware_dynamic_rebalance.md
     - ライフプランを考慮した<br>支出制限（生存確率ベース<br>のガードレール）: spend_aware_dynamic_spending.md
-  - 年齢別の最適戦略:
+  - 2人以上世帯の年齢別最適戦略:
     - 60歳の最適戦略: all_60yr.md
     - 50歳の最適戦略: all_50yr.md
     - 40歳の最適戦略: all_40yr.md
+  - 単身世帯・LEAN FIREの年齢別最適戦略:
+    - 60歳の最適戦略: single_60yr.md
   - 公開未定:
     - NISA: nisa.md
     - iDeco: ideco.md
