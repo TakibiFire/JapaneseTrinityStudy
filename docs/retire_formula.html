@@ -320,7 +320,16 @@
             const L_vertex = (Math.sqrt(M * ka / kb) - ia) / ka;
             if (L_calc > L_vertex) L_calc = L_vertex;
           }
-          result = M / (ka * L_calc + ia) + kb * L_calc + ib;
+          const denom = ka * L_calc + ia;
+          if (denom <= 0) {
+            showError();
+            return;
+          }
+          result = M / denom + kb * L_calc + ib;
+          if (result < 0) {
+            showError();
+            return;
+          }
         }
         state.Spend = result;
         resValEl.textContent = Math.round(result).toLocaleString();
@@ -339,7 +348,12 @@
           // For Hyper-Alpha + Lin-Beta, cap L at the vertex
           let L_calc = L;
           if (L_calc > 8.0) L_calc = 8.0; 
-          result = (Spend - kb * L_calc - ib) * (ka * L_calc + ia);
+          const alpha = ka * L_calc + ia;
+          if (alpha <= 0) {
+            showError();
+            return;
+          }
+          result = (Spend - kb * L_calc - ib) * alpha;
           if (result < 0) result = 0;
         }
         state.M = result;
