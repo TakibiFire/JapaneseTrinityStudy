@@ -1,4 +1,5 @@
 site_name: 日本版リタイア後の取り崩し戦略 〜 4%ルールを信じるな | たきびFIRE
+site_url: https://takibi-fire.com/4percent-rule/
 site_dir: dist
 use_directory_urls: false
 
@@ -129,6 +130,7 @@ nav:
   - 単身世帯・LEAN FIREの年齢別最適戦略:
     - 60歳の最適戦略: single_60yr.md
     - 50歳の最適戦略: single_50yr.md
+    - 40歳の最適戦略: single_40yr.md
   - 公開未定:
     - NISA: nisa.md
     - iDeco: ideco.md
