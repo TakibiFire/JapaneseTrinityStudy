@@ -42,7 +42,7 @@ python3 src/cash_ratio_comp_main.py
 
 資産形成期によく言われるのは「普通の人が持つリスク資産は株式 100％で十分です」という話です。
 
-参考: [リスク資産として株式だけでなく「債券」も入れたほうがよいと言われたのですが?](https://hayatoito.github.io/2020/investing/#f797)
+参考: [リスク資産として株式だけでなく「債券」も入れたほうがよいと言われたのですが? | 普通の人が資産運用で99点をとる方法とその考え方](https://hayatoito.github.io/2020/investing/#f797)
 
 しかし今まで見てきたように、資産形成期と取り崩し期では戦略が違います。
 
@@ -73,10 +73,15 @@ python3 src/cash_ratio_comp_main.py
 
 取り崩しが必要な際、まず手元の現金を使い切り、現金がなくなってからオルカンを売却する戦略です。これは運用初期の暴落時に株式を売却せずに済む効果を狙ったものです。
 
-{!data/cash_ratio/exp1_result.md!}
+生存確率の推移は以下のようになりました。
+
+<div class="grid cards" markdown>
+
+- ![生存確率の推移(実験1)](imgs/cash_ratio/exp1_survival.svg)
+
+</div>
 
 ![資産額の分布(実験1)](imgs/cash_ratio/exp1_distribution.svg)
-![生存確率の推移(実験1)](imgs/cash_ratio/exp1_survival.svg)
 
 グラフから、**現金比率を高めるほど23年目までの生存確率は向上するが、23年目以降は逆に生存確率が下がる**ことがわかります。
 
