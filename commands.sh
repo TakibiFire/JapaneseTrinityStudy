@@ -62,7 +62,7 @@ while (( "$#" )); do
             pnpm dlx @tailwindcss/cli -i ./src/input.css -o ./docs/stylesheets/tailwind.css --minify
             execute_cmd .venv/bin/zensical build
             execute_cmd rm -f dist/.DS_Store
-            rsync -av --delete ~/projects/lebakan/dist/ ~/projects/takibi-fire/public_root/4p-rule/
+            rsync -av --delete ~/projects/lebakan/dist/ ~/projects/takibi-fire/public_root/4percent-rule/
             ;;
         *)
             echo "Error: Invalid action '$ACTION'." >&2
