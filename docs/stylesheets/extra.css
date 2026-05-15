@@ -88,3 +88,11 @@
 .md-sidebar__scrollwrap:hover {
   scrollbar-color: var(--md-default-fg-color--lighter) #0000 !important;
 }
+
+/* 画像を中央揃えにする */
+.md-typeset img {
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+}
+
