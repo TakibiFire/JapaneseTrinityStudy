@@ -6,11 +6,14 @@ import numpy as np
 import pytest
 
 from src.lib.dynamic_rebalance_type import DRResult
-from src.lib.scenario_builder import (
-    ConstantSpend, CpiType, CurveSpend, DynamicV1Adjustment, DynamicV1Rebalance,
-    FixedRebalance, FxType, Gender, Lifeplan, PensionStatus, PredefinedStock,
-    PredefinedZeroRisk, Setup, SpendAwareAdjustment, SpendAwareDPRebalance,
-    StrategySpec, WorldConfig, create_experiment_setup)
+from src.lib.scenario_builder import (ConstantSpend, CpiType, CurveSpend,
+                                      DynamicV1Adjustment, DynamicV1Rebalance,
+                                      FixedRebalance, FxType, Gender, Lifeplan,
+                                      PensionStatus, PredefinedStock,
+                                      PredefinedZeroRisk, Setup,
+                                      SpendAwareAdjustment,
+                                      SpendAwareDPRebalance, StrategySpec,
+                                      WorldConfig, create_experiment_setup)
 
 
 @pytest.fixture
@@ -176,13 +179,13 @@ def test_pension_status_variations(baseline_setup):
 
 
 def test_pension_age_reduction_and_increase(baseline_setup):
-  """繰り上げ(60歳)および繰り下げ(70歳)の影響を検証する。"""
+  """繰上げ(60歳)および繰下げ(70歳)の影響を検証する。"""
   baseline_setup.world = replace(baseline_setup.world,
                                  start_age=50,
                                  n_years=40,
                                  cpi_type=CpiType.FIXED_0)
 
-  # 60歳受給 (65歳から60ヶ月繰り上げ、0.4% * 60 = 24%減) -> 76%
+  # 60歳受給 (65歳から60ヶ月繰上げ、0.4% * 60 = 24%減) -> 76%
   baseline_setup.lifeplan = replace(baseline_setup.lifeplan,
                                     retirement_start_age=55,
                                     pension_status=PensionStatus.FULL,
@@ -196,7 +199,7 @@ def test_pension_age_reduction_and_increase(baseline_setup):
   assert np.allclose(arr_60[0, :120], 0)
   assert np.isclose(arr_60[0, 120], 5.168)
 
-  # 70歳受給 (65歳から60ヶ月繰り下げ、0.7% * 60 = 42%増) -> 142%
+  # 70歳受給 (65歳から60ヶ月繰下げ、0.7% * 60 = 42%増) -> 142%
   baseline_setup.lifeplan = replace(baseline_setup.lifeplan,
                                     retirement_start_age=55,
                                     pension_status=PensionStatus.FULL,

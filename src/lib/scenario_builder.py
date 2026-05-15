@@ -30,7 +30,8 @@ from src.lib.life_table import FEMALE_MORTALITY_RATES, MALE_MORTALITY_RATES
 from src.lib.retired_spending import (SpendingType,
                                       get_annual_retired_spending_multipliers,
                                       get_annual_retired_spending_values)
-from src.lib.simulation_defaults import (AcwiModelKey, get_acwi_fat_tail_config,
+from src.lib.simulation_defaults import (AcwiModelKey,
+                                         get_acwi_fat_tail_config,
                                          get_cpi_ar12_1981_config,
                                          get_cpi_ar12_config)
 from src.lib.spend_aware_dynamic_spending import SpendAwareDynamicSpending
@@ -774,10 +775,10 @@ def _compile_lifeplan(lp: Lifeplan, world: WorldConfig) -> _CompiledLifeplan:
 
     # 受給額倍率の計算 (65歳基準)
     if p_start_age < 65:
-      # 繰り上げ (0.4% / 月 減額)
+      # 繰上げ (0.4% / 月 減額)
       reduction_rate = 1.0 - 0.004 * (65 - p_start_age) * 12
     else:
-      # 繰り下げ (0.7% / 月 増額)
+      # 繰下げ (0.7% / 月 増額)
       reduction_rate = 1.0 + 0.007 * (p_start_age - 65) * 12
 
     # 厚生年金
