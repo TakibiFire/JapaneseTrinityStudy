@@ -75,13 +75,7 @@ python3 src/cash_ratio_comp_main.py
 
 生存確率の推移は以下のようになりました。
 
-<div class="grid cards" markdown>
-
-- ![生存確率の推移(実験1)](imgs/cash_ratio/exp1_survival.svg)
-
-</div>
-
-![資産額の分布(実験1)](imgs/cash_ratio/exp1_distribution.svg)
+![生存確率の推移(実験1)](imgs/cash_ratio/exp1_survival.svg)
 
 グラフから、**現金比率を高めるほど23年目までの生存確率は向上するが、23年目以降は逆に生存確率が下がる**ことがわかります。
 
@@ -89,9 +83,6 @@ python3 src/cash_ratio_comp_main.py
 
 取り崩しが必要な際、まずオルカンを売却し、オルカンが底をついてから初めて現金を使う戦略です。
 
-{!data/cash_ratio/exp2_result.md!}
-
-![資産額の分布(実験2)](imgs/cash_ratio/exp2_distribution.svg)
 ![生存確率の推移(実験2)](imgs/cash_ratio/exp2_survival.svg)
 
 こちらの戦略でも、**現金比率を高めるほど19年目までの生存確率は上がるが、19年目以降は生存確率が下がる**という結果になりました。

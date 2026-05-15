@@ -46,11 +46,16 @@ python3 src/cash_rebalance_comp_main.py
 
 ### 結果
 
-{!data/cash_rebalance/rebalance_effect_result.md!}
+50年間の生存確率は以下のようになりました。
+
+![生存確率（リバランスの有無）](imgs/cash_rebalance/rebalance_effect_survival.svg)
+
+50年後の生存確率だけをみるなら、オルカン100%で何も現金を持たないほうがよい事がわかります。
+
+50年後の資産の分布は以下のようになります。
 
 ![資産額の分布（リバランスの有無）](imgs/cash_rebalance/rebalance_effect_distribution.svg)
 
-![生存確率（リバランスの有無）](imgs/cash_rebalance/rebalance_effect_survival.svg)
 
 ### 考察
 
@@ -75,11 +80,14 @@ python3 src/cash_rebalance_comp_main.py
 
 ### 結果
 
-{!data/cash_rebalance/rebalance_freq_result.md!}
+50年間の生存確率は以下のようになりました。
+
+![生存確率（リバランス頻度）](imgs/cash_rebalance/rebalance_freq_survival.svg)
+
+
 
 ![資産額の分布（リバランス頻度）](imgs/cash_rebalance/rebalance_freq_distribution.svg)
 
-![生存確率（リバランス頻度）](imgs/cash_rebalance/rebalance_freq_survival.svg)
 
 ### 考察
 
