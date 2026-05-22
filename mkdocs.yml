@@ -50,8 +50,8 @@ extra:
     provider: google
     property: G-0HHJ8YE8GZ
   social:
-    - icon: fontawesome/brands/github
-      link: https://github.com/TakibiFire/JapaneseTrinityStudy
+    - icon: custom/note-square
+      link: https://note.com/takibi333
     - icon: fontawesome/brands/twitter
       link: https://twitter.com/takibi333
       name: たきび@FIRE
@@ -84,6 +84,9 @@ markdown_extensions:
   - pymdownx.emoji:
       emoji_index: !!python/name:zensical.extensions.emoji.twemoji 
       emoji_generator: !!python/name:zensical.extensions.emoji.to_svg
+      options:
+        custom_icons:
+          - overrides/.icons
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.inlinehilite

@@ -99,3 +99,30 @@
 .md-typeset .twemoji {
   vertical-align: text-bottom;
 }
+
+.md-social a {
+  color: var(--md-default-fg-color);
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.5rem;
+  padding: 0.2rem;
+  transition: background-color 250ms, color 250ms;
+  overflow: hidden;
+  display: inline-block;
+  vertical-align: baseline;
+}
+
+.md-social a:hover {
+  background-color: var(--md-default-fg-color--lightest);
+  color: var(--md-default-fg-color);
+}
+
+.md-social a.md-social__link[title="note.com"] {
+  width: 3rem;
+}
+.md-social a.md-social__link[title="note.com"] svg {
+  transform: scale(3);
+  transform-origin: center;
+}
+.md-social a svg {
+  vertical-align: baseline;
+}
