@@ -96,3 +96,6 @@
   margin-right: auto;
 }
 
+.md-typeset .twemoji {
+  vertical-align: text-bottom;
+}

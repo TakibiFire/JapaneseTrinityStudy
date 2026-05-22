@@ -1,4 +1,4 @@
-site_name: 日本版リタイア後の取り崩し戦略 〜 4%ルールを信じるな | たきびFIRE
+site_name: 日本版アーリーリタイア後の取り崩し戦略 〜 4%ルールを信じるな | たきびFIRE
 site_url: https://takibi-fire.com/4percent-rule/
 site_dir: dist
 use_directory_urls: false
@@ -79,6 +79,9 @@ markdown_extensions:
       smart_dollar: false
   - pymdownx.caret
   - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:zensical.extensions.emoji.twemoji 
+      emoji_generator: !!python/name:zensical.extensions.emoji.to_svg
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.inlinehilite
@@ -100,32 +103,34 @@ extra_javascript:
 
 nav:
   - リタイア後の取り崩し戦略: index.md
-  - よくある質問: qa.md
-  - 取り崩し戦略に必要な知識:
-    - ボラティリティが長期投資に与える影響: volatility.md
-    - 資産が枯渇するパターン：収益率配列のリスク: sequence.md
+  - 全解説: contents.md
+  - 取り崩しシミュレーションにおいて考慮すべきこと:
+    - ボラティリティの影響: volatility.md
+    - 収益率配列のリスク: sequence.md
     - 物価上昇率の影響: cpi.md
     - 譲渡所得税の影響: tax.md
     - 信託報酬の影響: trust_fee.md
     - 為替リスクの影響: forex.md
     - 購買力平価とインフレの相関: ppp.md
+  - 取り崩しにおける運用とポートフォリオ戦略:
     - ファットテール分布の影響: fat_tails.md
     - S&P500 vs. オルカン: sp500_vs_acwi.md
-  - 生存確率を上げる戦略:
     - 現金保有の効果: cash_ratio.md
     - 現金リバランスの効果: cash_rebalance.md
+    - 日本の無リスク資産の候補: zero_risk_options.md
     - 無リスク資産保有の効果: zero_risk.md
     - 無リスク資産リバランスの効果: zero_risk_rebalance.md
-    - 最適配分を繰り返す<br>(ダイナミックリバランス): dynamic_rebalance.md
-    - 支出制限<br>(ダイナミックスペンディングと<br>ガードレール): dynamic_spending.md
+    - ダイナミックリバランス戦略: dynamic_rebalance.md
+  - ライフプランを決めることの重要性:
     - 高齢になると支出が減る: retired_spending.md
-    - 年金支払いと受給の効果: pension.md
-    - サイドFIREの効果: side_fire.md
+    - 年金受給が取り崩し戦略に与える影響: pension.md
     - 死亡率を考慮する: mortality.md
-  - ライフプランに基づく戦略:
     - ライフプランを考慮した<br>最適配分を繰り返す<br>（進化版ダイナミックリバランス）: spend_aware_dynamic_rebalance.md
+  - 支出を減らす・収入を増やす:
+    - ダイナミック・スペンディング<br>（動的支出）: dynamic_spending.md
     - ライフプランを考慮した<br>支出制限（生存確率ベース<br>のガードレール）: spend_aware_dynamic_spending.md
-  - 2人以上世帯の年齢別最適戦略:
+    - サイドFIRE: side_fire.md
+  - 2人以上世帯・FAT FIREの年齢別最適戦略:
     - 60歳の最適戦略: all_60yr.md
     - 50歳の最適戦略: all_50yr.md
     - 40歳の最適戦略: all_40yr.md
