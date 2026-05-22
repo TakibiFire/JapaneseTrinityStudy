@@ -36,7 +36,7 @@ python3 src/analyze_dynamic_spending_grid_main.py  --exp_name 1p_1.5p_spend
 
 ## ダイナミック・スペンディング（動的支出）戦略の紹介と出典
 
-このサイト「日本版リタイア後の取り崩し戦略 〜 4%ルールを信じるな」では様々な条件を吟味して4%ルールの不備を指摘してきました。
+このサイト「日本版FIRE後の取り崩し戦略 〜 4%ルールを信じるな」では様々な条件を吟味して4%ルールの不備を指摘してきました。
 
 4%ルールは「アメリカにおける、30年生存確率を上げるための戦略」として開発されましたが、「4%ルールっておかしいよね」という話は海外でも挙げられています。ヴァンガード社が 2021年に出した [Fuel for the F.I.R.E.: Updating the 4% rule for early retirees (英語pdf)](https://www.vanguardmexico.com/content/dam/intl/americas/documents/mexico/en/fuel-for-the-fire.pdf) では以下の4%ルールの問題点を指摘しています。
 

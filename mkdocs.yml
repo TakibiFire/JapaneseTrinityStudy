@@ -1,4 +1,4 @@
-site_name: 日本版アーリーリタイア後の取り崩し戦略 〜 4%ルールを信じるな | たきびFIRE
+site_name: 日本版FIRE後の取り崩し戦略 〜 4%ルールを信じるな | たきびFIRE
 site_url: https://takibi-fire.com/4percent-rule/
 site_dir: dist
 use_directory_urls: false
@@ -103,7 +103,7 @@ extra_javascript:
   - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
 
 nav:
-  - リタイア後の取り崩し戦略: index.md
+  - FIRE後の取り崩し戦略: index.md
   - 全解説: contents.md
   - 取り崩しシミュレーションにおいて考慮すべきこと:
     - ボラティリティの影響: volatility.md
