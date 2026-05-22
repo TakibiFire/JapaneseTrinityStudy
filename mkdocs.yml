@@ -6,6 +6,7 @@ use_directory_urls: false
 theme:
   language: ja
   name: material
+  custom_dir: overrides
   favicon: imgs/favicon.png
   logo: imgs/takibi.png
   font:
