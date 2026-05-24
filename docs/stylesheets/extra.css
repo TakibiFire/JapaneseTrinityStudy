@@ -131,6 +131,10 @@
   display: none;
 }
 
+label.md-header__button[for="__search"] {
+  display: none;
+}
+
 /* 計算ツールのレスポンシブ高さ設定 */
 .optimal-ratio-calculator {
   height: 440px;
