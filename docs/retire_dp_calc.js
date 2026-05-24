@@ -160,8 +160,8 @@ async function init() {
     startAge = calcConfig.start_age || 60;
     const targetAge = calcConfig.target_age || 95;
 
-    document.getElementById('html-title').textContent = `${startAge}歳リタイア用 最適オルカン配分計算機`;
-    document.getElementById('title').textContent = `${startAge}歳リタイア用 最適オルカン配分計算機`;
+    document.getElementById('html-title').textContent = `${startAge}歳退職用 最適オルカン配分計算機`;
+    document.getElementById('title').textContent = `${startAge}歳退職用 最適オルカン配分計算機`;
     document.getElementById('age-base-header').textContent = `${startAge}歳時の取り崩し額`;
     document.getElementById('age-label').textContent = `現在の年齢 (${startAge}〜${targetAge - 1}歳)`;
 
