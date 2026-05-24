@@ -126,3 +126,7 @@
 .md-social a svg {
   vertical-align: baseline;
 }
+
+.md-search {
+  display: none;
+}
