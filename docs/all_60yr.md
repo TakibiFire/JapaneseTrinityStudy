@@ -331,7 +331,7 @@ $$
 <iframe 
   src="./retire_dp_calc.html?data=all_60yr" 
   width="100%" 
-  height="680" 
+  class="dp-calculator" 
   frameborder="0" 
   scrolling="no" 
   style="max-width: 500px; display: block; margin: 0 auto; border: none;"

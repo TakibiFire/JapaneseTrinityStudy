@@ -145,3 +145,14 @@ label.md-header__button[for="__search"] {
     height: 490px;
   }
 }
+
+.dp-calculator {
+  height: 680px;
+}
+
+@media screen and (max-width: 600px) {
+  .dp-calculator {
+    height: 750px;
+  }
+}
+
