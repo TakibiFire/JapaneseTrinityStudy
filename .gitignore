@@ -178,3 +178,4 @@ dist/
 
 # Generated CSS
 docs/stylesheets/tailwind.css
+docs/google*
