@@ -200,7 +200,7 @@ $$h(S, m) = 0.4566 + 0.0896 \ln(m) - 0.6490 \ln(S) - \frac{0.0570}{n \cdot S} - 
 <iframe 
   src="optimal_ratio_calc.html" 
   width="100%" 
-  height="440" 
+  class="optimal-ratio-calculator" 
   frameborder="0" 
   scrolling="no" 
   style="max-width: 500px; display: block; margin: 0 auto; border: none;"

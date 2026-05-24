@@ -282,10 +282,10 @@ $$
 
 <iframe 
   src="optimal_ratio_calc.html" 
-  width="100%"
-  height="440"
-  frameborder="0"
-  scrolling="no"
+  width="100%" 
+  class="optimal-ratio-calculator" 
+  frameborder="0" 
+  scrolling="no" 
   style="max-width: 500px; display: block; margin: 0 auto; border: none;"
 ></iframe>
 

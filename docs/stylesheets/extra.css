@@ -130,3 +130,14 @@
 .md-search {
   display: none;
 }
+
+/* 計算ツールのレスポンシブ高さ設定 */
+.optimal-ratio-calculator {
+  height: 440px;
+}
+
+@media screen and (max-width: 600px) {
+  .optimal-ratio-calculator {
+    height: 490px;
+  }
+}
