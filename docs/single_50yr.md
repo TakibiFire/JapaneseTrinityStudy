@@ -24,7 +24,7 @@ python3 src/analyze_single_50yr_grid_main.py --exp_type optimal-pension
 
 ## 50歳から取り崩しを開始し95歳まで破綻しない確率を最大化する
 
-ちなみに現在50歳の人が95歳まで生きられる人は男性で9.84%, 女性で26.54%です ([寿命・健康寿命予測ツール | たきびFIRE](https://takibi-fire.com/app/life-expectancy-calculator/))。
+ちなみに現在50歳の人が95歳まで生きられる人は男性で9.46%, 女性で25.99%です ([寿命・健康寿命予測ツール | たきびFIRE](https://takibi-fire.com/app/life-expectancy-calculator/))。
 
 45年という取り崩し期間において、生存確率を上げるために個人ができることは主に以下の3点です。
 
